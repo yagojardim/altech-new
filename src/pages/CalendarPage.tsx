@@ -1,0 +1,1227 @@
+import { useState, useRef, useEffect, type CSSProperties } from 'react'
+import { T } from '../components/ds/tokens'
+import { ISSUES, type Issue } from '../data/issues'
+import {
+  getAllEvents, addEvent, updateEvent, removeEvent,
+  addGoogleEvents, removeGoogleEvents, genMeetLink,
+  GOOGLE_SYNC, type CalendarEvent,
+} from '../data/calendarEvents'
+import { MOCK_USERS, MOCK_TENANT } from '../data/session'
+
+// ─── Constants ─────────────────────────────────────────────────────────────────
+const DOW_PT    = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+const MONTHS_SHORT = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+const GRID_START = 8   // 08:00
+const GRID_HOURS = 13  // 08:00 – 20:00
+const HOUR_H     = 56  // px per hour
+
+const EVENT_COLORS = [
+  { label: 'Azul',    hex: '#3B82F6' },
+  { label: 'Verde',   hex: '#10B981' },
+  { label: 'Roxo',    hex: '#A78BFA' },
+  { label: 'Índigo',  hex: '#6366F1' },
+  { label: 'Laranja', hex: '#F59E0B' },
+  { label: 'Vermelho',hex: '#EF4444' },
+  { label: 'Rosa',    hex: '#EC4899' },
+  { label: 'Teal',    hex: '#14B8A6' },
+]
+
+// ─── Date helpers ──────────────────────────────────────────────────────────────
+function sameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+function startOfWeek(d: Date): Date {
+  const s = new Date(d); s.setHours(0,0,0,0); s.setDate(d.getDate() - d.getDay()); return s
+}
+function getWeekDays(anchor: Date): Date[] {
+  const s = startOfWeek(anchor)
+  return Array.from({length:7}, (_, i) => { const d = new Date(s); d.setDate(s.getDate()+i); return d })
+}
+function buildMonthGrid(year: number, month: number): (Date|null)[][] {
+  const first = new Date(year, month, 1).getDay()
+  const days  = new Date(year, month+1, 0).getDate()
+  const cells: (Date|null)[] = []
+  for (let i=0; i<first; i++) cells.push(null)
+  for (let d=1; d<=days; d++) cells.push(new Date(year, month, d))
+  while (cells.length % 7 !== 0) cells.push(null)
+  const rows: (Date|null)[][] = []
+  for (let i=0; i<cells.length; i+=7) rows.push(cells.slice(i,i+7))
+  return rows
+}
+function fmtDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+}
+function fmtTime(d: Date): string {
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`
+}
+function parseDateTime(date: string, time: string): Date {
+  return new Date(`${date}T${time}:00`)
+}
+function eventsForDay(events: CalendarEvent[], day: Date): CalendarEvent[] {
+  return events.filter(e => {
+    const s = new Date(e.start), en = new Date(e.end)
+    if (e.allDay) return sameDay(s, day) || (s <= day && en >= day)
+    return sameDay(s, day)
+  })
+}
+function eventTopPx(ev: CalendarEvent): number {
+  const d = new Date(ev.start)
+  return Math.max(0, (d.getHours() + d.getMinutes()/60 - GRID_START) * HOUR_H)
+}
+function eventHeightPx(ev: CalendarEvent): number {
+  const s = new Date(ev.start), en = new Date(ev.end)
+  const h = (en.getTime() - s.getTime()) / 3600000
+  return Math.max(h * HOUR_H, 24)
+}
+
+// ─── Local toast ──────────────────────────────────────────────────────────────
+function useLocalToast() {
+  const [msg, setMsg] = useState<string|null>(null)
+  function toast(m: string) { setMsg(m); setTimeout(() => setMsg(null), 3000) }
+  return { msg, toast }
+}
+
+// ─── Event color chip ─────────────────────────────────────────────────────────
+function EventChip({ ev, onClick }: { ev: CalendarEvent; onClick: () => void }) {
+  const isGoogle = ev.source === 'google'
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); onClick() }}
+      title={ev.title}
+      style={{
+        background: `${ev.color}22`, borderLeft: `3px solid ${ev.color}`,
+        borderRadius: 4, padding: '2px 6px', fontSize: 10, color: T.text1,
+        whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        marginBottom: 2, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+        borderTop: isGoogle ? `1px dashed ${ev.color}66` : 'none',
+      }}
+    >
+      {isGoogle && <span style={{ fontSize: 8, color: ev.color, fontWeight: 700, flexShrink: 0 }}>G</span>}
+      {ev.meetLink && <span style={{ fontSize: 9, flexShrink: 0 }}>📹</span>}
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</span>
+    </div>
+  )
+}
+
+// ─── Issue due-date chip (read-only) ─────────────────────────────────────────
+const PRIORITY_DOT: Record<string, string> = {
+  critical: '#EF4444', high: '#F59E0B', medium: '#3B82F6', low: '#5C5C7A',
+}
+function IssueDueChip({ issue }: { issue: Issue }) {
+  const dotColor = PRIORITY_DOT[issue.priority] ?? T.text3
+  const isOverdue = new Date(issue.dueDateIso) < new Date() && issue.status !== 'done'
+  return (
+    <div style={{
+      background: isOverdue ? `${dotColor}18` : `${T.text3}10`,
+      borderLeft: `2px solid ${isOverdue ? dotColor : T.text3}`,
+      borderRadius: 3, padding: '1px 5px', fontSize: 9,
+      color: isOverdue ? dotColor : T.text2,
+      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: 2,
+      display: 'flex', alignItems: 'center', gap: 3,
+    }} title={`Prazo: ${issue.key} – ${issue.title}${isOverdue ? ' (atrasado)' : ''}`}>
+      <span style={{ fontSize: 8 }}>⏰</span>
+      <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{issue.key}</span>
+      {issue.blocked && <span style={{ color: '#EF4444', fontSize: 8 }}>🔴</span>}
+    </div>
+  )
+}
+
+/** Issues due on a given calendar day */
+function issuesDueOnDay(day: Date): Issue[] {
+  return ISSUES.filter(i => sameDay(new Date(i.dueDateIso), day))
+}
+
+// ─── Week event block ─────────────────────────────────────────────────────────
+function WeekEventBlock({ ev, onClick }: { ev: CalendarEvent; onClick: () => void }) {
+  const top    = eventTopPx(ev)
+  const height = eventHeightPx(ev)
+  const isGoogle = ev.source === 'google'
+  const start = new Date(ev.start)
+  return (
+    <div
+      onClick={e => { e.stopPropagation(); onClick() }}
+      style={{
+        position: 'absolute', left: 3, right: 3,
+        top, height: Math.min(height, GRID_HOURS * HOUR_H - top),
+        background: `${ev.color}28`, borderLeft: `3px solid ${ev.color}`,
+        borderRadius: 5, padding: '3px 6px', cursor: 'pointer', zIndex: 2,
+        overflow: 'hidden',
+        borderTop: isGoogle ? `1px dashed ${ev.color}88` : 'none',
+      }}
+      title={ev.title}
+    >
+      <div style={{ fontSize: 10, fontWeight: 700, color: ev.color, lineHeight: 1.3, display: 'flex', gap: 4 }}>
+        {isGoogle && <span style={{ fontSize: 8 }}>G</span>}
+        {ev.meetLink && <span>📹</span>}
+        {fmtTime(start)}
+      </div>
+      {height > 36 && (
+        <div style={{ fontSize: 10, color: T.text1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {ev.title}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Event detail popover ─────────────────────────────────────────────────────
+function EventDetailCard({
+  ev, onClose, onEdit, onDelete,
+}: { ev: CalendarEvent; onClose: () => void; onEdit: () => void; onDelete: () => void }) {
+  const start = new Date(ev.start), end = new Date(ev.end)
+  const isGoogle = ev.source === 'google'
+  const [copied, setCopied] = useState(false)
+
+  function copyLink() {
+    if (ev.meetLink) {
+      navigator.clipboard?.writeText(`https://${ev.meetLink}`).catch(() => {})
+      setCopied(true); setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: T.bgSurface, border: `1px solid ${T.border}`,
+        borderRadius: 14, boxShadow: T.shadowModal, width: 380, padding: '20px 24px',
+        position: 'relative',
+      }}>
+        {/* Color bar + close */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: ev.color, borderRadius: '14px 14px 0 0' }} />
+        <button onClick={onClose} style={{
+          position: 'absolute', top: 12, right: 12, width: 28, height: 28, borderRadius: 6,
+          background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 16, lineHeight: 1,
+        }}>×</button>
+
+        <div style={{ marginTop: 8 }}>
+          {isGoogle && (
+            <div style={{
+              fontSize: 10, color: T.warn, background: T.warnDim, border: `1px solid ${T.warn}44`,
+              borderRadius: 4, padding: '2px 8px', display: 'inline-block', marginBottom: 8,
+            }}>Google Calendar</div>
+          )}
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: T.text1, margin: '0 0 8px' }}>{ev.title}</h2>
+
+          <div style={{ fontSize: 12, color: T.text2, marginBottom: 6 }}>
+            {ev.allDay
+              ? `📅 ${fmtDate(start)} (dia inteiro)`
+              : `📅 ${fmtDate(start)} · ${fmtTime(start)} – ${fmtTime(end)}`}
+          </div>
+
+          {ev.location && (
+            <div style={{ fontSize: 12, color: T.text2, marginBottom: 6 }}>📍 {ev.location}</div>
+          )}
+
+          {ev.meetLink && (
+            <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                flex: 1, fontSize: 11, color: T.accent,
+                background: T.accentDim, border: `1px solid ${T.accentBorder}`,
+                borderRadius: 6, padding: '5px 10px', fontFamily: 'monospace',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                📹 {ev.meetLink}
+              </div>
+              <button onClick={copyLink} style={{
+                fontSize: 11, color: copied ? T.success : T.text2,
+                background: `${T.text3}12`, border: `1px solid ${T.border}`,
+                borderRadius: 6, padding: '5px 10px', cursor: 'pointer', flexShrink: 0,
+              }}>
+                {copied ? '✓ Copiado' : 'Copiar'}
+              </button>
+            </div>
+          )}
+
+          {ev.guests.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Convidados</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {ev.guests.map(g => (
+                  <span key={g.email} style={{
+                    fontSize: 11, color: T.text1, background: `${T.text3}12`,
+                    border: `1px solid ${T.border}`, borderRadius: 4, padding: '2px 8px',
+                  }}>{g.name}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {ev.description && (
+            <p style={{ fontSize: 12, color: T.text2, margin: '0 0 8px', lineHeight: 1.5 }}>{ev.description}</p>
+          )}
+
+          {ev.workItemId && (
+            <div style={{ fontSize: 11, color: T.accent, marginBottom: 8 }}>🔗 {ev.workItemId}</div>
+          )}
+
+          {ev.reminder && (
+            <div style={{ fontSize: 11, color: T.text3, marginBottom: 8 }}>🔔 {ev.reminder} min antes</div>
+          )}
+
+          {isGoogle && (
+            <div style={{ fontSize: 10, color: T.text3, marginBottom: 8, fontStyle: 'italic' }}>
+              Evento importado via Google Calendar (demonstrativo).
+            </div>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: `1px solid ${T.border}` }}>
+          {!isGoogle && (
+            <button onClick={onEdit} style={{
+              flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 12, fontWeight: 600,
+              background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`, cursor: 'pointer',
+            }}>Editar</button>
+          )}
+          <button onClick={onDelete} style={{
+            flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 12, fontWeight: 600,
+            background: T.critDim, color: T.crit, border: `1px solid ${T.crit}44`, cursor: 'pointer',
+          }}>Remover</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Event composer modal ─────────────────────────────────────────────────────
+interface ComposerProps {
+  initial: {
+    date: string; startTime: string; endTime: string
+    editEvent?: CalendarEvent
+  }
+  onSave:   (ev: Omit<CalendarEvent,'id'>) => void
+  onClose:  () => void
+}
+
+function EventComposer({ initial, onSave, onClose }: ComposerProps) {
+  const editing = initial.editEvent
+  const [title,    setTitle]    = useState(editing?.title ?? '')
+  const [date,     setDate]     = useState(fmtDate(new Date(editing?.start ?? initial.date)))
+  const [startT,   setStartT]   = useState(editing ? fmtTime(new Date(editing.start)) : initial.startTime)
+  const [endT,     setEndT]     = useState(editing ? fmtTime(new Date(editing.end))   : initial.endTime)
+  const [allDay,   setAllDay]   = useState(editing?.allDay ?? false)
+  const [color,    setColor]    = useState(editing?.color ?? '#3B82F6')
+  const [location, setLocation] = useState(editing?.location ?? '')
+  const [desc,     setDesc]     = useState(editing?.description ?? '')
+  const [workItem, setWorkItem] = useState(editing?.workItemId ?? '')
+  const [reminder, setReminder] = useState<number|undefined>(editing?.reminder ?? 10)
+  const [meetLink, setMeetLink] = useState(editing?.meetLink ?? '')
+  const [guestQ,   setGuestQ]   = useState('')
+  const [guests,   setGuests]   = useState<{name:string;email:string}[]>(editing?.guests ?? [])
+  const [expanded, setExpanded] = useState(!!editing)
+  const titleRef = useRef<HTMLInputElement>(null)
+  useEffect(() => { titleRef.current?.focus() }, [])
+
+  const guestSuggestions = guestQ.length > 0
+    ? MOCK_USERS.filter(u =>
+        (u.name.toLowerCase().includes(guestQ.toLowerCase()) ||
+         u.email.toLowerCase().includes(guestQ.toLowerCase())) &&
+        !guests.find(g => g.email === u.email)
+      ).slice(0, 5)
+    : []
+
+  function addGuest(u: typeof MOCK_USERS[0]) {
+    setGuests(gs => [...gs, { name: u.name, email: u.email }]); setGuestQ('')
+  }
+  function removeGuest(email: string) { setGuests(gs => gs.filter(g => g.email !== email)) }
+  function toggleMeet() {
+    if (meetLink) setMeetLink('')
+    else setMeetLink(genMeetLink())
+  }
+
+  function handleSave() {
+    if (!title.trim()) return
+    const start = allDay ? `${date}T00:00:00.000Z` : parseDateTime(date, startT).toISOString()
+    const end   = allDay ? `${date}T23:59:00.000Z` : parseDateTime(date, endT).toISOString()
+    onSave({
+      tenant_id: MOCK_TENANT.tenant_id,
+      title: title.trim(), start, end, allDay, guests,
+      meetLink: meetLink || undefined,
+      location: location || undefined,
+      description: desc || undefined,
+      color, workItemId: workItem || undefined,
+      reminder: reminder ?? undefined,
+      source: 'altech', created_by: 'u_po',
+    })
+  }
+
+  const inpS: CSSProperties = {
+    width: '100%', background: T.bgSurface2, border: `1px solid ${T.border}`,
+    borderRadius: 7, padding: '8px 10px', fontSize: 12, color: T.text1,
+    outline: 'none', boxSizing: 'border-box',
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+         onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: T.bgSurface, border: `1px solid ${T.border}`,
+        borderRadius: 16, boxShadow: T.shadowModal, width: 480,
+        maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '16px 20px 12px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: T.text1 }}>
+            {editing ? 'Editar evento' : 'Novo evento'}
+          </span>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 6, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Title */}
+          <input
+            ref={titleRef}
+            value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="Título do evento *"
+            style={{ ...inpS, fontSize: 15, fontWeight: 600, padding: '10px 12px' }}
+          />
+
+          {/* All-day toggle */}
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+            <div
+              onClick={() => setAllDay(a => !a)}
+              style={{
+                width: 36, height: 20, borderRadius: 10, background: allDay ? T.accent : T.border,
+                position: 'relative', flexShrink: 0, transition: 'background 0.2s',
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: 2, left: allDay ? 18 : 2, width: 16, height: 16,
+                borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+              }} />
+            </div>
+            <span style={{ fontSize: 12, color: T.text2 }}>Dia inteiro</span>
+          </label>
+
+          {/* Date + time */}
+          {allDay ? (
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} style={inpS} />
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', gap: 8, alignItems: 'center' }}>
+              <input type="date"  value={date}   onChange={e => setDate(e.target.value)}   style={inpS} />
+              <input type="time"  value={startT} onChange={e => setStartT(e.target.value)} style={{ ...inpS, width: 'auto' }} />
+              <input type="time"  value={endT}   onChange={e => setEndT(e.target.value)}   style={{ ...inpS, width: 'auto' }} />
+            </div>
+          )}
+
+          {/* Guests */}
+          <div>
+            <div style={{ position: 'relative' }}>
+              <input
+                value={guestQ} onChange={e => setGuestQ(e.target.value)}
+                placeholder="Convidar pessoas (nome ou e-mail)..."
+                style={inpS}
+              />
+              {guestSuggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+                  background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 7,
+                  boxShadow: T.shadow2, marginTop: 2,
+                }}>
+                  {guestSuggestions.map(u => (
+                    <button key={u.user_id} onClick={() => addGuest(u)} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      padding: '8px 12px', background: 'transparent', border: 'none',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}10` }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}>
+                      <div style={{ width: 24, height: 24, borderRadius: '50%', background: u.avatar_color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#fff' }}>{u.avatar_initials}</div>
+                      <div>
+                        <div style={{ fontSize: 12, color: T.text1 }}>{u.name}</div>
+                        <div style={{ fontSize: 10, color: T.text3 }}>{u.email}</div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {guests.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                {guests.map(g => (
+                  <span key={g.email} style={{
+                    fontSize: 11, color: T.text1, background: T.accentDim,
+                    border: `1px solid ${T.accentBorder}`, borderRadius: 99, padding: '3px 8px',
+                    display: 'flex', alignItems: 'center', gap: 4,
+                  }}>
+                    {g.name}
+                    <button onClick={() => removeGuest(g.email)} style={{ background: 'none', border: 'none', color: T.text3, cursor: 'pointer', fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Video call */}
+          <button onClick={toggleMeet} style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+            borderRadius: 7, fontSize: 12, cursor: 'pointer',
+            background: meetLink ? T.accentDim : `${T.text3}10`,
+            color: meetLink ? T.accent : T.text2,
+            border: `1px solid ${meetLink ? T.accentBorder : T.border}`,
+            width: '100%', fontWeight: meetLink ? 600 : 400,
+          }}>
+            <span>📹</span>
+            {meetLink ? (
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                {meetLink} · Remover
+              </span>
+            ) : 'Adicionar videochamada Altech Meet'}
+          </button>
+
+          {/* Expanded fields */}
+          {!expanded && (
+            <button onClick={() => setExpanded(true)} style={{ fontSize: 12, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+              ＋ Mais opções (local, descrição, cor, lembrete…)
+            </button>
+          )}
+
+          {expanded && (
+            <>
+              {/* Location */}
+              <input value={location} onChange={e => setLocation(e.target.value)}
+                placeholder="Local (opcional)" style={inpS} />
+
+              {/* Description */}
+              <textarea value={desc} onChange={e => setDesc(e.target.value)}
+                placeholder="Descrição (opcional)" rows={3}
+                style={{ ...inpS, resize: 'vertical', lineHeight: 1.5 }} />
+
+              {/* Color */}
+              <div>
+                <div style={{ fontSize: 11, color: T.text3, marginBottom: 6 }}>Cor / Categoria</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                  {EVENT_COLORS.map(c => (
+                    <button
+                      key={c.hex}
+                      title={c.label}
+                      onClick={() => setColor(c.hex)}
+                      style={{
+                        width: 22, height: 22, borderRadius: '50%', background: c.hex,
+                        border: color === c.hex ? `3px solid ${T.text1}` : `2px solid transparent`,
+                        cursor: 'pointer', flexShrink: 0,
+                        boxShadow: color === c.hex ? `0 0 0 2px ${c.hex}` : 'none',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Work item */}
+              <input value={workItem} onChange={e => setWorkItem(e.target.value)}
+                placeholder="Vincular work item (ex.: ALT-139)" style={inpS} />
+
+              {/* Reminder */}
+              <div>
+                <div style={{ fontSize: 11, color: T.text3, marginBottom: 6 }}>Lembrete</div>
+                <select value={reminder ?? ''} onChange={e => setReminder(e.target.value ? Number(e.target.value) : undefined)}
+                  style={{ ...inpS }}>
+                  <option value="">Sem lembrete</option>
+                  <option value="5">5 min antes</option>
+                  <option value="10">10 min antes</option>
+                  <option value="15">15 min antes</option>
+                  <option value="30">30 min antes</option>
+                  <option value="60">1 hora antes</option>
+                  <option value="1440">1 dia antes</option>
+                </select>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 500,
+            background: 'transparent', color: T.text2, border: `1px solid ${T.border}`, cursor: 'pointer',
+          }}>Cancelar</button>
+          <button
+            onClick={handleSave}
+            disabled={!title.trim()}
+            style={{
+              flex: 2, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 700,
+              background: title.trim() ? T.accent : T.border, color: '#fff', border: 'none', cursor: title.trim() ? 'pointer' : 'default',
+            }}>
+            {editing ? 'Salvar alterações' : 'Salvar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Google Sync Panel ────────────────────────────────────────────────────────
+function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConnected: () => void }) {
+  const [phase, setPhase] = useState<'idle'|'connecting'|'connected'>(
+    GOOGLE_SYNC.connected ? 'connected' : 'idle'
+  )
+  const [email] = useState(GOOGLE_SYNC.email || 'usuario@gmail.com')
+
+  function connect() {
+    setPhase('connecting')
+    setTimeout(() => {
+      GOOGLE_SYNC.connected  = true
+      GOOGLE_SYNC.email      = email
+      GOOGLE_SYNC.lastSync   = 'agora'
+      addGoogleEvents()
+      setPhase('connected')
+      onConnected()
+    }, 2000)
+  }
+  function disconnect() {
+    GOOGLE_SYNC.connected = false
+    GOOGLE_SYNC.email     = ''
+    removeGoogleEvents()
+    setPhase('idle')
+    onConnected()
+    onClose()
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 850, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
+         onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: T.bgSurface, border: `1px solid ${T.border}`,
+        borderRadius: 16, boxShadow: T.shadowModal, width: 420, padding: '28px 28px 24px',
+      }}>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 8, background: `${T.warn}20`,
+            border: `1px solid ${T.warn}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          }}>📅</div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.text1 }}>Sincronizar com Google Calendar</div>
+            <div style={{ fontSize: 11, color: T.text3 }}>Demonstrativo — sem acesso real à sua conta</div>
+          </div>
+          <button onClick={onClose} style={{ marginLeft: 'auto', width: 28, height: 28, borderRadius: 6, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 16 }}>×</button>
+        </div>
+
+        {/* Demo disclaimer */}
+        <div style={{
+          background: T.warnDim, border: `1px solid ${T.warn}44`, borderRadius: 8,
+          padding: '10px 14px', marginBottom: 20, fontSize: 11, color: T.warn, lineHeight: 1.5,
+        }}>
+          ⚠️ Esta sincronização é <strong>demonstrativa</strong>. Nenhuma OAuth real é realizada nem dados
+          da sua conta Google são acessados. Os eventos importados são mockados para fins de visualização.
+        </div>
+
+        {phase === 'idle' && (
+          <>
+            <div style={{ fontSize: 12, color: T.text2, marginBottom: 16, lineHeight: 1.5 }}>
+              Conecte sua conta Google para importar eventos do Google Calendar e manter o Altech sincronizado.
+              Em produção, OAuth 2.0 seria utilizado.
+            </div>
+            <button onClick={connect} style={{
+              width: '100%', padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+              background: '#4285F4', color: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            }}>
+              <span>🔗</span>
+              Conectar conta Google (simulado)
+            </button>
+          </>
+        )}
+
+        {phase === 'connecting' && (
+          <div style={{ textAlign: 'center', padding: '20px 0' }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: '50%',
+              border: `3px solid ${T.accent}`, borderTopColor: 'transparent',
+              margin: '0 auto 14px', animation: 'spin 0.8s linear infinite',
+            }} />
+            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+            <div style={{ fontSize: 13, color: T.text2 }}>Simulando conexão com Google…</div>
+          </div>
+        )}
+
+        {phase === 'connected' && (
+          <>
+            <div style={{
+              background: T.successDim, border: `1px solid ${T.success}44`,
+              borderRadius: 10, padding: '14px 16px', marginBottom: 16,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 16 }}>✅</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.success }}>Conectado</span>
+              </div>
+              <div style={{ fontSize: 12, color: T.text2 }}>{email}</div>
+              <div style={{ fontSize: 11, color: T.text3, marginTop: 4 }}>Última sincronização: {GOOGLE_SYNC.lastSync}</div>
+            </div>
+
+            <div style={{ fontSize: 11, color: T.text2, marginBottom: 16, lineHeight: 1.5 }}>
+              Eventos importados do Google aparecem marcados com <strong style={{ color: T.warn }}>G</strong> na grade.
+              Eventos criados no Altech serão sincronizados automaticamente (demonstrativo).
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={onClose} style={{
+                flex: 2, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`, cursor: 'pointer',
+              }}>Fechar</button>
+              <button onClick={disconnect} style={{
+                flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12,
+                background: 'transparent', color: T.text3, border: `1px solid ${T.border}`, cursor: 'pointer',
+              }}>Desconectar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Day / Agenda view ────────────────────────────────────────────────────────
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i)
+
+interface DayViewProps {
+  anchor:        Date
+  events:        CalendarEvent[]
+  today:         Date
+  onEventClick:  (ev: CalendarEvent) => void
+  onSlotClick:   (day: Date, hour: number) => void
+}
+
+function DayView({ anchor, events, today, onEventClick, onSlotClick }: DayViewProps) {
+  const isToday   = sameDay(anchor, today)
+  const nowRef    = useRef<HTMLDivElement>(null)
+  const [nowMin, setNowMin] = useState(() => new Date().getHours() * 60 + new Date().getMinutes())
+
+  // Scroll to current hour on mount / when day changes
+  useEffect(() => {
+    nowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [anchor])
+
+  // Update now-indicator every minute
+  useEffect(() => {
+    const id = setInterval(() => setNowMin(new Date().getHours() * 60 + new Date().getMinutes()), 60_000)
+    return () => clearInterval(id)
+  }, [])
+
+  // All-day events for this day
+  const allDayEvs = events.filter(e => e.allDay && sameDay(new Date(e.start), anchor))
+
+  // Due issues for this day
+  const dueIssues = issuesDueOnDay(anchor)
+
+  // Timed events for this day
+  const timedEvs = events.filter(e => !e.allDay && sameDay(new Date(e.start), anchor))
+
+  // Events starting in a given hour
+  function eventsAtHour(h: number): CalendarEvent[] {
+    return timedEvs.filter(e => new Date(e.start).getHours() === h)
+  }
+
+  const nowTopPx = (nowMin / 60) * HOUR_H  // within the 24h scroll area
+
+  const TYPE_COLOR: Record<string, string> = {
+    story: T.accent, bug: T.crit, task: T.text2, subtask: T.text3, epic: T.warn, feature: T.purple ?? '#A78BFA',
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+      {/* ── Day header ── */}
+      <div style={{ padding: '10px 20px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isToday ? T.accent : T.text1 }}>
+            {isToday && <span style={{ fontSize: 10, background: T.accent, color: '#fff', borderRadius: 4, padding: '1px 6px', marginRight: 7, fontWeight: 700 }}>HOJE</span>}
+            {DOW_PT[anchor.getDay()]}, {anchor.getDate()} de {MONTHS_PT[anchor.getMonth()]} {anchor.getFullYear()}
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: T.text2, background: `${T.text3}10`, border: `1px solid ${T.border}`, borderRadius: 4, padding: '2px 8px' }}>
+              {timedEvs.length} evento{timedEvs.length !== 1 ? 's' : ''}
+            </span>
+            {dueIssues.length > 0 && (
+              <span style={{ fontSize: 11, color: T.warn, background: T.warnDim, border: `1px solid ${T.warn}44`, borderRadius: 4, padding: '2px 8px' }}>
+                ⏰ {dueIssues.length} prazo{dueIssues.length !== 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* All-day strip */}
+        {(allDayEvs.length > 0 || dueIssues.length > 0) && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {allDayEvs.map(ev => (
+              <div
+                key={ev.id}
+                onClick={() => onEventClick(ev)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: `${ev.color}22`, border: `1px solid ${ev.color}66`,
+                  borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12, color: T.text1,
+                }}
+              >
+                {ev.source === 'google' && <span style={{ fontSize: 9, fontWeight: 800, color: ev.color }}>G</span>}
+                <span style={{ fontWeight: 600 }}>{ev.title}</span>
+                <span style={{ fontSize: 9, color: T.text3 }}>dia inteiro</span>
+              </div>
+            ))}
+            {dueIssues.map(i => {
+              const dotC = TYPE_COLOR[i.type] ?? T.text3
+              const isOverdue = new Date(i.dueDateIso) < today && i.status !== 'done'
+              return (
+                <div key={i.key} style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  background: isOverdue ? `${T.crit}12` : T.warnDim,
+                  border: `1px solid ${isOverdue ? T.crit : T.warn}44`,
+                  borderRadius: 6, padding: '4px 10px', fontSize: 11, color: isOverdue ? T.crit : T.warn,
+                }}>
+                  <span style={{ fontSize: 9 }}>⏰</span>
+                  <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{i.key}</span>
+                  <span style={{ color: dotC }}>·</span>
+                  <span style={{ color: T.text2, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span>
+                  {i.blocked && <span style={{ fontSize: 9, color: T.crit }}>🔴 Bloqueado</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Hour grid ── */}
+      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
+        {/* Now line */}
+        {isToday && (
+          <div
+            ref={nowRef}
+            style={{
+              position: 'absolute', left: 0, right: 0,
+              top: nowTopPx, zIndex: 10, pointerEvents: 'none',
+              display: 'flex', alignItems: 'center',
+            }}
+          >
+            <div style={{ width: 10, height: 10, borderRadius: '50%', background: T.crit, flexShrink: 0, marginLeft: 48 }} />
+            <div style={{ flex: 1, height: 2, background: T.crit, opacity: 0.8 }} />
+          </div>
+        )}
+
+        {ALL_HOURS.map(hour => {
+          const hEvs   = eventsAtHour(hour)
+          const isEmpty = hEvs.length === 0
+          const isNowHour = isToday && new Date().getHours() === hour
+
+          return (
+            <div
+              key={hour}
+              onClick={() => isEmpty && onSlotClick(anchor, hour)}
+              style={{
+                display: 'flex', minHeight: HOUR_H,
+                borderBottom: `1px solid ${T.border}${hour % 2 === 0 ? '' : '55'}`,
+                background: isNowHour ? `${T.accent}05` : 'transparent',
+                cursor: isEmpty ? 'pointer' : 'default',
+              }}
+              onMouseEnter={e => { if (isEmpty) (e.currentTarget as HTMLDivElement).style.background = `${T.text3}07` }}
+              onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isNowHour ? `${T.accent}05` : 'transparent' }}
+            >
+              {/* Hour label */}
+              <div style={{
+                width: 56, flexShrink: 0, paddingTop: 6, paddingRight: 10,
+                textAlign: 'right', fontSize: 10,
+                color: isNowHour ? T.accent : T.text3,
+                fontWeight: isNowHour ? 700 : 400,
+                userSelect: 'none',
+              }}>
+                {`${String(hour).padStart(2,'0')}:00`}
+              </div>
+
+              {/* Events in this hour */}
+              <div style={{ flex: 1, padding: '4px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {hEvs.map(ev => {
+                  const start = new Date(ev.start), end = new Date(ev.end)
+                  const isGoogle = ev.source === 'google'
+                  const durationH = (end.getTime() - start.getTime()) / 3_600_000
+                  return (
+                    <div
+                      key={ev.id}
+                      onClick={e => { e.stopPropagation(); onEventClick(ev) }}
+                      style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 10,
+                        background: `${ev.color}18`,
+                        borderLeft: `3px solid ${ev.color}`,
+                        borderRadius: 6, padding: '6px 10px', cursor: 'pointer',
+                        borderTop: isGoogle ? `1px dashed ${ev.color}77` : 'none',
+                        minHeight: Math.max(40, durationH * 28),
+                      }}
+                    >
+                      {/* Time col */}
+                      <div style={{ fontSize: 11, color: ev.color, fontWeight: 700, flexShrink: 0, lineHeight: 1.4 }}>
+                        <div>{fmtTime(start)}</div>
+                        <div style={{ fontWeight: 400, color: T.text3 }}>– {fmtTime(end)}</div>
+                      </div>
+                      {/* Content col */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {isGoogle && <span style={{ fontSize: 9, fontWeight: 800, color: ev.color }}>G</span>}
+                          <span style={{ fontSize: 13, fontWeight: 700, color: T.text1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {ev.title}
+                          </span>
+                        </div>
+                        {ev.meetLink && (
+                          <div style={{ fontSize: 11, color: T.accent, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span>📹</span>
+                            <span style={{ fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {ev.meetLink}
+                            </span>
+                          </div>
+                        )}
+                        {ev.guests.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                            {ev.guests.slice(0, 3).map(g => (
+                              <span key={g.email} style={{
+                                fontSize: 10, color: T.text2, background: `${T.text3}12`,
+                                border: `1px solid ${T.border}`, borderRadius: 3, padding: '1px 6px',
+                              }}>{g.name.split(' ')[0]}</span>
+                            ))}
+                            {ev.guests.length > 3 && <span style={{ fontSize: 10, color: T.text3 }}>+{ev.guests.length - 3}</span>}
+                          </div>
+                        )}
+                        {ev.location && (
+                          <div style={{ fontSize: 10, color: T.text3, marginTop: 3 }}>📍 {ev.location}</div>
+                        )}
+                      </div>
+                      {/* Type tag */}
+                      <div style={{
+                        fontSize: 9, fontWeight: 700, flexShrink: 0,
+                        background: `${ev.color}22`, color: ev.color,
+                        border: `1px solid ${ev.color}44`, borderRadius: 4, padding: '1px 5px',
+                      }}>
+                        {isGoogle ? 'Google' : 'Evento'}
+                      </div>
+                    </div>
+                  )
+                })}
+                {/* Empty hour hint */}
+                {isEmpty && (
+                  <div style={{ fontSize: 10, color: `${T.text3}44`, paddingTop: 2, userSelect: 'none' }}>
+                    Clique para criar evento
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ─── Main page ─────────────────────────────────────────────────────────────────
+type CalView = 'month' | 'week' | 'day'
+
+export default function CalendarPage() {
+  const today       = new Date(); today.setHours(0,0,0,0)
+  const [anchor, setAnchor] = useState<Date>(() => { const d = new Date(); d.setHours(0,0,0,0); return d })
+  const [view, setView]     = useState<CalView>('week')
+  const [tick, setTick]     = useState(0)
+  const [composer, setComposer] = useState<{
+    date: string; startTime: string; endTime: string; editEvent?: CalendarEvent
+  } | null>(null)
+  const [detailEv,   setDetailEv]   = useState<CalendarEvent | null>(null)
+  const [showGSync,  setShowGSync]  = useState(false)
+  const { msg: toastMsg, toast }    = useLocalToast()
+
+  const events = getAllEvents(MOCK_TENANT.tenant_id)
+
+  function refresh() { setTick(t => t + 1) }
+  void tick
+
+  function navToday() { setAnchor(new Date(today)); setView('day') }
+  function navPrev()  {
+    const d = new Date(anchor)
+    if (view === 'month') d.setMonth(d.getMonth() - 1, 1)
+    else if (view === 'week') d.setDate(d.getDate() - 7)
+    else d.setDate(d.getDate() - 1)
+    setAnchor(d)
+  }
+  function navNext()  {
+    const d = new Date(anchor)
+    if (view === 'month') d.setMonth(d.getMonth() + 1, 1)
+    else if (view === 'week') d.setDate(d.getDate() + 7)
+    else d.setDate(d.getDate() + 1)
+    setAnchor(d)
+  }
+
+  function openCreate(date: Date, hour = 9) {
+    const d = fmtDate(date)
+    const sh = String(hour).padStart(2,'0')
+    const eh = String(Math.min(hour+1,23)).padStart(2,'0')
+    setComposer({ date: d, startTime: `${sh}:00`, endTime: `${eh}:00` })
+  }
+  function openEdit(ev: CalendarEvent) {
+    setDetailEv(null)
+    setComposer({ date: fmtDate(new Date(ev.start)), startTime: fmtTime(new Date(ev.start)), endTime: fmtTime(new Date(ev.end)), editEvent: ev })
+  }
+  function handleDelete(ev: CalendarEvent) {
+    removeEvent(ev.id); setDetailEv(null); refresh(); toast('Evento removido.')
+  }
+  function handleSave(data: Omit<CalendarEvent,'id'>) {
+    if (composer?.editEvent) {
+      updateEvent(composer.editEvent.id, data)
+      toast('Evento atualizado.')
+    } else {
+      addEvent(data)
+      toast('Evento criado.')
+    }
+    setComposer(null); refresh()
+  }
+
+  // Week view data
+  const weekDays = getWeekDays(anchor)
+
+  // Month view data
+  const year = anchor.getFullYear(), month = anchor.getMonth()
+  const monthRows = buildMonthGrid(year, month)
+
+  // Period label
+  const periodLabel = view === 'month'
+    ? `${MONTHS_PT[month]} ${year}`
+    : view === 'day'
+    ? `${DOW_PT[anchor.getDay()]}, ${anchor.getDate()} de ${MONTHS_PT[anchor.getMonth()]} ${anchor.getFullYear()}`
+    : (() => {
+        const s = weekDays[0], e = weekDays[6]
+        if (s.getMonth() === e.getMonth())
+          return `${s.getDate()} – ${e.getDate()} de ${MONTHS_PT[s.getMonth()]} ${s.getFullYear()}`
+        return `${s.getDate()} ${MONTHS_SHORT[s.getMonth()]} – ${e.getDate()} ${MONTHS_SHORT[e.getMonth()]} ${e.getFullYear()}`
+      })()
+
+  const isGoogleConnected = GOOGLE_SYNC.connected
+
+  const toolBtn: CSSProperties = {
+    padding: '5px 11px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
+    background: T.bgSurface2, color: T.text2, border: `1px solid ${T.border}`,
+  }
+
+  return (
+    <div style={{ background: T.bgPage, height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', overflow: 'hidden' }}>
+
+      {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0, flexWrap: 'wrap' }}>
+        {/* + Criar */}
+        <button
+          onClick={() => openCreate(anchor)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+            background: T.accent, color: '#fff', border: 'none', cursor: 'pointer',
+          }}
+        >
+          ＋ Criar
+        </button>
+
+        {/* View toggle */}
+        <div style={{ display: 'flex', borderRadius: 6, overflow: 'hidden', border: `1px solid ${T.border}` }}>
+          {(['month','week','day'] as CalView[]).map(v => (
+            <button key={v} onClick={() => setView(v)} style={{
+              padding: '5px 14px', fontSize: 12, cursor: 'pointer',
+              background: view===v ? T.accentDim : 'transparent',
+              color:      view===v ? T.accent    : T.text2,
+              border: 'none', fontWeight: view===v ? 700 : 400,
+            }}>{v==='month' ? 'Mês' : v==='week' ? 'Semana' : 'Dia'}</button>
+          ))}
+        </div>
+
+        {/* Hoje */}
+        <button onClick={navToday} style={toolBtn}>Hoje</button>
+
+        {/* Navigation */}
+        <button onClick={navPrev} style={{ ...toolBtn, padding: '5px 10px', fontSize: 15 }}>‹</button>
+        <span style={{ color: T.text1, fontWeight: 600, fontSize: 14, minWidth: 200, textAlign: 'center' }}>
+          {periodLabel}
+        </span>
+        <button onClick={navNext} style={{ ...toolBtn, padding: '5px 10px', fontSize: 15 }}>›</button>
+
+        {/* Google sync */}
+        <button
+          onClick={() => setShowGSync(true)}
+          style={{
+            ...toolBtn, marginLeft: 'auto',
+            display: 'flex', alignItems: 'center', gap: 6,
+            color:      isGoogleConnected ? T.success : T.text2,
+            background: isGoogleConnected ? T.successDim : T.bgSurface2,
+            border:     `1px solid ${isGoogleConnected ? T.success + '44' : T.border}`,
+          }}
+        >
+          <span>📅</span>
+          {isGoogleConnected ? `Sincronizado · ${GOOGLE_SYNC.email}` : 'Sincronizar com Google'}
+        </button>
+      </div>
+
+      {/* ── Month view ──────────────────────────────────────────────────────── */}
+      {view === 'month' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', padding: 12, overflow: 'hidden' }}>
+          {/* DOW headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 1, marginBottom: 1 }}>
+            {DOW_PT.map(d => (
+              <div key={d} style={{ textAlign: 'center', padding: '6px 0', fontSize: 11, fontWeight: 700, color: T.text3 }}>{d}</div>
+            ))}
+          </div>
+          {/* Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gridAutoRows: 'minmax(90px,1fr)', gap: 1, flex: 1 }}>
+            {monthRows.flat().map((day, idx) => {
+              const isToday  = day ? sameDay(day, today) : false
+              const dayEvs   = day ? eventsForDay(events, day) : []
+              const dueIssues = day ? issuesDueOnDay(day) : []
+              const visible  = dayEvs.slice(0, 3)
+              const overflow = dayEvs.length - 3
+              return (
+                <div
+                  key={idx}
+                  onClick={() => day && openCreate(day)}
+                  style={{
+                    background: day ? T.bgSurface : `${T.bgSurface}44`,
+                    border:     isToday ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
+                    borderRadius: 5, padding: '5px 5px 3px',
+                    cursor: day ? 'pointer' : 'default', minHeight: 90,
+                    boxShadow: isToday ? `0 0 0 1px ${T.accent}20` : 'none',
+                  }}
+                >
+                  {day && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: isToday ? 800 : 500, marginBottom: 3, userSelect: 'none' }}>
+                        <span style={isToday ? {
+                          background: T.accent, color: '#fff', borderRadius: '50%',
+                          width: 20, height: 20, display: 'inline-flex', alignItems: 'center',
+                          justifyContent: 'center', fontSize: 10,
+                        } : { color: T.text2 }}>{day.getDate()}</span>
+                      </div>
+                      {dueIssues.slice(0,1).map(i => <IssueDueChip key={i.key} issue={i} />)}
+                      {visible.map(ev => <EventChip key={ev.id} ev={ev} onClick={() => setDetailEv(ev)} />)}
+                      {overflow > 0 && <div style={{ fontSize: 9, color: T.accent, cursor: 'pointer' }}>+{overflow} mais</div>}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Week view ───────────────────────────────────────────────────────── */}
+      {view === 'week' && (
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {/* All-day row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '56px repeat(7,1fr)', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0 }}>
+            <div style={{ padding: '5px 6px', fontSize: 9, color: T.text3, borderRight: `1px solid ${T.border}`, textAlign: 'right', paddingTop: 8 }}>tod</div>
+            {weekDays.map((day, di) => {
+              const allDayEvs = eventsForDay(events, day).filter(e => e.allDay)
+              const duePt = issuesDueOnDay(day)
+              return (
+                <div key={di} style={{ padding: '3px 3px', borderRight: `1px solid ${T.border}`, minHeight: 28 }}>
+                  {duePt.slice(0,1).map(i => <IssueDueChip key={i.key} issue={i} />)}
+                  {allDayEvs.map(ev => <EventChip key={ev.id} ev={ev} onClick={() => setDetailEv(ev)} />)}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Day headers */}
+          <div style={{ display: 'grid', gridTemplateColumns: '56px repeat(7,1fr)', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0 }}>
+            <div style={{ borderRight: `1px solid ${T.border}` }} />
+            {weekDays.map((day, i) => {
+              const isT = sameDay(day, today)
+              return (
+                <div key={i} style={{
+                  textAlign: 'center', padding: '8px 0', fontSize: 12, fontWeight: 600,
+                  color: isT ? T.accent : T.text2, borderRight: `1px solid ${T.border}`,
+                }}>
+                  <div style={{ fontSize: 10, color: isT ? T.accent : T.text3, marginBottom: 3 }}>{DOW_PT[day.getDay()]}</div>
+                  <div style={isT ? {
+                    background: T.accent, color: '#fff', borderRadius: '50%',
+                    width: 26, height: 26, display: 'inline-flex', alignItems: 'center',
+                    justifyContent: 'center', fontSize: 13,
+                  } : { fontSize: 15, color: T.text1 }}>{day.getDate()}</div>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Hour grid */}
+          <div style={{ flex: 1, overflowY: 'auto' }}>
+            {Array.from({ length: GRID_HOURS }, (_, i) => GRID_START + i).map(hour => (
+              <div key={hour} style={{ display: 'grid', gridTemplateColumns: '56px repeat(7,1fr)', borderBottom: `1px solid ${T.border}${hour % 2 === 0 ? '' : '44'}` }}>
+                {/* Hour label */}
+                <div style={{
+                  padding: '4px 6px', fontSize: 9, color: T.text3, textAlign: 'right',
+                  borderRight: `1px solid ${T.border}`, background: T.bgSurface,
+                  height: HOUR_H, boxSizing: 'border-box', flexShrink: 0,
+                }}>
+                  {hour < 10 ? `0${hour}:00` : `${hour}:00`}
+                </div>
+                {/* Day cells */}
+                {weekDays.map((day, di) => {
+                  const isT = sameDay(day, today)
+                  const slotEvs = eventsForDay(events, day).filter(ev => {
+                    if (ev.allDay) return false
+                    const h = new Date(ev.start).getHours()
+                    return h === hour
+                  })
+                  return (
+                    <div
+                      key={di}
+                      onClick={() => openCreate(day, hour)}
+                      style={{
+                        height: HOUR_H, borderRight: `1px solid ${T.border}`,
+                        background: isT ? `${T.accent}06` : 'transparent',
+                        position: 'relative', cursor: 'pointer',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLDivElement).style.background = isT ? `${T.accent}12` : `${T.text3}07` }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLDivElement).style.background = isT ? `${T.accent}06` : 'transparent' }}
+                    >
+                      {slotEvs.map(ev => (
+                        <WeekEventBlock key={ev.id} ev={ev} onClick={() => setDetailEv(ev)} />
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Day / Agenda view ───────────────────────────────────────────────── */}
+      {view === 'day' && <DayView anchor={anchor} events={events} today={today} onEventClick={setDetailEv} onSlotClick={openCreate} />}
+
+      {/* ── Modals ──────────────────────────────────────────────────────────── */}
+      {composer && (
+        <EventComposer
+          initial={composer}
+          onSave={handleSave}
+          onClose={() => setComposer(null)}
+        />
+      )}
+      {detailEv && (
+        <EventDetailCard
+          ev={detailEv}
+          onClose={() => setDetailEv(null)}
+          onEdit={() => openEdit(detailEv)}
+          onDelete={() => handleDelete(detailEv)}
+        />
+      )}
+      {showGSync && (
+        <GoogleSyncPanel
+          onClose={() => setShowGSync(false)}
+          onConnected={refresh}
+        />
+      )}
+
+      {/* ── Toast ───────────────────────────────────────────────────────────── */}
+      {toastMsg && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 9999,
+          background: T.bgSurface, border: `1px solid ${T.accentBorder}`,
+          borderRadius: 10, padding: '11px 18px', boxShadow: T.shadow2,
+          fontSize: 13, color: T.text1, display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ color: T.success, fontSize: 15 }}>✓</span> {toastMsg}
+        </div>
+      )}
+    </div>
+  )
+}

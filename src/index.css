@@ -1,0 +1,199 @@
+@import 'tailwindcss';
+
+/* ═══════════════════════════════════════════════════════════════
+   ALTECH DARK PREMIUM — Design System Tokens
+   Single source of truth. All pages use these values.
+   ═══════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Backgrounds ──────────────────────────────────────────── */
+  --bg-page:       #09090B;
+  --bg-surface:    #16161D;
+  --bg-surface-2:  #1C1C26;
+  --bg-overlay:    rgba(9,9,11,0.80);
+
+  /* ── Borders ──────────────────────────────────────────────── */
+  --border-subtle: #262633;
+  --border-default:#2E2E40;
+
+  /* ── Text ─────────────────────────────────────────────────── */
+  --text-primary:  #F1F1F5;
+  --text-secondary:#9898AD;
+  --text-muted:    #5C5C7A;
+
+  /* ── Accent / Primary — Altech Blue ──────────────────────── */
+  --primary:       #3B82F6;
+  --primary-hover: #2563EB;
+  --primary-active:#1D4ED8;
+  --accent:        #3B82F6;
+  --indigo:        #6366F1;
+  --focus-ring:    rgba(59,130,246,0.35);
+
+  /* ── Semantic: Success ────────────────────────────────────── */
+  --healthy:       #10B981;
+  --healthy-tint:  rgba(16,185,129,0.12);
+  --success:       #10B981;
+  --success-dim:   rgba(16,185,129,0.12);
+
+  /* ── Semantic: Warning ────────────────────────────────────── */
+  --warning:       #F59E0B;
+  --warning-tint:  rgba(245,158,11,0.12);
+  --warn:          #F59E0B;
+  --warn-dim:      rgba(245,158,11,0.12);
+
+  /* ── Semantic: Critical ───────────────────────────────────── */
+  --blocked:       #EF4444;
+  --blocked-tint:  rgba(239,68,68,0.12);
+  --crit:          #EF4444;
+  --crit-dim:      rgba(239,68,68,0.12);
+
+  /* ── Semantic: In-progress ────────────────────────────────── */
+  --inprogress:    #3B82F6;
+  --inprogress-tint: rgba(59,130,246,0.12);
+
+  /* ── Semantic: Neutral / Backlog ──────────────────────────── */
+  --backlog:       #5C5C7A;
+  --backlog-tint:  rgba(92,92,122,0.12);
+
+  /* ── Elevation ────────────────────────────────────────────── */
+  --shadow-1: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-2: 0 4px 16px rgba(0,0,0,0.4);
+  --shadow-3: 0 16px 48px rgba(0,0,0,0.5);
+  --shadow-modal: 0 32px 80px rgba(0,0,0,0.56);
+
+  /* ── Radius ───────────────────────────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  --sidebar-w: 240px;
+  --rail-w:    56px;
+  --header-h:  48px;
+
+  /* ── Type scale ───────────────────────────────────────────── */
+  --fs-2xs: 11px;
+  --fs-xs:  12px;
+  --fs-sm:  13px;
+  --fs-base:14px;
+  --fs-md:  16px;
+  --fs-lg:  19px;
+  --fs-xl:  24px;
+  --fs-2xl: 32px;
+}
+
+/* ── .dark-shell reinforces Altech dark on wrapped pages ──────── */
+.dark-shell {
+  --bg-page:         #0e1016;
+  --bg-surface:      #171a22;
+  --bg-surface-2:    #1e222c;
+  --border-subtle:   #262b37;
+  --border-default:  #2f3547;
+  --text-primary:    #e7eaf2;
+  --text-secondary:  #a2a8ba;
+  --text-muted:      #6a7390;
+  --primary:         #7d92ff;
+  --primary-hover:   #6a7eec;
+  --primary-active:  #5a6eda;
+  --accent:          #7d92ff;
+  --focus-ring:      rgba(125,146,255,0.35);
+  --healthy:         #35c9ae;
+  --healthy-tint:    rgba(53,201,174,0.12);
+  --warning:         #e6b23c;
+  --warning-tint:    rgba(230,178,60,0.12);
+  --blocked:         #f0805c;
+  --blocked-tint:    rgba(240,128,92,0.12);
+  --inprogress:      #7d92ff;
+  --inprogress-tint: rgba(125,146,255,0.12);
+  --backlog:         #6a7390;
+  --backlog-tint:    rgba(106,115,144,0.12);
+  --success:         #35c9ae;
+  --success-dim:     rgba(53,201,174,0.12);
+  --warn:            #e6b23c;
+  --warn-dim:        rgba(230,178,60,0.12);
+  --crit:            #f0805c;
+  --crit-dim:        rgba(240,128,92,0.12);
+}
+
+/* ── .dark-content: deeper bg for full-canvas views ──────────── */
+.dark-content {
+  --bg-page:       #080f1c;
+  --bg-surface:    #0d1728;
+  --bg-surface-2:  #111d33;
+  --border-subtle: #162032;
+  --border-default:#1e2d42;
+  --text-primary:  #e7eaf2;
+  --text-secondary:#a2a8ba;
+  --text-muted:    #466080;
+}
+
+/* ═══ Responsive grid utility ════════════════════════════════════ */
+.responsive-grid > * { min-width: 0; }
+
+/* ═══ Reset & base ═══════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.tabular { font-variant-numeric: tabular-nums; }
+
+/* ═══ Scrollbar ══════════════════════════════════════════════════ */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ═══ Focus ══════════════════════════════════════════════════════ */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ═══ Animations ═════════════════════════════════════════════════ */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.7s linear infinite; }
+
+@keyframes fadeRise {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-rise { animation: fadeRise 0.18s ease-out forwards; }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.fade-in { animation: fadeIn 0.15s ease-out forwards; }
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.slide-right { animation: slideRight 0.2s ease-out forwards; }
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+.skeleton {
+  background: var(--bg-surface-2);
+  border-radius: var(--radius-sm);
+  animation: skeletonPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.toast-in { animation: toastIn 0.22s ease-out forwards; }

@@ -1,0 +1,10 @@
+{
+  "description": "Streamline project management for software teams with a comprehensive design system and intuitive interfaces, enhancing collaboration and productivity.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

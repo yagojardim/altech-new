@@ -1,0 +1,353 @@
+import { useState } from 'react'
+import { T } from '../components/ds/tokens'
+import { useSession } from '../data/SessionContext'
+import { can } from '../data/permissions'
+import { updateApprovedSquads } from '../data/session'
+import {
+  getEntriesBySquads, approveEntry, rejectEntry, batchApprove, batchReject,
+  SQUADS, type TimesheetEntry, type TimesheetStatus,
+} from '../data/timesheets'
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+function fmtDate(d: string) {
+  const [y, m, day] = d.split('-')
+  return `${day}/${m}/${y}`
+}
+
+function exportCSV(rows: TimesheetEntry[], filename: string) {
+  const headers = ['Colaborador','Data','Projeto','Demanda','Horas','Descrição','Status','Squad']
+  const lines = [
+    headers,
+    ...rows.map(e => [e.user_name, e.date, e.project_name, e.item_label, String(e.hours), e.description, e.status, e.squad_id ?? '']),
+  ].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url; a.download = filename; a.click()
+  URL.revokeObjectURL(url)
+}
+
+const STATUS_META: Record<TimesheetStatus, { label: string; bg: string; txt: string; dot: string }> = {
+  saved:     { label: 'Salvo',      bg: `${T.border}22`,  txt: T.text3,   dot: T.border2  },
+  submitted: { label: 'Aguardando', bg: `${T.warn}18`,    txt: T.warn,    dot: T.warn     },
+  approved:  { label: 'Aprovado',   bg: `${T.success}18`, txt: T.success, dot: T.success  },
+  rejected:  { label: 'Rejeitado',  bg: `${T.danger}18`,  txt: T.danger,  dot: T.danger   },
+}
+
+function StatusBadge({ status }: { status: TimesheetStatus }) {
+  const m = STATUS_META[status]
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 99, background: m.bg, fontSize: 11, color: m.txt, fontWeight: 600 }}>
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: m.dot, flexShrink: 0 }} />
+      {m.label}
+    </span>
+  )
+}
+
+// ─── Reject Modal ──────────────────────────────────────────────────────────────
+function RejectModal({ count, onConfirm, onCancel }: { count: number; onConfirm: (reason: string) => void; onCancel: () => void }) {
+  const [reason, setReason] = useState('')
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 600, background: 'rgba(9,9,11,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, width: 420, padding: 24, boxShadow: T.shadowModal }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.text1, marginBottom: 6 }}>Rejeitar lançamento{count > 1 ? 's' : ''}</div>
+        <div style={{ fontSize: 12, color: T.text3, marginBottom: 16 }}>
+          {count > 1 ? `${count} lançamentos serão rejeitados.` : 'Informe o motivo da rejeição.'}
+        </div>
+        <textarea
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Descreva o motivo…"
+          rows={4}
+          style={{ width: '100%', boxSizing: 'border-box', padding: '9px 11px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text1, fontSize: 13, outline: 'none', resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+          <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+          <button onClick={() => reason.trim() && onConfirm(reason.trim())} disabled={!reason.trim()}
+            style={{ padding: '8px 16px', borderRadius: 8, background: reason.trim() ? T.danger : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: reason.trim() ? 'pointer' : 'not-allowed' }}>
+            Rejeitar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Squad Setup ──────────────────────────────────────────────────────────────
+function SquadSetup({ userId, current, onSave }: { userId: string; current: string[]; onSave: (squads: string[]) => void }) {
+  const [selected, setSelected] = useState<string[]>(current)
+
+  function toggle(id: string) {
+    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  return (
+    <div style={{ maxWidth: 480, margin: '60px auto', background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 14, padding: 28, boxShadow: T.shadowModal }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: T.text1, marginBottom: 6 }}>Squads que você aprova</div>
+      <div style={{ fontSize: 12, color: T.text3, marginBottom: 20 }}>Selecione os squads cujos lançamentos aparecem para você revisar.</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+        {SQUADS.map(s => {
+          const on = selected.includes(s.id)
+          return (
+            <button key={s.id} onClick={() => toggle(s.id)} style={{
+              display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 9, cursor: 'pointer',
+              background: on ? `${T.accent}10` : T.bgPage,
+              borderTop:    `1px solid ${on ? T.accent : T.border}`,
+              borderRight:  `1px solid ${on ? T.accent : T.border}`,
+              borderBottom: `1px solid ${on ? T.accent : T.border}`,
+              borderLeft:   `3px solid ${on ? T.accent : 'transparent'}`,
+              transition: 'all 0.15s',
+            }}>
+              <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, background: on ? T.accent : T.border2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {on && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>{s.name}</span>
+            </button>
+          )
+        })}
+      </div>
+      <button onClick={() => { updateApprovedSquads(userId, selected); onSave(selected) }}
+        disabled={selected.length === 0}
+        style={{ width: '100%', padding: '10px', borderRadius: 9, background: selected.length > 0 ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: selected.length > 0 ? 'pointer' : 'not-allowed' }}>
+        Confirmar
+      </button>
+    </div>
+  )
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+export default function HoursApprovalPage() {
+  const { activeUser, setActiveUser } = useSession()
+  const { permissions, user_id: userId, name: userName, tenant_id: tenantId, approved_squads } = activeUser
+
+  const [tick, setTick] = useState(0)
+  const refresh = () => setTick(t => t + 1)
+  const [mySquads, setMySquads] = useState<string[]>(approved_squads ?? [])
+  const [setupDone, setSetupDone] = useState((approved_squads ?? []).length > 0)
+
+  if (!can(permissions, 'approve:hours')) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.text3, fontSize: 14 }}>Sem permissão para aprovar horas.</div>
+  }
+
+  if (!setupDone) {
+    return (
+      <SquadSetup userId={userId} current={mySquads} onSave={squads => { setMySquads(squads); setSetupDone(true); setActiveUser(userId) }} />
+    )
+  }
+
+  void tick
+  const allEntries = getEntriesBySquads(mySquads, tenantId)
+
+  // ─── Filter state ──────────────────────────────────────────────────────────
+  const [filterStatus, setFilterStatus] = useState<TimesheetStatus | 'all'>('submitted')
+  const [filterSquad, setFilterSquad] = useState('all')
+
+  const filtered = allEntries.filter(e => {
+    if (filterStatus !== 'all' && e.status !== filterStatus) return false
+    if (filterSquad !== 'all' && e.squad_id !== filterSquad) return false
+    return true
+  })
+
+  // ─── Selection ──────────────────────────────────────────────────────────────
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [rejectTarget, setRejectTarget] = useState<'single' | 'batch' | null>(null)
+  const [rejectId, setRejectId] = useState<string>('')
+  const [toast, setToast] = useState('')
+
+  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
+
+  function toggleSelect(id: string) {
+    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function toggleAll() {
+    const submittedIds = filtered.filter(e => e.status === 'submitted').map(e => e.id)
+    if (submittedIds.every(id => selected.has(id))) {
+      setSelected(new Set())
+    } else {
+      setSelected(new Set(submittedIds))
+    }
+  }
+  const submittedInView = filtered.filter(e => e.status === 'submitted')
+  const allChecked = submittedInView.length > 0 && submittedInView.every(e => selected.has(e.id))
+
+  function handleApprove(id: string) {
+    approveEntry(id, userName); refresh(); showToast('Aprovado.')
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+  }
+  function handleRejectOpen(id: string) { setRejectId(id); setRejectTarget('single') }
+  function handleRejectConfirm(reason: string) {
+    if (rejectTarget === 'single') {
+      rejectEntry(rejectId, userName, reason); showToast('Rejeitado.')
+      setSelected(prev => { const n = new Set(prev); n.delete(rejectId); return n })
+    } else {
+      batchReject(Array.from(selected), userName, reason); showToast(`${selected.size} lançamento(s) rejeitado(s).`); setSelected(new Set())
+    }
+    setRejectTarget(null); setRejectId(''); refresh()
+  }
+  function handleBatchApprove() {
+    batchApprove(Array.from(selected), userName); showToast(`${selected.size} lançamento(s) aprovado(s).`); setSelected(new Set()); refresh()
+  }
+
+  function handleExportAll() {
+    exportCSV(filtered, `horas-${filterSquad === 'all' ? 'todos' : filterSquad}.csv`)
+  }
+  function handleBatchExport() {
+    const rows = filtered.filter(e => selected.has(e.id))
+    exportCSV(rows, `horas-selecionados.csv`)
+  }
+
+  // Group by squad
+  const bySquad: Record<string, TimesheetEntry[]> = {}
+  for (const e of filtered) {
+    const k = e.squad_id ?? 'sem-squad'
+    if (!bySquad[k]) bySquad[k] = []
+    bySquad[k].push(e)
+  }
+  const squadOrder = [...mySquads.filter(s => bySquad[s]), ...Object.keys(bySquad).filter(k => !mySquads.includes(k))]
+
+  const inputSt: React.CSSProperties = { padding: '6px 10px', borderRadius: 7, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text1, fontSize: 12, outline: 'none' }
+
+  return (
+    <div style={{ padding: '28px 32px', maxWidth: 1080, margin: '0 auto', position: 'relative' }}>
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 28, right: 28, zIndex: 9999, background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 18px', color: T.text1, fontSize: 13, boxShadow: T.shadowModal }}>
+          {toast}
+        </div>
+      )}
+      {rejectTarget && (
+        <RejectModal
+          count={rejectTarget === 'batch' ? selected.size : 1}
+          onConfirm={handleRejectConfirm}
+          onCancel={() => { setRejectTarget(null); setRejectId('') }}
+        />
+      )}
+
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 20, fontWeight: 700, color: T.text1 }}>Aprovar Horas</div>
+          <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>
+            Squads: {mySquads.map(s => SQUADS.find(x => x.id === s)?.name ?? s).join(', ')}
+            <button onClick={() => setSetupDone(false)} style={{ marginLeft: 8, fontSize: 10, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Editar</button>
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {selected.size > 0 && (
+            <>
+              <button onClick={handleBatchExport} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
+                ↓ CSV ({selected.size})
+              </button>
+              <button onClick={() => setRejectTarget('batch')} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.danger, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Rejeitar ({selected.size})
+              </button>
+              <button onClick={handleBatchApprove} style={{ padding: '7px 14px', borderRadius: 8, background: T.success, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                Aprovar ({selected.size})
+              </button>
+            </>
+          )}
+          <button onClick={handleExportAll} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
+            ↓ Exportar CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        {(['all', 'submitted', 'approved', 'rejected'] as const).map(s => (
+          <button key={s} onClick={() => setFilterStatus(s)} style={{
+            padding: '4px 11px', borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+            background: filterStatus === s ? T.accent : T.bgPage,
+            color: filterStatus === s ? '#fff' : T.text2,
+            border: `1px solid ${filterStatus === s ? T.accent : T.border}`,
+          }}>
+            {s === 'all' ? 'Todos' : STATUS_META[s].label}
+          </button>
+        ))}
+        <select value={filterSquad} onChange={e => setFilterSquad(e.target.value)} style={{ ...inputSt, marginLeft: 'auto' }}>
+          <option value="all">Todos os squads</option>
+          {mySquads.map(s => <option key={s} value={s}>{SQUADS.find(x => x.id === s)?.name ?? s}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      {filtered.length === 0 ? (
+        <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, padding: '60px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>
+          Nenhum lançamento para os filtros selecionados.
+        </div>
+      ) : (
+        Object.entries(bySquad).filter(([k]) => squadOrder.includes(k)).sort(([a], [b]) => squadOrder.indexOf(a) - squadOrder.indexOf(b)).map(([squadId, entries]) => {
+          const squadName = SQUADS.find(s => s.id === squadId)?.name ?? squadId
+          return (
+            <div key={squadId} style={{ marginBottom: 20 }}>
+              {/* Squad header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', marginBottom: 4 }}>
+                <div style={{ width: 8, height: 8, borderRadius: 99, background: T.accent }} />
+                <span style={{ fontSize: 12, fontWeight: 700, color: T.text2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{squadName}</span>
+                <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>{entries.length} lançamento{entries.length !== 1 ? 's' : ''}</span>
+              </div>
+
+              <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <th style={{ padding: '9px 12px', width: 32 }}>
+                        <input type="checkbox" checked={allChecked} onChange={toggleAll} style={{ cursor: 'pointer' }} />
+                      </th>
+                      {['Colaborador','Data','Projeto','Demanda','Horas','Descrição','Status','Ações'].map(h => (
+                        <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: T.text3, whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {entries.map(entry => {
+                      const isChecked = selected.has(entry.id)
+                      return (
+                        <tr key={entry.id} style={{ borderBottom: `1px solid ${T.border}`, background: isChecked ? `${T.accent}09` : 'transparent', transition: 'background 0.1s' }}
+                          onMouseEnter={e => { if (!isChecked) e.currentTarget.style.background = `${T.accent}06` }}
+                          onMouseLeave={e => { e.currentTarget.style.background = isChecked ? `${T.accent}09` : 'transparent' }}>
+                          <td style={{ padding: '10px 12px' }}>
+                            {entry.status === 'submitted' && (
+                              <input type="checkbox" checked={isChecked} onChange={() => toggleSelect(entry.id)} style={{ cursor: 'pointer' }} />
+                            )}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <div style={{ width: 28, height: 28, borderRadius: 99, background: T.accent + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: T.accent, flexShrink: 0 }}>
+                                {entry.user_initials}
+                              </div>
+                              <span style={{ fontSize: 12, color: T.text1, fontWeight: 500 }}>{entry.user_name}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: 12, color: T.text2, whiteSpace: 'nowrap' }}>{fmtDate(entry.date)}</td>
+                          <td style={{ padding: '10px 12px', fontSize: 11, color: T.text3, whiteSpace: 'nowrap' }}>{entry.project_name}</td>
+                          <td style={{ padding: '10px 12px', fontSize: 12, color: T.text1 }}>
+                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: T.accent, background: `${T.accent}12`, borderRadius: 4, padding: '1px 5px', marginRight: 4 }}>{entry.item_id}</span>
+                            <span style={{ color: T.text2 }}>{entry.item_label.split('·').slice(1).join('·').trim() || ''}</span>
+                          </td>
+                          <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700, color: T.text1, whiteSpace: 'nowrap' }}>{entry.hours}h</td>
+                          <td style={{ padding: '10px 12px', fontSize: 12, color: T.text2, maxWidth: 180 }}>
+                            <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.description || '—'}</span>
+                            {entry.reject_reason && <span style={{ display: 'block', fontSize: 10, color: T.danger, marginTop: 2 }}>✕ {entry.reject_reason}</span>}
+                          </td>
+                          <td style={{ padding: '10px 12px' }}><StatusBadge status={entry.status} /></td>
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                            {entry.status === 'submitted' && (
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <button onClick={() => handleApprove(entry.id)} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.success}18`, border: `1px solid ${T.success}44`, color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓</button>
+                                <button onClick={() => handleRejectOpen(entry.id)} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.danger}12`, border: `1px solid ${T.danger}44`, color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✕</button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })
+      )}
+    </div>
+  )
+}
