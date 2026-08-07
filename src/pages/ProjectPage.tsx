@@ -712,6 +712,8 @@ type SwimlaneMode = 'none' | 'assignee' | 'epic'
 // • Remover/remapear nunca faz issue sumir — cai em "Não mapeados".
 // • Editar colunas (renomear/remover/reordenar) requer permissão Admin.
 
+let _issueSeq = 200
+
 interface ColState {
   id:       string
   label:    string
@@ -1065,7 +1067,7 @@ function BoardTab({
                     <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
                       {/* Quick "+" — opens CreateIssueModal pre-filled with column status */}
                       <button
-                        onClick={e=>{ e.stopPropagation(); onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint) }}
+                        onClick={e=>{ e.stopPropagation(); openComposer(col.id) }}
                         title="Criar issue nesta coluna"
                         className="w-5 h-5 flex items-center justify-center rounded transition-colors text-[15px] leading-none"
                         style={{ color:S.t3 }}
@@ -1192,7 +1194,7 @@ function BoardTab({
 
                   {/* Bottom add button — opens CreateIssueModal pre-filled with column status */}
                   {col.id !== 'unmapped' && (
-                    <button onClick={()=>onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint)}
+                    <button onClick={()=>openComposer(col.id)}
                       className="w-full py-1.5 rounded-lg text-[11px] transition-all text-center mt-auto"
                       style={{ color:S.t3, border:`1px dashed ${S.border}` }}
                       onMouseEnter={e=>{ (e.currentTarget as HTMLButtonElement).style.background=DS.accentDim;(e.currentTarget as HTMLButtonElement).style.borderColor=DS.accent;(e.currentTarget as HTMLButtonElement).style.color=DS.accent }}
@@ -1253,7 +1255,7 @@ function BoardTab({
           issue={openIssue}
           onClose={() => setOpenIssue(null)}
           onUpdate={updated => {
-            setIssues(prev => prev.map(i => i.key === updated.key ? updated : i))
+            onLocalPatch(updated.key, updated)
             setOpenIssue(updated)
           }}
         />
