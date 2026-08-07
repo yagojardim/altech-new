@@ -207,7 +207,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
       <UnifiedMural dashId="admin" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -295,7 +295,7 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="pmo" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -361,7 +361,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="project-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -439,7 +439,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="product-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -735,7 +735,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -808,7 +808,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -907,7 +907,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="tech-lead" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -987,7 +987,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="dev" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -1045,7 +1045,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="ux" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1116,7 +1116,7 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="qa" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
