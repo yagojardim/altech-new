@@ -6,6 +6,7 @@
 // access goes through a small untyped shim while the rows stay strongly typed here.
 import { supabase } from '../../integrations/supabase/client'
 import { DEFAULT_TENANT_ID } from './timeline'
+import { safeCall, logger } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID }
 
@@ -136,7 +137,7 @@ function tenantError(table: string, message: string): Error {
 }
 
 /** Projects of the tenant (used to resolve project names ↔ ids). */
-export async function listPortalProjects(): Promise<PortalProject[]> {
+async function listPortalProjects__raw(): Promise<PortalProject[]> {
   const { data, error } = await supabase.from('projects')
     .select('id, name, status, period_start, period_end')
     .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null).order('name')
@@ -149,7 +150,7 @@ export async function listPortalProjects(): Promise<PortalProject[]> {
  * Only items explicitly shared (shared_project_items) or with client visibility
  * are returned — raw internal work items, PRs and infra never leave the tenant.
  */
-export async function getClientPortal(projectId: string): Promise<ClientPortalScope> {
+async function getClientPortal__raw(projectId: string): Promise<ClientPortalScope> {
   const tid = DEFAULT_TENANT_ID
   const [projectRes, sprintsRes, sharedRes, epicsRes, itemsRes] = await Promise.all([
     supabase.from('projects').select('id, name, status, period_start, period_end')
@@ -215,19 +216,23 @@ async function writeAudit(
   entityType: string, entityId: string, action: string,
   actorName: string, before: AuditPayload | null, after: AuditPayload | null,
 ): Promise<void> {
-  await supabase.from('audit_logs').insert({
-    tenant_id: DEFAULT_TENANT_ID,
-    entity_type: entityType,
-    entity_id: entityId,
-    action,
-    actor_name: actorName,
-    before,
-    after,
-  })
+  try {
+    await supabase.from('audit_logs').insert({
+      tenant_id: DEFAULT_TENANT_ID,
+      entity_type: entityType,
+      entity_id: entityId,
+      action,
+      actor_name: actorName,
+      before,
+      after,
+    })
+  } catch (err) {
+    logger.error('clientPortal.writeAudit', err, { entityType, action })
+  }
 }
 
 // ─── Signals ──────────────────────────────────────────────────────────────────
-export async function listClientSignals(projectId?: string): Promise<ClientSignalRow[]> {
+async function listClientSignals__raw(projectId?: string): Promise<ClientSignalRow[]> {
   let q = tbl('client_signals').select('*')
     .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null)
   if (projectId) q = q.eq('project_id', projectId)
@@ -236,7 +241,7 @@ export async function listClientSignals(projectId?: string): Promise<ClientSigna
   return (data ?? []) as ClientSignalRow[]
 }
 
-export async function listClientSignalsForPo(poId: string): Promise<ClientSignalRow[]> {
+async function listClientSignalsForPo__raw(poId: string): Promise<ClientSignalRow[]> {
   const { data, error } = await tbl('client_signals').select('*')
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('responsible_po', poId)
     .is('archived_at', null).order('created_at', { ascending: false })
@@ -255,7 +260,7 @@ export interface AddCommentInput {
   source?: 'client' | 'management'
 }
 
-export async function addClientComment(input: AddCommentInput): Promise<ClientSignalRow> {
+async function addClientComment__raw(input: AddCommentInput): Promise<ClientSignalRow> {
   const isMgmt = input.source === 'management'
   const { data, error } = await tbl('client_signals').insert({
     tenant_id: DEFAULT_TENANT_ID,
@@ -287,7 +292,7 @@ export interface AddApprovalInput {
 }
 
 /** Records a formal approval (client_approvals) plus its signal (type=approval). */
-export async function addClientApproval(input: AddApprovalInput): Promise<ClientSignalRow> {
+async function addClientApproval__raw(input: AddApprovalInput): Promise<ClientSignalRow> {
   if (input.workItemId) {
     const { data: appr, error: apprErr } = await tbl('client_approvals').insert({
       tenant_id: DEFAULT_TENANT_ID,
@@ -320,7 +325,7 @@ export async function addClientApproval(input: AddApprovalInput): Promise<Client
 }
 
 /** Public reply from management — marks the signal read and notifies the client. */
-export async function addPoReply(signalId: string, reply: string, poName: string): Promise<void> {
+async function addPoReply__raw(signalId: string, reply: string, poName: string): Promise<void> {
   const { data, error } = await tbl('client_signals')
     .update({
       po_reply: reply,
@@ -336,28 +341,28 @@ export async function addPoReply(signalId: string, reply: string, poName: string
     { project_id: row.project_id, reply })
 }
 
-export async function markSignalReadByPo(signalId: string): Promise<void> {
+async function markSignalReadByPo__raw(signalId: string): Promise<void> {
   await tbl('client_signals').update({ read_by_po: true })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', signalId)
 }
 
-export async function markProjectReadByPo(projectId: string): Promise<void> {
+async function markProjectReadByPo__raw(projectId: string): Promise<void> {
   await tbl('client_signals').update({ read_by_po: true })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('project_id', projectId).eq('read_by_po', false)
 }
 
-export async function markReplyReadByClient(signalId: string): Promise<void> {
+async function markReplyReadByClient__raw(signalId: string): Promise<void> {
   await tbl('client_signals').update({ reply_read_by_client: true })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', signalId)
 }
 
-export async function markAllRepliesReadByClient(author: string): Promise<void> {
+async function markAllRepliesReadByClient__raw(author: string): Promise<void> {
   await tbl('client_signals').update({ reply_read_by_client: true })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('author', author).eq('reply_read_by_client', false)
 }
 
 // ─── Portal users / permissions ───────────────────────────────────────────────
-export async function listClientPortalUsers(projectId?: string): Promise<ClientPortalUserRow[]> {
+async function listClientPortalUsers__raw(projectId?: string): Promise<ClientPortalUserRow[]> {
   let q = tbl('client_portal_users').select('*')
     .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null)
   if (projectId) q = q.eq('project_id', projectId)
@@ -379,7 +384,7 @@ export interface CreatePortalUserInput {
 }
 
 /** Creates one client_portal_users row per shared project. */
-export async function createClientPortalUsers(
+async function createClientPortalUsers__raw(
   input: CreatePortalUserInput,
 ): Promise<ClientPortalUserRow[]> {
   const rows = input.projectIds.map(pid => ({
@@ -415,7 +420,7 @@ export interface ClientPermissions {
 }
 
 /** Effective portal permissions for one client email (optionally per project). */
-export async function getClientPermissions(
+async function getClientPermissions__raw(
   email: string, projectId?: string,
 ): Promise<ClientPermissions> {
   let q = tbl('client_portal_users').select('*')
@@ -435,7 +440,62 @@ export async function getClientPermissions(
   }
 }
 
-export async function setPortalPasswordChanged(userId: string): Promise<void> {
+async function setPortalPasswordChanged__raw(userId: string): Promise<void> {
   await tbl('client_portal_users').update({ password_must_change: false, status: 'active' })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', userId)
 }
+
+
+// ─── Resilient public API ─────────────────────────────────────────────────────
+// Every exported call degrades to a safe empty value on failure (missing table,
+// network error, RLS): the UI renders an empty/error state instead of crashing.
+
+const EMPTY_SCOPE: ClientPortalScope = { project: null, sprints: [], deliveries: [], roadmap: [] }
+const NO_PERMISSIONS: ClientPermissions = {
+  portalRole: 'viewer', canApprove: false, canPreview: false, canComment: false,
+}
+
+export const listPortalProjects = (): Promise<PortalProject[]> =>
+  safeCall('clientPortal.listPortalProjects', () => listPortalProjects__raw(), [])
+
+export const getClientPortal = (projectId: string): Promise<ClientPortalScope> =>
+  safeCall('clientPortal.getClientPortal', () => getClientPortal__raw(projectId), EMPTY_SCOPE, { projectId })
+
+export const listClientSignals = (projectId?: string): Promise<ClientSignalRow[]> =>
+  safeCall('clientPortal.listClientSignals', () => listClientSignals__raw(projectId), [], { projectId })
+
+export const listClientSignalsForPo = (poId: string): Promise<ClientSignalRow[]> =>
+  safeCall('clientPortal.listClientSignalsForPo', () => listClientSignalsForPo__raw(poId), [], { poId })
+
+export const addClientComment = (input: AddCommentInput): Promise<ClientSignalRow | null> =>
+  safeCall('clientPortal.addClientComment', () => addClientComment__raw(input), null, { projectId: input.projectId })
+
+export const addClientApproval = (input: AddApprovalInput): Promise<ClientSignalRow | null> =>
+  safeCall('clientPortal.addClientApproval', () => addClientApproval__raw(input), null, { projectId: input.projectId })
+
+export const addPoReply = (signalId: string, reply: string, poName: string): Promise<void> =>
+  safeCall('clientPortal.addPoReply', () => addPoReply__raw(signalId, reply, poName), undefined, { signalId })
+
+export const markSignalReadByPo = (signalId: string): Promise<void> =>
+  safeCall('clientPortal.markSignalReadByPo', () => markSignalReadByPo__raw(signalId), undefined, { signalId })
+
+export const markProjectReadByPo = (projectId: string): Promise<void> =>
+  safeCall('clientPortal.markProjectReadByPo', () => markProjectReadByPo__raw(projectId), undefined, { projectId })
+
+export const markReplyReadByClient = (signalId: string): Promise<void> =>
+  safeCall('clientPortal.markReplyReadByClient', () => markReplyReadByClient__raw(signalId), undefined, { signalId })
+
+export const markAllRepliesReadByClient = (author: string): Promise<void> =>
+  safeCall('clientPortal.markAllRepliesReadByClient', () => markAllRepliesReadByClient__raw(author), undefined)
+
+export const listClientPortalUsers = (projectId?: string): Promise<ClientPortalUserRow[]> =>
+  safeCall('clientPortal.listClientPortalUsers', () => listClientPortalUsers__raw(projectId), [], { projectId })
+
+export const createClientPortalUsers = (input: CreatePortalUserInput): Promise<ClientPortalUserRow[]> =>
+  safeCall('clientPortal.createClientPortalUsers', () => createClientPortalUsers__raw(input), [], { email: input.email })
+
+export const getClientPermissions = (email: string, projectId?: string): Promise<ClientPermissions> =>
+  safeCall('clientPortal.getClientPermissions', () => getClientPermissions__raw(email, projectId), NO_PERMISSIONS)
+
+export const setPortalPasswordChanged = (userId: string): Promise<void> =>
+  safeCall('clientPortal.setPortalPasswordChanged', () => setPortalPasswordChanged__raw(userId), undefined, { userId })

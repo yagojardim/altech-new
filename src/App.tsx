@@ -35,6 +35,7 @@ import BoardsListPage from './pages/BoardsListPage'
 import ModulesPortfolioPage from './pages/ModulesPortfolioPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 
 const ALL_VIEWS: View[] = [
@@ -64,9 +65,11 @@ export const VIEW_LABELS: Record<View, string> = {
 
 export default function App() {
   return (
-    <SessionProvider>
-      <AppInner />
-    </SessionProvider>
+    <ErrorBoundary scope="AppShell">
+      <SessionProvider>
+        <AppInner />
+      </SessionProvider>
+    </ErrorBoundary>
   )
 }
 
@@ -123,11 +126,11 @@ function AppInner() {
     return (
       <div className="fixed inset-0 flex flex-col" style={{ background:'#0e1016' }}>
         <div className="flex-1 overflow-hidden">
-          <ClientPortalPage
+          <ErrorBoundary scope="ClientPortal"><ClientPortalPage
             mustChangePassword={clientMustChangePwd}
             onPasswordChanged={() => setClientMustChangePwd(false)}
             onLogout={() => setView('client-login')}
-          />
+          /></ErrorBoundary>
         </div>
       </div>
     )
@@ -155,6 +158,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         <InviteMemberModal onClose={()=>setInvite(false)} />
       )}
       <Shell currentView={view} onViewChange={v => { if (v === 'team') setTeamInitialTab('membros'); setView(v) }} onCreateIssue={()=>setCreate(true)}>
+        <ErrorBoundary scope={`view:${view}`} key={view}>
         {view==='home'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => {
           if (v === 'team:convites') { setTeamInitialTab('convites'); setView('team') }
           else if (v === 'team:membros') { setTeamInitialTab('membros'); setView('team') }
@@ -184,6 +188,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='hours-approval'   && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><HoursApprovalPage /></div>}
         {view==='boards-list'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setView('project') }} /></div>}
         {view==='modules'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
+        </ErrorBoundary>
       </Shell>
     </>
   )

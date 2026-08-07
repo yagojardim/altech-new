@@ -3,6 +3,7 @@
 // synchronously) always render live tenant data. Every write goes to Supabase.
 import { useEffect, useSyncExternalStore } from 'react'
 import { MOCK_TENANT } from './session'
+import { logger } from '../utils/logger'
 import * as api from './db/clientPortal'
 import type { ClientSignalRow, PortalProject } from './db/clientPortal'
 import type { ClientSignal } from './clientSignals'
@@ -206,7 +207,17 @@ export async function refreshPortal(): Promise<void> {
       }
       hydrated = true
     } catch (e) {
-      state = { ...state, loading: false, error: e instanceof Error ? e.message : String(e) }
+      // Never let a portal failure bubble into render — degrade to empty state.
+      logger.error('clientPortalStore.refreshPortal', e)
+      state = {
+        ...state,
+        signals: state.signals ?? [],
+        users: state.users ?? [],
+        scope: state.scope ?? EMPTY_SCOPE,
+        loading: false,
+        error: e instanceof Error ? e.message : String(e),
+      }
+      hydrated = true
     } finally {
       inflight = null
       emit()

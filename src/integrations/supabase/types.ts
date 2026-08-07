@@ -452,6 +452,259 @@ export type Database = {
         }
         Relationships: []
       }
+      client_approvals: {
+        Row: {
+          archived_at: string | null
+          client_user_id: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          id: string
+          metadata: Json
+          project_id: string
+          row_version: number
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          work_item_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          client_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          id?: string
+          metadata?: Json
+          project_id: string
+          row_version?: number
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          work_item_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          client_user_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          id?: string
+          metadata?: Json
+          project_id?: string
+          row_version?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          work_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_approvals_item_fk"
+            columns: ["tenant_id", "work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_approvals_project_fk"
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_approvals_user_fk"
+            columns: ["tenant_id", "client_user_id"]
+            isOneToOne: false
+            referencedRelation: "client_portal_users"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
+      client_portal_users: {
+        Row: {
+          archived_at: string | null
+          can_approve: boolean
+          can_comment: boolean
+          can_preview: boolean
+          created_at: string
+          created_by: string | null
+          email: string
+          id: string
+          metadata: Json
+          name: string
+          password_must_change: boolean
+          portal_role: string
+          project_id: string
+          row_version: number
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          can_approve?: boolean
+          can_comment?: boolean
+          can_preview?: boolean
+          created_at?: string
+          created_by?: string | null
+          email: string
+          id?: string
+          metadata?: Json
+          name: string
+          password_must_change?: boolean
+          portal_role?: string
+          project_id: string
+          row_version?: number
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          can_approve?: boolean
+          can_comment?: boolean
+          can_preview?: boolean
+          created_at?: string
+          created_by?: string | null
+          email?: string
+          id?: string
+          metadata?: Json
+          name?: string
+          password_must_change?: boolean
+          portal_role?: string
+          project_id?: string
+          row_version?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_portal_users_project_fk"
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_portal_users_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_signals: {
+        Row: {
+          archived_at: string | null
+          author: string | null
+          body: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          item_id: string | null
+          item_title: string | null
+          metadata: Json
+          po_reply: string | null
+          project_id: string
+          read_by_po: boolean
+          reply_read_by_client: boolean
+          responsible_po: string | null
+          row_version: number
+          tenant_id: string
+          type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          author?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id?: string | null
+          item_title?: string | null
+          metadata?: Json
+          po_reply?: string | null
+          project_id: string
+          read_by_po?: boolean
+          reply_read_by_client?: boolean
+          responsible_po?: string | null
+          row_version?: number
+          tenant_id: string
+          type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          author?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          item_id?: string | null
+          item_title?: string | null
+          metadata?: Json
+          po_reply?: string | null
+          project_id?: string
+          read_by_po?: boolean
+          reply_read_by_client?: boolean
+          responsible_po?: string | null
+          row_version?: number
+          tenant_id?: string
+          type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_signals_item_fk"
+            columns: ["tenant_id", "item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_signals_po_fk"
+            columns: ["tenant_id", "responsible_po"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_signals_project_fk"
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "client_signals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       comments: {
         Row: {
           archived_at: string | null
@@ -1471,6 +1724,69 @@ export type Database = {
           tier?: number
         }
         Relationships: []
+      }
+      shared_project_items: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          project_id: string
+          row_version: number
+          shared_entity_id: string
+          shared_entity_type: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          visibility: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id: string
+          row_version?: number
+          shared_entity_id: string
+          shared_entity_type: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          visibility?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          project_id?: string
+          row_version?: number
+          shared_entity_id?: string
+          shared_entity_type?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          visibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_project_items_project_fk"
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "shared_project_items_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sprint_items: {
         Row: {
