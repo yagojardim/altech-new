@@ -1,12 +1,26 @@
 import React, { useState } from 'react'
 import { T } from './ds/tokens'
 
+export interface NewProjectInput {
+  name: string
+  key: string
+  description: string
+  boardType: 'scrum' | 'kanban'
+  leadId: string | null
+}
+
 interface Props {
   onClose: () => void
   onSuccess: (projectKey: string, projectName: string) => void
+  /** Real persistence hook — when given, "Criar" inserts the project in the database. */
+  onCreate?: (input: NewProjectInput) => Promise<void>
+  /** Real leads loaded from the database. */
+  leads?: { id: string; name: string; initials: string }[]
+  /** Keys already used in the database (duplicate guard). */
+  existingKeys?: string[]
 }
 
-const EXISTING_KEYS = ['ALT', 'PM', 'SB', 'INT']
+const FALLBACK_KEYS = ['ALT', 'PM', 'SB', 'INT']
 
 const overlay: React.CSSProperties = {
   position: 'fixed',
@@ -51,18 +65,21 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
 }
 
-export function NewProjectModal({ onClose, onSuccess }: Props) {
+export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingKeys }: Props) {
   const [workspace, setWorkspace] = useState('Altech Agency')
   const [name, setName] = useState('')
   const [key, setKey] = useState('')
   const [keyManual, setKeyManual] = useState(false)
   const [type, setType] = useState<'scrum' | 'kanban'>('scrum')
-  const [lead, setLead] = useState('AL')
+  const [lead, setLead] = useState(leads?.[0]?.id ?? 'AL')
   const [desc, setDesc] = useState('')
   const [success, setSuccess] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const isDuplicate = EXISTING_KEYS.includes(key) && key.length > 0
-  const canCreate = name.trim().length > 0 && key.length > 0 && !isDuplicate
+  const takenKeys = existingKeys ?? FALLBACK_KEYS
+  const isDuplicate = takenKeys.includes(key) && key.length > 0
+  const canCreate = name.trim().length > 0 && key.length > 0 && !isDuplicate && !saving
 
   function handleNameChange(val: string) {
     setName(val)
@@ -84,9 +101,19 @@ export function NewProjectModal({ onClose, onSuccess }: Props) {
     setKeyManual(true)
   }
 
-  function handleCreate() {
+  async function handleCreate() {
     if (!canCreate) return
-    setSuccess(true)
+    setError(null)
+    if (!onCreate) { setSuccess(true); return }
+    setSaving(true)
+    try {
+      await onCreate({ name: name.trim(), key, description: desc.trim(), boardType: type, leadId: lead || null })
+      setSuccess(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Não foi possível criar o projeto.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function handleReset() {
@@ -95,9 +122,10 @@ export function NewProjectModal({ onClose, onSuccess }: Props) {
     setKey('')
     setKeyManual(false)
     setType('scrum')
-    setLead('AL')
+    setLead(leads?.[0]?.id ?? 'AL')
     setDesc('')
     setSuccess(false)
+    setError(null)
   }
 
   return (
@@ -279,12 +307,16 @@ export function NewProjectModal({ onClose, onSuccess }: Props) {
                   onChange={e => setLead(e.target.value)}
                   style={{ ...inputStyle, cursor: 'pointer' }}
                 >
-                  <option value="AL">Ana Lima (AL)</option>
-                  <option value="NM">Nuno Matos (NM)</option>
-                  <option value="JN">João Neves (JN)</option>
-                  <option value="CS">Carla Silva (CS)</option>
-                  <option value="RM">Rui Melo (RM)</option>
-                  <option value="LF">Lucas Ferreira (LF)</option>
+                  {(leads ?? [
+                    { id: 'AL', name: 'Ana Lima', initials: 'AL' },
+                    { id: 'NM', name: 'Nuno Matos', initials: 'NM' },
+                    { id: 'JN', name: 'João Neves', initials: 'JN' },
+                    { id: 'CS', name: 'Carla Silva', initials: 'CS' },
+                    { id: 'RM', name: 'Rui Melo', initials: 'RM' },
+                    { id: 'LF', name: 'Lucas Ferreira', initials: 'LF' },
+                  ]).map(l => (
+                    <option key={l.id} value={l.id}>{l.name} ({l.initials})</option>
+                  ))}
                 </select>
               </div>
 
@@ -299,6 +331,10 @@ export function NewProjectModal({ onClose, onSuccess }: Props) {
                   style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
                 />
               </div>
+
+              {error && (
+                <p style={{ fontSize: 12, color: T.crit }}>{error}</p>
+              )}
             </div>
 
             {/* Footer */}
@@ -337,7 +373,7 @@ export function NewProjectModal({ onClose, onSuccess }: Props) {
                   opacity: canCreate ? 1 : 0.4,
                   transition: 'opacity 0.15s',
                 }}
-              >Criar</button>
+              >{saving ? 'Criando…' : 'Criar'}</button>
             </div>
           </>
         )}
