@@ -11,6 +11,10 @@ import {
   PRIORITY_FROM_DB,
   type BoardItemRow, type BoardData,
 } from '../data/db/board'
+import {
+  startSprint as dbStartSprint,
+  completeSprint as dbCompleteSprint,
+} from '../data/db/sprints'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -1947,6 +1951,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
+  const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
   // ── Board (Kanban) — real data from Supabase ────────────────────────────
@@ -2179,7 +2184,16 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
       )}
       {tab === 'Sprints' && (
-        <SprintsTab issues={issues} sprints={sprints} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
+        <SprintsTab
+          issues={dbIssues}
+          sprints={dbSprints}
+          canManageSprint={canManageSprint}
+          loading={boardLoading}
+          error={boardError}
+          onStartSprint={s=>setStartingSprint(s)}
+          onCompleteSprint={s=>setCompletingSprint(s)}
+          onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+        />
       )}
 
     </div>
@@ -2215,8 +2229,15 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         }}
       />
     )}
+    {startingSprint && (
+      <StartSprintModal
+        sprint={startingSprint}
+        onConfirm={(id, goal, name) => { void handleStartSprintDb(id, goal, name) }}
+        onClose={() => setStartingSprint(null)}
+      />
+    )}
     {completingSprint && (() => {
-      const sprintIssues  = issues.filter(i => i.sprint === completingSprint.id)
+      const sprintIssues  = dbIssues.filter(i => i.sprint === completingSprint.id)
       const doneCount     = sprintIssues.filter(i => i.status === 'done').length
       const totalCount    = sprintIssues.length
       const remainCount   = sprintIssues.filter(i => i.status !== 'done').length
@@ -2224,9 +2245,9 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         <CompleteSprintModal
           sprint={completingSprint}
           stats={{ done: doneCount, total: totalCount, remaining: remainCount }}
-          nextSprintName={sprints.find(s => s.state === 'planned')?.name}
+          nextSprintName={dbSprints.find(s => s.state === 'planned')?.name}
           onClose={() => setCompletingSprint(null)}
-          onConfirm={handleCompleteSprint}
+          onConfirm={m => { void handleCompleteSprint(m) }}
         />
       )
     })()}
