@@ -15,7 +15,7 @@ import {
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
-  useLiveDashboard, liveProjects, liveItems, liveCurrentSprintName,
+  useLiveDashboard, liveProjects, liveItems, liveCurrentSprintName, liveAggregates,
   getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
 } from '../data/db/homeLive'
