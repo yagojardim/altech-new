@@ -123,14 +123,16 @@ export async function refreshPortal(): Promise<void> {
     try {
       const projects = await api.listPortalProjects()
       state = { ...state, projects }
-      const [signals, users] = await Promise.all([
+      const [signals, users, scopes] = await Promise.all([
         api.listClientSignals(),
         api.listClientPortalUsers(),
+        Promise.all(projects.map(p => api.getClientPortal(p.id))),
       ])
       state = {
         projects,
         signals: signals.map(toSignal),
         users: users.map(toAccess),
+        scope: buildScope(scopes),
         loading: false,
         error: null,
       }
