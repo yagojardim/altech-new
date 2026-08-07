@@ -251,7 +251,7 @@ export default function DashboardPage({ onNav }: { onNav?: (v:string)=>void }) {
   return (
     <div className="p-5 space-y-5 overflow-y-auto h-full" style={{ maxWidth:1280, margin:'0 auto' }}>
       {openItemId && (
-        <WorkItemDetail itemId={openItemId} mode="drawer" onClose={() => setOpenItemId(null)} />
+        <WorkItemDetail itemId={openItemId} mode="drawer" onUpdate={() => {}} onClose={() => setOpenItemId(null)} />
       )}
 
       {/* Page title + filter */}
