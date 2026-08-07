@@ -407,6 +407,34 @@ export async function createClientPortalUsers(
   return created
 }
 
+export interface ClientPermissions {
+  portalRole: PortalRole
+  canApprove: boolean
+  canPreview: boolean
+  canComment: boolean
+}
+
+/** Effective portal permissions for one client email (optionally per project). */
+export async function getClientPermissions(
+  email: string, projectId?: string,
+): Promise<ClientPermissions> {
+  let q = tbl('client_portal_users').select('*')
+    .eq('tenant_id', DEFAULT_TENANT_ID).ilike('email', email)
+  if (projectId) q = q.eq('project_id', projectId)
+  const { data, error } = await q
+  if (error) throw tenantError('client_portal_users', error.message)
+  const rows = (data ?? []) as ClientPortalUserRow[]
+  if (rows.length === 0) {
+    return { portalRole: 'viewer', canApprove: false, canPreview: false, canComment: false }
+  }
+  return {
+    portalRole: rows.some(r => r.portal_role === 'portal-admin') ? 'portal-admin' : 'viewer',
+    canApprove: rows.some(r => r.can_approve),
+    canPreview: rows.some(r => r.can_preview),
+    canComment: rows.some(r => r.can_comment),
+  }
+}
+
 export async function setPortalPasswordChanged(userId: string): Promise<void> {
   await tbl('client_portal_users').update({ password_must_change: false, status: 'active' })
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', userId)
