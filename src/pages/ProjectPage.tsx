@@ -975,7 +975,7 @@ function BoardTab({
         <select value={activeSprint} onChange={e=>setActiveSprint(e.target.value)}
           className="h-7 px-2 text-[11px] rounded-lg border outline-none appearance-none pr-5 font-[inherit]"
           style={{ background:S.surface2, border:`1px solid ${S.border}`, color:DS.accent }}>
-          {SPRINTS.filter(s=>s.state!=='completed').map(s=>(
+          {selectableSprints.map(s=>(
             <option key={s.id} value={s.id} style={{ background:S.surface2 }}>{s.name} {s.state==='active'?'▶':''}</option>
           ))}
         </select>
@@ -1041,6 +1041,33 @@ function BoardTab({
         </div>
       </div>
 
+      {/* ── Loading / error / empty ────────────────────────────────────────── */}
+      {loading ? (
+        <div className="flex-1 overflow-hidden">
+          <div className="flex gap-3 p-4">
+            {[0,1,2,3,4].map(i=>(
+              <div key={i} className="flex flex-col gap-2 flex-shrink-0" style={{ width:212 }}>
+                <div style={{ height:14, width:'55%', borderRadius:6, background:S.surface2 }}/>
+                {[0,1,2].map(j=>(
+                  <div key={j} style={{ height:64, borderRadius:10, background:S.surface, border:`1px solid ${S.border}`, opacity:1-j*0.22 }}/>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div style={{ maxWidth:460, textAlign:'center' }}>
+            <p style={{ fontSize:13, fontWeight:700, color:DS.crit, marginBottom:6 }}>Não foi possível carregar o board</p>
+            <p style={{ fontSize:12, color:S.t3 }}>{error}</p>
+          </div>
+        </div>
+      ) : orderedCols.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <p style={{ fontSize:12, color:S.t3 }}>Nenhuma coluna configurada para este board.</p>
+        </div>
+      ) : (
+      <>
       {/* ── Board area ─────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto">
         <div className="flex gap-3 p-4 h-full" style={{ minWidth: visibleCols.length*224+80 }}>
@@ -1160,7 +1187,7 @@ function BoardTab({
                   style={{ background:isCardOver?`${DS.accent}10`:'transparent', border:isCardOver?`1.5px dashed ${DS.accent}`:'1.5px dashed transparent', minHeight:80 }}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(col.id) }}
                   onDragLeave={()=>setDragOver(null)}
-                  onDrop={()=>handleCardDrop(col)}>
+                  onDrop={()=>{ void handleCardDrop(col) }}>
 
                   {/* ── Inline mini-card composer ────────────────────── */}
                   {composerCol === col.id && (
@@ -1177,7 +1204,7 @@ function BoardTab({
                         value={composerText}
                         onChange={e=>setComposerText(e.target.value)}
                         onKeyDown={e=>{
-                          if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); submitComposer(col) }
+                          if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); void submitComposer(col) }
                           if(e.key==='Escape'){ setComposerCol(null); setComposerText('') }
                         }}
                         placeholder="O que precisa ser feito?"
@@ -1193,9 +1220,9 @@ function BoardTab({
                             style={{ fontSize:11,color:S.t3,background:'none',border:'none',cursor:'pointer',padding:'3px 8px' }}>
                             Esc
                           </button>
-                          <button onClick={()=>submitComposer(col)} disabled={!composerText.trim()}
-                            style={{ fontSize:11,fontWeight:600,color:'#fff',background:composerText.trim()?DS.accent:S.border,border:'none',borderRadius:6,cursor:composerText.trim()?'pointer':'not-allowed',padding:'3px 10px' }}>
-                            Adicionar
+                          <button onClick={()=>{ void submitComposer(col) }} disabled={!composerText.trim()||composerBusy}
+                            style={{ fontSize:11,fontWeight:600,color:'#fff',background:composerText.trim()?DS.accent:S.border,border:'none',borderRadius:6,cursor:composerText.trim()?'pointer':'not-allowed',padding:'3px 10px',opacity:composerBusy?0.6:1 }}>
+                            {composerBusy?'Salvando…':'Adicionar'}
                           </button>
                         </div>
                       </div>
@@ -1266,6 +1293,17 @@ function BoardTab({
           </div>
         </div>
       </div>
+
+      </>
+      )}
+
+      {boardToast && (
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', zIndex:300,
+          background:S.surface, border:`1px solid ${DS.crit}55`, color:S.t1, fontSize:12,
+          padding:'9px 14px', borderRadius:10, boxShadow:DS.shadowModal, maxWidth:420 }}>
+          {boardToast}
+        </div>
+      )}
 
       {/* ── Remove column confirmation ────────────────────────────────────── */}
       {removeColId && (() => {
