@@ -60,23 +60,20 @@ function applyFilters(items: WorkItem[], f: FilterState): WorkItem[] {
 function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
-      <ProjectMultiSelect projects={PROJECTS} selected={selected} onChange={onChange} />
+      <ProjectMultiSelect projects={liveProjects()} selected={selected} onChange={onChange} />
     </div>
   )
 }
 
-const PROJECTS = [
-  { id: 'proj_001', name: 'Website Relaunch', color: '#35c9ae' },
-  { id: 'proj_002', name: 'Infra Migration',  color: '#a78bfa' },
-  { id: 'proj_003', name: 'ERP Corporativo',  color: '#f5a524' },
-  { id: 'proj_004', name: 'Mobile App v2',    color: '#60a5fa' },
-]
-const ALL_PROJ_IDS = new Set(PROJECTS.map(p => p.id))
+/** Project options come from the database (tenant-scoped). */
+const PROJECTS = () => liveProjects()
+const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
 
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
-  if (sel.size >= PROJECTS.length) return items
+  if (sel.size === 0 || sel.size >= liveProjects().length) return items
   return items.filter(w => sel.has(w.project_id ?? ''))
 }
+
 const SQUADS = [
   { id: 'squad_growth',   name: 'Growth' },
   { id: 'squad_platform', name: 'Platform' },
