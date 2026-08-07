@@ -1410,7 +1410,7 @@ function sigProjectId(sigProject: string): string | null {
 }
 
 function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
-  const [selId, setSelId] = useState(PROJECTS[0].id)
+  const [selId, setSelId] = useState<string>(PROJECTS[0]?.id ?? '')
   const [draft, setDraft] = useState('')
   const [tick, setTick] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1831,8 +1831,17 @@ export default function ClientPortalPage({
   onLogout?: () => void
 }) {
   const { toasts, add: showToast } = useLocalToast()
-  useClientPortal()
-  const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
+  const portal = useClientPortal()
+  applyScope(portal.scope)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  // Select every visible project as soon as the client scope hydrates.
+  useEffect(() => {
+    setSelected(prev => {
+      const valid = new Set([...prev].filter(id => PROJECTS.some(p => p.id === id)))
+      return valid.size > 0 ? prev : new Set(PROJECTS.map(p => p.id))
+    })
+  }, [portal.scope])
   const [notifTick, setNotifTick] = useState(0)
   const [showPwdModal, setShowPwdModal] = useState(mustChangePassword)
   const [showVoluntaryPwdModal, setShowVoluntaryPwdModal] = useState(false)
