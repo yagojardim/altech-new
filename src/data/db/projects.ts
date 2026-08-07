@@ -76,12 +76,15 @@ export async function listProjects(): Promise<ProjectsData> {
   }
 }
 
+type AuditValue = string | number | boolean | null
+type AuditPayload = Record<string, AuditValue>
+
 async function writeAudit(
   entityId: string,
   action: string,
   actorName: string,
-  before: Record<string, unknown> | null,
-  after: Record<string, unknown> | null,
+  before: AuditPayload | null,
+  after: AuditPayload | null,
 ): Promise<void> {
   await supabase.from('audit_logs').insert({
     tenant_id: DEFAULT_TENANT_ID,
@@ -194,7 +197,7 @@ export async function updateProject(
   patch: UpdateProjectInput,
   actorName = 'Sistema',
 ): Promise<void> {
-  const payload: Record<string, unknown> = {}
+  const payload: Tables['projects']['Update'] & AuditPayload = {}
   if (patch.name !== undefined) payload.name = patch.name
   if (patch.status !== undefined) payload.status = patch.status
   if (patch.periodStart !== undefined) payload.period_start = patch.periodStart
