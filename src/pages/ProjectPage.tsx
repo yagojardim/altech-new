@@ -15,6 +15,7 @@ import {
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
 } from '../data/db/sprints'
+import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -254,12 +255,17 @@ function PriorityDot({ p }: { p: Priority }) {
 }
 
 function TypeIcon({ t }: { t: IssueType }) {
-  const map: Record<IssueType, { label: string; color: string }> = {
-    story:   { label: '◇', color: DS.accent  },
+  // story / epic use the Altech icon library; the remaining types keep their glyphs.
+  if (t === 'story') {
+    return <span className="flex-shrink-0 inline-flex" style={{ color: DS.accent }}><StoryIcon size={12} /></span>
+  }
+  if (t === 'epic') {
+    return <span className="flex-shrink-0 inline-flex" style={{ color: DS.warn }}><EpicIcon size={12} /></span>
+  }
+  const map: Record<Exclude<IssueType, 'story' | 'epic'>, { label: string; color: string }> = {
     bug:     { label: '⬟', color: DS.crit    },
     task:    { label: '☑', color: DS.text2   },
     subtask: { label: '◻', color: DS.text3   },
-    epic:    { label: '⚡', color: DS.warn    },
     feature: { label: '▣', color: DS.purple  },
   }
   const m = map[t]

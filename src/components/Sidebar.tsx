@@ -6,6 +6,22 @@ import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
+import {
+  DashboardIcon as AltechDashboard, ProjectsIcon as AltechProjects, DiscoveryIcon as AltechDiscovery,
+  BacklogIcon as AltechBacklog, RoadmapIcon as AltechRoadmap, ReportsAltIcon as AltechReports,
+  AdminIcon as AltechAdmin, EpicIcon as AltechEpic,
+} from './ds/AltechIcons'
+
+// Sidebar renders icons at 14px; the Altech library is drawn on a 24x24 grid.
+const NAV_ICON_SIZE = 14
+const DashboardIcon  = () => <AltechDashboard size={NAV_ICON_SIZE} />
+const ProjectsIcon   = () => <AltechProjects size={NAV_ICON_SIZE} />
+const DiscoveryIcon  = () => <AltechDiscovery size={NAV_ICON_SIZE} />
+const BacklogIcon    = () => <AltechBacklog size={NAV_ICON_SIZE} />
+const RoadmapIcon    = () => <AltechRoadmap size={NAV_ICON_SIZE} />
+const ReportsAltIcon = () => <AltechReports size={NAV_ICON_SIZE} />
+const AdminIcon      = () => <AltechAdmin size={NAV_ICON_SIZE} />
+const EpicIcon       = () => <AltechEpic size={NAV_ICON_SIZE} />
 
 interface SidebarProps {
   collapsed: boolean
@@ -45,27 +61,27 @@ const ALL_GROUPS: NavGroup[] = [
   {
     label: 'Gestão',
     items: [
-      { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectIcon },
+      { id: 'projects-list', label: 'Projetos & Tarefas', icon: ProjectsIcon },
       { id: 'boards-list',   label: 'Boards',             icon: BoardIcon   },
-      { id: 'list',          label: 'Lista',              icon: ListIcon    },
+      { id: 'list',          label: 'Lista',              icon: BacklogIcon    },
       { id: 'gantt',         label: 'Gráfico Gantt',      icon: GanttIcon   },
-      { id: 'timeline',      label: 'Timeline',           icon: TimelineIcon},
-      { id: 'dashboard', label: 'Dashboard Executivo', icon: ChartIcon, cap: 'access:dashview' },
+      { id: 'timeline',      label: 'Timeline',           icon: RoadmapIcon},
+      { id: 'dashboard', label: 'Dashboard Executivo', icon: DashboardIcon, cap: 'access:dashview' },
     ],
   },
   {
     label: 'Planejamento',
     items: [
-      { id: 'epics',     label: 'Épicos',         icon: EpicNavIcon, cap: 'create:epic'    },
+      { id: 'epics',     label: 'Épicos',         icon: EpicIcon, cap: 'create:epic'    },
       { id: 'releases',  label: 'Releases',        icon: ReleaseIcon                       },
-      { id: 'filters',   label: 'Filtros & Busca', icon: FilterIcon                        },
-      { id: 'navigator', label: 'Issue Navigator', icon: NavIcon                           },
+      { id: 'filters',   label: 'Filtros & Busca', icon: DiscoveryIcon                        },
+      { id: 'navigator', label: 'Issue Navigator', icon: DiscoveryIcon                           },
     ],
   },
   {
     label: 'Configuração',
     items: [
-      { id: 'config',        label: 'Configurações',        icon: ConfigIcon, cap: 'users:manage' },
+      { id: 'config',        label: 'Configurações',        icon: AdminIcon, cap: 'users:manage' },
       { id: 'modules',       label: 'Módulos',              icon: ModulesIcon, cap: 'module:request' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
       { id: 'client-access',    label: 'Criar acesso cliente',    icon: AccessIcon, cap: 'access:client-portal' },
@@ -76,8 +92,8 @@ const ALL_GROUPS: NavGroup[] = [
   {
     label: 'Mais',
     items: [
-      { id: 'team',         label: 'Time & Permissões', icon: TeamIcon,    cap: 'users:manage' },
-      { id: 'reports',      label: 'Relatórios',        icon: ReportsIcon                     },
+      { id: 'team',         label: 'Time & Permissões', icon: AdminIcon,    cap: 'users:manage' },
+      { id: 'reports',      label: 'Relatórios',        icon: ReportsAltIcon                     },
       { id: 'login',        label: 'Login Gestão',      icon: LoginIcon,   cap: 'users:manage' },
       { id: 'client-login', label: 'Login Portal',      icon: PortalIcon,  cap: 'users:manage' },
     ],
@@ -901,26 +917,16 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
 function HomeIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1.5 6.5L7 2L12.5 6.5V12.5H9V9H5V12.5H1.5V6.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg> }
 
 function CalendarIcon(){ return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="10" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5 2v2M9 2v2M2 6h10M5 9h1M7 9h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
-function ProjectIcon() { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="8" y="2" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="2" y="8" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="8" y="8" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.3"/></svg> }
 function GanttIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="4" width="5" height="2" rx="1" fill="currentColor" opacity=".7"/><rect x="5" y="7" width="7" height="2" rx="1" fill="currentColor" opacity=".7"/><rect x="3" y="10" width="4" height="2" rx="1" fill="currentColor" opacity=".7"/></svg> }
-function ChartIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 10.5L5 7l2.5 2L10 5l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function BoardIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="3" width="3" height="8" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="6" y="3" width="3" height="5" rx="1" stroke="currentColor" strokeWidth="1.3"/><rect x="10" y="3" width="2" height="7" rx="1" stroke="currentColor" strokeWidth="1.3"/></svg> }
 function ClientIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="5" r="2.5" stroke="currentColor" strokeWidth="1.3"/><path d="M2 12c0-2.76 2.24-5 5-5s5 2.24 5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
-function TeamIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="5" cy="5" r="2" stroke="currentColor" strokeWidth="1.3"/><circle cx="10" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M1 12c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M10 9c1.6.4 3 1.7 3 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function SearchIcon()  { return <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><circle cx="4.5" cy="4.5" r="3.5" stroke="currentColor" strokeWidth="1.2"/><path d="M8.5 8.5L7 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
-function ListIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4h10M2 7h10M2 10h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
-function TimelineIcon(){ return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="4" width="4" height="2" rx="1" fill="currentColor" opacity=".6"/><rect x="5" y="7" width="6" height="2" rx="1" fill="currentColor" opacity=".6"/><rect x="3" y="10" width="5" height="2" rx="1" fill="currentColor" opacity=".6"/><path d="M1 2v10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
-function EpicNavIcon() { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5L9.5 5.5H12L8.5 9H10.5L7 12.5L3.5 9H5.5L2 5.5H4.5L7 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
 function ReleaseIcon() { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4v3l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
-function FilterIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M4 7h6M6 10.5h2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
-function NavIcon()     { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="5.5" cy="5.5" r="3.5" stroke="currentColor" strokeWidth="1.2"/><path d="M9.5 9.5L12.5 12.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M7.5 7.5l3 1-1 3-1-4Z" fill="currentColor"/></svg> }
 function AccessIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 7a2 2 0 1 0-4 0 2 2 0 0 0 4 0z" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
 function LoginIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M8 2H11C11.6 2 12 2.4 12 3V11C12 11.6 11.6 12 11 12H8" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M5 4.5L8 7L5 9.5M8 7H2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function PortalIcon()  { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.2"/><path d="M5 7h4M7 5l2 2-2 2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function ChatIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2h10a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H5l-3 2V3a1 1 0 0 1 1-1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
-function ReportsIcon()    { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 11V7M5 11V5M8 11V3M11 11V6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg> }
 function AutomIcon()      { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1.5l-5 7h5l-1 4 5-7H6l1-4z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/></svg> }
-function ConfigIcon()     { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M7 1v2M7 11v2M1 7h2M11 7h2M2.9 2.9l1.4 1.4M9.7 9.7l1.4 1.4M9.7 4.3L11.1 2.9M2.9 11.1l1.4-1.4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg> }
 function ModulesIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="7.5" y="1.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="1.5" y="7.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/><rect x="7.5" y="7.5" width="4" height="4" rx="1" stroke="currentColor" strokeWidth="1.2"/></svg> }
 function CollapseIcon(){ return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 2.5L5 6.5L8.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function ExpandIcon()  { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M4.5 2.5L8 6.5L4.5 10.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg> }
