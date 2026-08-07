@@ -1,16 +1,46 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { T } from '../components/ds/tokens'
 import {
-  WORK_ITEMS,
-  getItemsByAssignee,
-} from '../data/workItems'
-import {
-  WorkItemDetailDrawer,
   StatusBadge,
   ConditionalTag,
   type WorkItem,
+  type WorkStatus,
 } from '../components/ds/DashboardKit'
+import { WorkItemDetail } from '../components/WorkItemDetail'
+import { listMyQueue, type QueueItem } from '../data/db/myQueue'
 import { getActiveUser } from '../data/session'
+
+// ─── DB → UI mapping ─────────────────────────────────────────────────────────
+const DB_STATUS_TO_UI: Record<string, WorkStatus> = {
+  backlog: 'backlog', todo: 'todo', in_progress: 'in-progress', 'in-progress': 'in-progress',
+  in_review: 'in-review', 'in-review': 'in-review', blocked: 'blocked', done: 'done', ready: 'ready',
+}
+const DB_PRIORITY_TO_UI: Record<string, WorkItem['priority']> = {
+  critical: 'critical', critica: 'critical', 'crítica': 'critical',
+  high: 'high', alta: 'high', medium: 'medium', media: 'medium', 'média': 'medium',
+  low: 'low', baixa: 'low',
+}
+const DB_TYPE_TO_UI: Record<string, WorkItem['type']> = {
+  story: 'story', task: 'task', bug: 'bug', epic: 'epic', subtask: 'subtask', feature: 'story',
+}
+
+function toWorkItem(q: QueueItem): WorkItem {
+  const status = q.blocked ? 'blocked' : (DB_STATUS_TO_UI[q.status] ?? 'backlog')
+  return {
+    id: q.id,
+    key: q.key,
+    title: q.title,
+    type: DB_TYPE_TO_UI[q.type] ?? 'task',
+    status,
+    priority: DB_PRIORITY_TO_UI[q.priority] ?? 'medium',
+    sprint: q.sprintName ?? undefined,
+    project_id: q.projectId,
+    squad_id: '',
+    points: q.storyPoints ?? undefined,
+    due_date: q.dueDateIso ?? undefined,
+    tags: q.epicName ? [q.epicName] : undefined,
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -43,7 +73,7 @@ function sortItems(items: WorkItem[], by: SortBy): WorkItem[] {
   })
 }
 
-function groupItems(items: WorkItem[], by: GroupBy): { label: string; color: string; items: WorkItem[] }[] {
+function groupItems(items: WorkItem[], by: GroupBy, projectNames?: Map<string, string>): { label: string; color: string; items: WorkItem[] }[] {
   const map = new Map<string, WorkItem[]>()
   for (const item of items) {
     let key: string
@@ -77,8 +107,8 @@ function groupItems(items: WorkItem[], by: GroupBy): { label: string; color: str
         color = key.includes('14') ? T.accent : T.text3
         break
       case 'project':
-        label = ({ proj_001: 'Website Relaunch', proj_002: 'Infra Migration v2' } as Record<string,string>)[key] ?? key
-        color = ({ proj_001: T.accent, proj_002: T.warn } as Record<string,string>)[key] ?? T.text3
+        label = projectNames?.get(key) ?? key
+        color = T.accent
         break
     }
     return { label, color, items }
@@ -353,7 +383,8 @@ function Toolbar({
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void }) {
-  const [drawerItem, setDrawerItem] = useState<WorkItem | null>(null)
+  void onNav
+  const [drawerItemId, setDrawerItemId] = useState<string | null>(null)
   const [groupBy, setGroupBy]     = useState<GroupBy>('status')
   const [sortBy, setSortBy]       = useState<SortBy>('priority')
   const [hideCompleted, setHide]  = useState(true)
@@ -361,28 +392,21 @@ export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void 
 
   const user = getActiveUser()
 
-  // Derive the user's display name from their assignee objects in WORK_ITEMS
-  // (MOCK_USERS name → workItems assignee.name mapping, best-effort)
-  const NAME_MAP: Record<string, string[]> = {
-    'u_tl':   ['Lucas Ferreira'],
-    'u_dev':  ['Ana Lima'],
-    'u_ux':   ['Camila Torres'],
-    'u_qa':   ['Bruno Saraiva'],
-    'u_sm':   ['Rafael Mendes'],
-    'u_po':   ['Beatriz Alves'],
-    'u_pm':   ['Mariana Souza'],
-    'u_pmo':  ['Carlos Drummond'],
-    'u_prodmgr': ['Felipe Nunes'],
-    'u_admin':   ['Diana Costa'],
-  }
+  const [queue, setQueue]     = useState<QueueItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError]     = useState<string | null>(null)
 
-  const assigneeNames = NAME_MAP[user.user_id] ?? [user.name]
-  const myItems = WORK_ITEMS.filter(w =>
-    assigneeNames.some(n => w.assignee?.name === n)
-  )
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try { setQueue((await listMyQueue(user.name)).items) }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setLoading(false) }
+  }, [user.name])
 
-  // Fallback: if no items by exact name, show all items for demo richness
-  const items = myItems.length > 0 ? myItems : getItemsByAssignee(assigneeNames[0])
+  useEffect(() => { void load() }, [load])
+
+  const projectNames = new Map(queue.map(q => [q.projectId, q.projectName]))
+  const items = queue.map(toWorkItem)
 
   let filtered = hideCompleted
     ? items.filter(i => i.status !== 'done' && i.status !== 'cancelled')
@@ -398,13 +422,19 @@ export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void 
   }
 
   const sorted = sortItems(filtered, sortBy)
-  const groups = groupItems(sorted, groupBy)
+  const groups = groupItems(sorted, groupBy, projectNames)
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1100, margin: '0 auto' }}>
-      {drawerItem && (
-        <WorkItemDetailDrawer item={drawerItem} onClose={() => setDrawerItem(null)} onNav={v => onNav?.(v)} />
+      {drawerItemId && (
+        <WorkItemDetail
+          itemId={drawerItemId}
+          mode="drawer"
+          onUpdate={() => { /* the panel persists on its own */ }}
+          onClose={() => { setDrawerItemId(null); void load() }}
+        />
       )}
+
 
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
@@ -465,7 +495,11 @@ export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void 
         background: T.bgSurface, borderRadius: 12,
         border: `1px solid ${T.border}`, overflow: 'hidden', padding: '8px 0',
       }}>
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center', fontSize: 13, color: T.text3 }}>Carregando sua fila…</div>
+        ) : error ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center', fontSize: 13, color: T.crit }}>Erro ao carregar: {error}</div>
+        ) : filtered.length === 0 ? (
           <EmptyQueue />
         ) : (
           groups.map(g => (
@@ -474,7 +508,7 @@ export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void 
               label={g.label}
               color={g.color}
               items={g.items}
-              onOpen={setDrawerItem}
+              onOpen={item => setDrawerItemId(item.id)}
             />
           ))
         )}
