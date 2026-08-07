@@ -299,11 +299,13 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
       <Grid cols="1fr 1fr">
         <SCard title="Saúde por Projeto (RAG)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rags.length === 0 && <EmptyState message="Nenhum projeto no escopo selecionado." />}
             {rags.map(r => (
-              <RagCard key={r.name} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.days} reason={r.reason} onClick={() => onNav('project')} />
+              <RagCard key={r.id} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.daysLabel} reason={r.reason} onClick={() => onNav('project')} />
             ))}
           </div>
         </SCard>
+
 
         <WorkQueue title="Bloqueadores Críticos" items={blocked} onOpen={openPmoDrawer}
           showDaysBlocked onViewAll={() => onNav('list')}
