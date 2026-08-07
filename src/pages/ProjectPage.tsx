@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { T as DS } from '../components/ds/tokens'
 import { getBoardById } from '../data/boards'
 import { CreateIssueModal } from '../components/CreateIssueModal'
@@ -6,6 +6,12 @@ import { CompleteSprintModal } from '../components/CompleteSprintModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
+import {
+  fetchBoardData, moveWorkItemToColumn, createWorkItem, columnColor,
+  PRIORITY_FROM_DB, epicColor as dbEpicColor,
+  type BoardColumnDef, type BoardItemRow, type BoardData,
+} from '../data/db/board'
+
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
 // RULE 1: "planejado não é sobrescrito" — planned sprint data is immutable until explicitly started
