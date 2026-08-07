@@ -276,34 +276,46 @@ function ClientSignalThread({ itemId, refresh }: { itemId: string; refresh: numb
   )
 }
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const PROJECTS = [
-  { id: 'p1', name: 'Website Relaunch',        progress: 68, sprint: 'Sprint 7', sprintPct: 82, status: 'on-track' },
-  { id: 'p2', name: 'ERP Integration v2',      progress: 41, sprint: 'Sprint 4', sprintPct: 55, status: 'at-risk'  },
-  { id: 'p3', name: 'Mobile App (iOS+Android)', progress: 24, sprint: 'Sprint 2', sprintPct: 30, status: 'on-track' },
-]
+// ─── Data (live, hydrated from Supabase via useClientPortal) ──────────────────
+// These module-level bindings are refreshed by the portal shell on every render
+// so the presentational sub-components below keep their original shape.
+type LiveProject  = ScopeProject
+type LiveDelivery = ScopeDelivery
 
-const SPRINTS = [
-  { name: 'Sprint 7 — Website Relaunch',   pct: 82, status: 'on-track', ends: '28 jul' },
-  { name: 'Sprint 4 — ERP Integration v2', pct: 55, status: 'at-risk',  ends: '1 ago'  },
-  { name: 'Sprint 2 — Mobile App',         pct: 30, status: 'on-track', ends: '4 ago'  },
-]
+let PROJECTS: LiveProject[] = []
+let SPRINTS: ScopeSprint[] = []
+let SPRINT_DELIVERIES: LiveDelivery[] = []
+let VALIDATION_ITEMS: { id: string; title: string; project: string; dueDate: string }[] = []
+let ROADMAP: ScopeMilestone[] = []
+let RECENT_DELIVERIES: { id: string; title: string; project: string; date: string }[] = []
+let RISKS: { id: string; title: string; sev: 'high' | 'medium' | 'low'; project: string; days: number; detail: string }[] = []
 
-// Riscos visíveis ao cliente: apenas impactos funcionais de negócio, sem dados técnicos internos
-const RISKS = [
-  { id: 'r1', title: 'Integração com sistema legado pode impactar prazo do Sprint 4', sev: 'high' as const,   project: 'ERP Integration v2', days: 4, detail: 'A integração com o sistema legado está pendente de validação. O prazo de entrega do Sprint 4 pode ser afetado caso a validação não ocorra até 28/jul.' },
-  { id: 'r2', title: 'Aprovação de identidade visual aguardada',                      sev: 'medium' as const, project: 'Website Relaunch',    days: 7, detail: 'A aprovação final do guia de marca está pendente. Entregas visuais do sprint podem ser ajustadas após confirmação.' },
-  { id: 'r3', title: 'Assets de marca ainda não entregues',                           sev: 'low' as const,    project: 'Mobile App',          days: 2, detail: 'Os materiais de marca atualizados ainda não foram fornecidos. O time aguarda para prosseguir com os ajustes visuais.' },
-]
-
-// Entregas desta sprint — visão funcional de alto nível, sem detalhe técnico
-const SPRINT_DELIVERIES: { id: string; title: string; status: 'done' | 'review' | 'progress'; project: string }[] = [
-  { id: 'd1', title: 'Nova página inicial com identidade atualizada',       status: 'done',     project: 'Website Relaunch'    },
-  { id: 'd2', title: 'Formulário de contato com confirmação por e-mail',    status: 'done',     project: 'Website Relaunch'    },
-  { id: 'd3', title: 'Painel de importação de dados legados',               status: 'review',   project: 'ERP Integration v2' },
-  { id: 'd4', title: 'Fluxo de cadastro e onboarding',                     status: 'review',   project: 'Mobile App'          },
-  { id: 'd5', title: 'Relatório de status consolidado para gestores',       status: 'progress', project: 'ERP Integration v2' },
-]
+/** Projects the current portal client is allowed to see, mapped to view models. */
+function applyScope(scope: PortalScope) {
+  PROJECTS  = scope.projects
+  SPRINTS   = scope.sprints
+  ROADMAP   = scope.roadmap
+  SPRINT_DELIVERIES = scope.deliveries.filter(d => d.status !== 'done')
+    .concat(scope.deliveries.filter(d => d.status === 'done'))
+  VALIDATION_ITEMS = scope.deliveries
+    .filter(d => d.status === 'review')
+    .map(d => ({ id: d.id, title: d.title, project: d.project, dueDate: d.due }))
+  RECENT_DELIVERIES = scope.deliveries
+    .filter(d => d.status === 'done')
+    .slice(0, 6)
+    .map(d => ({ id: d.id, title: d.title, project: d.project, date: d.date }))
+  RISKS = scope.deliveries
+    .filter(d => d.overdueDays > 0)
+    .slice(0, 6)
+    .map(d => ({
+      id: `risk-${d.id}`,
+      title: `${d.title} — prazo ultrapassado`,
+      sev: (d.overdueDays > 7 ? 'high' : d.overdueDays > 2 ? 'medium' : 'low') as 'high' | 'medium' | 'low',
+      project: d.project,
+      days: d.overdueDays,
+      detail: `A entrega estava prevista para ${d.due} e segue em andamento. A equipe está acompanhando e informará a nova previsão.`,
+    }))
+}
 
 const DELIVERY_STATUS = {
   done:     { label: 'Concluído',   color: C.success },
@@ -311,27 +323,6 @@ const DELIVERY_STATUS = {
   progress: { label: 'Em andamento', color: C.accent  },
 }
 
-// Itens aguardando validação do cliente
-const VALIDATION_ITEMS = [
-  { id: 'v1', title: 'Identidade visual — aprovação do guia de marca',   project: 'Website Relaunch',    dueDate: '27 jul' },
-  { id: 'v2', title: 'Fluxo de onboarding do app — validação funcional', project: 'Mobile App',          dueDate: '29 jul' },
-  { id: 'v3', title: 'Layout do painel de gestão — feedback de UX',      project: 'ERP Integration v2',  dueDate: '31 jul' },
-]
-
-// Roadmap publicado — marcos de negócio
-const ROADMAP = [
-  { id: 'm1', date: 'Ago 2025', title: 'Beta fechado',          desc: 'Lançamento para grupo de clientes piloto',            status: 'upcoming' as const },
-  { id: 'm2', date: 'Set 2025', title: 'Lançamento público',    desc: 'Disponibilização geral do produto reformulado',        status: 'upcoming' as const },
-  { id: 'm3', date: 'Out 2025', title: 'Integração ERP v2',     desc: 'Conexão completa com sistema legado em produção',      status: 'upcoming' as const },
-  { id: 'm4', date: 'Dez 2025', title: 'App Mobile GA',         desc: 'Versão estável do aplicativo iOS e Android publicada', status: 'upcoming' as const },
-]
-
-// Entregas recentes — features concluídas com link de demo
-const RECENT_DELIVERIES = [
-  { id: 're1', title: 'Novo portal de autenticação',             project: 'Website Relaunch',   date: '18 jul 2025' },
-  { id: 're2', title: 'Dashboard de acompanhamento de pedidos',  project: 'ERP Integration v2', date: '14 jul 2025' },
-  { id: 're3', title: 'Tela de perfil e preferências do usuário', project: 'Mobile App',         date: '10 jul 2025' },
-]
 
 // ─── RISK OVERLAY ─────────────────────────────────────────────────────────────
 function RiskOverlay({ risk, onClose }: { risk: typeof RISKS[0]; onClose: () => void }) {
