@@ -1,52 +1,42 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { T } from '../components/ds/tokens'
-import { ISSUES, EPICS, STATUS_CFG, AV_COLOR, DEPENDENCIES, type Issue } from '../data/issues'
+import {
+  fetchTimelineData, updateWorkItemDates, projectColor, epicColor, DB_STATUS_CFG,
+  type TimelineData, type WorkItemRow,
+} from '../data/db/timeline'
 
 const DAY_PX = 28
-const ROW_H  = 52
-const TOTAL_DAYS = 30
-const TODAY_DAY  = 15
+const ROW_H = 52
+const HEADER_H = 48
+const MS_DAY = 86_400_000
 
-const SPRINT_MARKERS = [
-  { day: 1,  label: 'Sprint 13' },
-  { day: 14, label: 'Sprint 14' },
-  { day: 28, label: 'Sprint 15' },
-]
-const WEEK_MARKERS = [
-  { day: 1,  label: 'W14' },
-  { day: 7,  label: 'W15' },
-  { day: 14, label: 'W16' },
-  { day: 21, label: 'W17' },
-  { day: 28, label: 'W18' },
-]
-
-interface BarState { startDay: number; endDay: number }
-
-function initBarStates(): Record<string, BarState> {
-  const result: Record<string, BarState> = {}
-  ISSUES.forEach(issue => {
-    const pts    = Math.max(1, issue.points)
-    const endDay = Math.min(TOTAL_DAYS, Math.max(1, issue.dueDateDay))
-    result[issue.key] = { startDay: Math.max(1, endDay - pts), endDay }
-  })
-  return result
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function toDate(iso: string): Date {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, d))
+}
+function toIso(d: Date): string { return d.toISOString().slice(0, 10) }
+function addDays(iso: string, n: number): string {
+  const d = toDate(iso); d.setUTCDate(d.getUTCDate() + n); return toIso(d)
+}
+function diffDays(a: string, b: string): number {
+  return Math.round((toDate(b).getTime() - toDate(a).getTime()) / MS_DAY)
+}
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+function monthLabel(iso: string): string {
+  const d = toDate(iso)
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
 }
 
-function issueBarColor(issue: Issue): string {
-  if (issue.blocked) return T.crit
-  return STATUS_CFG[issue.status].color
-}
-
-function barLeft(startDay: number)                            { return (startDay - 1) * DAY_PX }
-function barWidth(startDay: number, endDay: number)           { return Math.max(DAY_PX, (endDay - startDay) * DAY_PX) }
+interface Span { start: string; end: string }
 
 // ─── Project multi-select dropdown ───────────────────────────────────────────
-interface EpicOption { id: string; label: string; color: string }
+interface ProjectOption { id: string; label: string; color: string }
 
 function ProjectDropdown({
   options, selected, onChange,
-}: { options: EpicOption[]; selected: Set<string>; onChange: (s: Set<string>) => void }) {
-  const [open, setOpen]     = useState(false)
+}: { options: ProjectOption[]; selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef<HTMLDivElement>(null)
 
@@ -59,8 +49,8 @@ function ProjectDropdown({
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const allSelected = selected.size === options.length
-  const filtered    = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+  const allSelected = options.length > 0 && selected.size === options.length
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
 
   function toggle(id: string) {
     const next = new Set(selected)
@@ -74,6 +64,7 @@ function ProjectDropdown({
   }
 
   function toggleAll() {
+    if (options.length === 0) return
     onChange(allSelected ? new Set([options[0].id]) : new Set(options.map(o => o.id)))
   }
 
@@ -128,7 +119,7 @@ function ProjectDropdown({
                 <path d="M9 9l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
               </svg>
               <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar épico / projeto…"
+                placeholder="Buscar projeto…"
                 style={{ background: 'none', border: 'none', outline: 'none', color: T.text1, fontSize: 12, width: '100%' }} />
             </div>
           </div>
@@ -167,7 +158,7 @@ function ProjectDropdown({
             )}
           </div>
 
-          {!allSelected && (
+          {!allSelected && options.length > 0 && (
             <div style={{ padding: '8px 13px', borderTop: `1px solid ${T.border}`, display: 'flex', justifyContent: 'flex-end' }}>
               <button onClick={() => { onChange(new Set(options.map(o => o.id))); setOpen(false) }}
                 style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
@@ -181,105 +172,246 @@ function ProjectDropdown({
   )
 }
 
+// ─── Skeleton ─────────────────────────────────────────────────────────────────
+function TimelineSkeleton() {
+  return (
+    <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {Array.from({ length: 8 }, (_, i) => (
+        <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ width: 160, height: 14, borderRadius: 5, background: T.bgSurface2, opacity: 0.9 }} />
+          <div style={{
+            height: 22, borderRadius: 6, background: T.bgSurface2,
+            width: `${25 + ((i * 37) % 50)}%`, marginLeft: `${(i * 23) % 25}%`,
+            animation: 'pulse 1.4s ease-in-out infinite', animationDelay: `${i * 0.08}s`,
+          }} />
+        </div>
+      ))}
+      <style>{`@keyframes pulse { 0%,100% { opacity: .5 } 50% { opacity: 1 } }`}</style>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
+type Row =
+  | { kind: 'project'; id: string; label: string; color: string; count: number }
+  | { kind: 'epic'; id: string; label: string; color: string; count: number }
+  | { kind: 'item'; id: string; item: WorkItemRow; color: string }
+
 export default function TimelinePage() {
-  const [bars, setBars]       = useState<Record<string, BarState>>(initBarStates)
-  const [dragging, setDragging] = useState<{ key: string; startX: number; origStart: number; origEnd: number } | null>(null)
+  const [data, setData] = useState<TimelineData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [spans, setSpans] = useState<Record<string, Span>>({})
+  const [selectedProjects, setSelectedProjects] = useState<Set<string> | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
-  const [selectedEpics, setSelectedEpics] = useState<Set<string>>(new Set(EPICS.map(e => e.id)))
+  const [dragging, setDragging] = useState<{ id: string; startX: number; orig: Span } | null>(null)
+  const [saving, setSaving] = useState<Set<string>>(new Set())
 
-  // Build filtered groups from selected epics
-  const allGroups = (() => {
-    const result: { epicId: string | null; label: string; color: string; issues: Issue[] }[] = []
-    EPICS.forEach(epic => {
-      if (!selectedEpics.has(epic.id)) return
-      const issues = ISSUES.filter(i => i.epic === epic.id)
-      result.push({ epicId: epic.id, label: epic.label, color: epic.color, issues })
+  // ── Load ────────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const timer = setTimeout(() => {
+      if (!cancelled) { setLoading(false); setError('Tempo esgotado ao consultar o Supabase.') }
+    }, 12_000)
+
+    fetchTimelineData()
+      .then(d => {
+        if (cancelled) return
+        setData(d)
+        setSpans(buildSpans(d))
+        setSelectedProjects(new Set(d.projects.map(p => p.id)))
+        setError(null)
+      })
+      .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) })
+      .finally(() => { if (!cancelled) { clearTimeout(timer); setLoading(false) } })
+
+    return () => { cancelled = true; clearTimeout(timer) }
+  }, [])
+
+  /** Derives each item's span: own dates → sprint dates → project period. */
+  function buildSpans(d: TimelineData): Record<string, Span> {
+    const sprintById = new Map(d.sprints.map(s => [s.id, s]))
+    const projectById = new Map(d.projects.map(p => [p.id, p]))
+    const out: Record<string, Span> = {}
+    d.workItems.forEach(wi => {
+      const sprint = wi.sprint_id ? sprintById.get(wi.sprint_id) : null
+      const project = projectById.get(wi.project_id)
+      const end = wi.due_date ?? sprint?.end_date ?? project?.period_end ?? null
+      const start = wi.start_date ?? sprint?.start_date ?? (end ? addDays(end, -5) : project?.period_start ?? null)
+      if (!start || !end) return
+      out[wi.id] = { start, end: diffDays(start, end) < 1 ? addDays(start, 1) : end }
     })
-    const noEpic = ISSUES.filter(i => !i.epic)
-    if (noEpic.length > 0 && selectedEpics.has('__none__')) {
-      result.push({ epicId: null, label: 'Sem épico', color: T.text3, issues: noEpic })
+    return out
+  }
+
+  const projectOptions: ProjectOption[] = useMemo(
+    () => (data?.projects ?? []).map((p, i) => ({ id: p.id, label: p.name, color: projectColor(p, i) })),
+    [data],
+  )
+  const projectColorById = useMemo(
+    () => new Map(projectOptions.map(o => [o.id, o.color])),
+    [projectOptions],
+  )
+  const profileById = useMemo(
+    () => new Map((data?.profiles ?? []).map(p => [p.id, p])),
+    [data],
+  )
+
+  // ── Grouping: project → epic → item (reacts to the project filter) ─────────
+  const rows: Row[] = useMemo(() => {
+    if (!data || !selectedProjects) return []
+    const out: Row[] = []
+    data.projects.forEach(project => {
+      if (!selectedProjects.has(project.id)) return
+      const items = data.workItems.filter(w => w.project_id === project.id && spans[w.id])
+      const color = projectColorById.get(project.id) ?? T.accent
+      out.push({ kind: 'project', id: project.id, label: project.name, color, count: items.length })
+
+      const epics = data.epics.filter(e => e.project_id === project.id)
+      epics.forEach(epic => {
+        const epicItems = items.filter(i => i.epic_id === epic.id)
+        if (epicItems.length === 0) return
+        const ec = epicColor(epic.color)
+        out.push({ kind: 'epic', id: epic.id, label: epic.name, color: ec, count: epicItems.length })
+        epicItems.forEach(item => out.push({ kind: 'item', id: item.id, item, color: ec }))
+      })
+
+      const orphans = items.filter(i => !i.epic_id || !epics.some(e => e.id === i.epic_id))
+      if (orphans.length > 0) {
+        out.push({ kind: 'epic', id: `${project.id}__none`, label: 'Sem épico', color: T.text3, count: orphans.length })
+        orphans.forEach(item => out.push({ kind: 'item', id: item.id, item, color: T.text3 }))
+      }
+    })
+    return out
+  }, [data, selectedProjects, spans, projectColorById])
+
+  const rowIndexById = useMemo(() => {
+    const m: Record<string, number> = {}
+    rows.forEach((r, i) => { if (r.kind === 'item') m[r.id] = i })
+    return m
+  }, [rows])
+
+  const visibleItems = rows.filter(r => r.kind === 'item') as Extract<Row, { kind: 'item' }>[]
+
+  // ── Time domain derived from the visible spans ──────────────────────────────
+  const { domainStart, totalDays } = useMemo(() => {
+    const all = visibleItems.map(r => spans[r.id]).filter(Boolean)
+    if (all.length === 0) return { domainStart: toIso(new Date()), totalDays: 30 }
+    let min = all[0].start, max = all[0].end
+    all.forEach(s => { if (s.start < min) min = s.start; if (s.end > max) max = s.end })
+    const start = addDays(min, -3)
+    return { domainStart: start, totalDays: Math.max(30, diffDays(start, max) + 4) }
+  }, [visibleItems, spans])
+
+  const todayIso = toIso(new Date())
+  const todayIdx = diffDays(domainStart, todayIso)
+
+  const barLeft = useCallback((iso: string) => diffDays(domainStart, iso) * DAY_PX, [domainStart])
+  const barWidth = useCallback((s: Span) => Math.max(DAY_PX, diffDays(s.start, s.end) * DAY_PX), [])
+
+  // Sprint markers for visible projects
+  const sprintMarkers = useMemo(() => {
+    if (!data || !selectedProjects) return []
+    return data.sprints
+      .filter(s => selectedProjects.has(s.project_id) && s.start_date)
+      .map(s => ({ id: s.id, label: s.name, idx: diffDays(domainStart, s.start_date!) }))
+      .filter(s => s.idx >= 0 && s.idx < totalDays)
+  }, [data, selectedProjects, domainStart, totalDays])
+
+  // Week markers (Mondays)
+  const weekMarkers = useMemo(() => {
+    const out: { idx: number; label: string }[] = []
+    for (let i = 0; i < totalDays; i++) {
+      const d = toDate(addDays(domainStart, i))
+      if (d.getUTCDay() === 1) {
+        const jan1 = Date.UTC(d.getUTCFullYear(), 0, 1)
+        const week = Math.ceil(((d.getTime() - jan1) / MS_DAY + 1) / 7)
+        out.push({ idx: i, label: `W${week}` })
+      }
     }
-    return result
-  })()
+    return out
+  }, [domainStart, totalDays])
 
-  const epicOptions: EpicOption[] = EPICS.map(e => ({ id: e.id, label: e.label, color: e.color }))
+  // ── Dependency curves — recomputed from spans + row map on every render ─────
+  const curves = useMemo(() => {
+    if (!data) return []
+    return data.dependencies.map(dep => {
+      const from = spans[dep.source_id], to = spans[dep.target_id]
+      const fr = rowIndexById[dep.source_id], tr = rowIndexById[dep.target_id]
+      if (!from || !to || fr == null || tr == null) return null // hidden when a side is filtered out
+      const x1 = barLeft(from.start) + barWidth(from)
+      const x2 = barLeft(to.start)
+      const y1 = fr * ROW_H + ROW_H / 2
+      const y2 = tr * ROW_H + ROW_H / 2
+      return { key: `${dep.source_id}-${dep.target_id}`, x1, y1, x2, y2, cx: (x1 + x2) / 2 }
+    }).filter(Boolean) as { key: string; x1: number; y1: number; x2: number; y2: number; cx: number }[]
+  }, [data, spans, rowIndexById, barLeft, barWidth])
 
-  // Row map: computed from filtered groups — reacts to filter changes.
-  // Also tracks each group's header row index.
-  const { rowMap, groupHeaderRows } = (() => {
-    const map: Record<string, number> = {}
-    const headers: Record<string, number> = {}  // epicId (or '__none__') → row index
-    let row = 0
-    allGroups.forEach(group => {
-      headers[group.epicId ?? '__none__'] = row
-      row++ // group header row
-      group.issues.forEach(issue => { map[issue.key] = row; row++ })
-    })
-    return { rowMap: map, groupHeaderRows: headers }
-  })()
-
-  const totalAbsRows = allGroups.reduce((s, g) => s + g.issues.length + 1, 0)
-  const svgH         = totalAbsRows * ROW_H
-
-  // Dependency curves — fully derived from bars + rowMap; recomputes on every drag
-  const curves = DEPENDENCIES.map(dep => {
-    const fromBar     = bars[dep.from]
-    const toBar       = bars[dep.to]
-    const fromAbsRow  = rowMap[dep.from]
-    const toAbsRow    = rowMap[dep.to]
-    if (!fromBar || !toBar || fromAbsRow == null || toAbsRow == null) return null
-
-    const x1 = barLeft(fromBar.endDay) + barWidth(fromBar.startDay, fromBar.endDay)
-    const x2 = barLeft(toBar.startDay)
-    const y1 = fromAbsRow * ROW_H + ROW_H / 2
-    const y2 = toAbsRow   * ROW_H + ROW_H / 2
-    const cx = (x1 + x2) / 2
-
-    return { key: `${dep.from}-${dep.to}`, x1, y1, x2, y2, cx }
-  }).filter(Boolean) as { key: string; x1: number; y1: number; x2: number; y2: number; cx: number }[]
-
-  const onMouseDown = useCallback((e: React.MouseEvent, issueKey: string) => {
+  // ── Drag → persist ──────────────────────────────────────────────────────────
+  const onMouseDown = useCallback((e: React.MouseEvent, id: string) => {
     e.preventDefault()
-    const bar = bars[issueKey]
-    if (!bar) return
-    setDragging({ key: issueKey, startX: e.clientX, origStart: bar.startDay, origEnd: bar.endDay })
-  }, [bars])
+    const span = spans[id]
+    if (!span) return
+    setDragging({ id, startX: e.clientX, orig: span })
+  }, [spans])
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (!dragging) return
-    const dx       = e.clientX - dragging.startX
-    const dayDelta = Math.round(dx / DAY_PX)
-    if (dayDelta === 0) return
-    const duration = dragging.origEnd - dragging.origStart
-    let newStart   = Math.max(1, Math.min(TOTAL_DAYS - duration, dragging.origStart + dayDelta))
-    setBars(prev => ({ ...prev, [dragging.key]: { startDay: newStart, endDay: newStart + duration } }))
+    const dayDelta = Math.round((e.clientX - dragging.startX) / DAY_PX)
+    setSpans(prev => {
+      const next = { start: addDays(dragging.orig.start, dayDelta), end: addDays(dragging.orig.end, dayDelta) }
+      const cur = prev[dragging.id]
+      if (cur && cur.start === next.start && cur.end === next.end) return prev
+      return { ...prev, [dragging.id]: next }
+    })
   }, [dragging])
 
-  const onMouseUp = useCallback(() => setDragging(null), [])
+  const onMouseUp = useCallback(() => {
+    if (!dragging || !data) { setDragging(null); return }
+    const { id, orig } = dragging
+    setDragging(null)
+    const span = spans[id]
+    if (!span || (span.start === orig.start && span.end === orig.end)) return
+    const item = data.workItems.find(w => w.id === id)
+    if (!item) return
 
-  const gridW = TOTAL_DAYS * DAY_PX
+    setSaving(s => new Set(s).add(id))
+    updateWorkItemDates(item, span.start, span.end)
+      .then(() => {
+        setData(d => d && ({
+          ...d,
+          workItems: d.workItems.map(w => w.id === id ? { ...w, start_date: span.start, due_date: span.end } : w),
+        }))
+        setSaveError(null)
+      })
+      .catch((err: unknown) => {
+        setSpans(prev => ({ ...prev, [id]: orig }))
+        setSaveError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => setSaving(s => { const n = new Set(s); n.delete(id); return n }))
+  }, [dragging, spans, data])
 
+  const gridW = totalDays * DAY_PX
+  const svgH = rows.length * ROW_H
+
+  const rangeLabel = visibleItems.length > 0
+    ? `${monthLabel(domainStart)} — ${monthLabel(addDays(domainStart, totalDays - 1))}`
+    : 'Sem período'
+
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: T.bgPage, height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', overflow: 'hidden' }}>
       {/* Toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0 }}>
-        <span style={{ color: T.text1, fontWeight: 700, fontSize: 15 }}>Roadmap — Abril 2025</span>
+        <span style={{ color: T.text1, fontWeight: 700, fontSize: 15 }}>Roadmap — {rangeLabel}</span>
         <span style={{ color: T.text3, fontSize: 12 }}>Arraste as barras para reposicionar</span>
+        {saving.size > 0 && <span style={{ color: T.accent, fontSize: 11 }}>salvando…</span>}
+        {saveError && <span style={{ color: T.crit, fontSize: 11 }}>Falha ao salvar: {saveError}</span>}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
-          {/* Legend — only visible epics */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-            {epicOptions.filter(o => selectedEpics.has(o.id)).map(o => (
-              <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ width: 8, height: 8, borderRadius: 2, background: o.color, display: 'inline-block' }} />
-                <span style={{ color: T.text3, fontSize: 11 }}>{o.label}</span>
-              </div>
-            ))}
-          </div>
-
           {/* Status legend */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderLeft: `1px solid ${T.border}`, paddingLeft: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: T.accent, display: 'inline-block' }} />
             <span style={{ color: T.text3, fontSize: 11 }}>Em andamento</span>
             <span style={{ width: 8, height: 8, borderRadius: 2, background: T.success, display: 'inline-block', marginLeft: 4 }} />
@@ -288,108 +420,140 @@ export default function TimelinePage() {
             <span style={{ color: T.text3, fontSize: 11 }}>Bloqueado</span>
           </div>
 
-          {/* Project dropdown */}
-          <ProjectDropdown options={epicOptions} selected={selectedEpics} onChange={setSelectedEpics} />
+          {selectedProjects && projectOptions.length > 0 && (
+            <ProjectDropdown options={projectOptions} selected={selectedProjects} onChange={setSelectedProjects} />
+          )}
         </div>
       </div>
 
-      {/* Body */}
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Sidebar */}
-        <div style={{ width: 180, flexShrink: 0, borderRight: `1px solid ${T.border}`, background: T.bgSurface, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <div style={{ height: 48, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 12px', flexShrink: 0 }}>
-            <span style={{ color: T.text3, fontSize: 11, fontWeight: 700 }}>ÉPICO / ISSUE</span>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {allGroups.map(group => (
-              <div key={group.epicId ?? 'none'}>
-                <div style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface2, flexShrink: 0 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: group.color, flexShrink: 0, marginRight: 7 }} />
-                  <span style={{ color: group.color, fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{group.label}</span>
-                </div>
-                {group.issues.map(issue => (
-                  <div key={issue.key} style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px', borderBottom: `1px solid ${T.border}`, background: hovered === issue.key ? T.bgSurface2 : T.bgSurface }}
-                    onMouseEnter={() => setHovered(issue.key)} onMouseLeave={() => setHovered(null)}>
-                    <span style={{ color: T.accent, fontSize: 10, fontWeight: 700, marginRight: 5, flexShrink: 0 }}>{issue.key}</span>
-                    <span style={{ color: T.text2, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={issue.title}>{issue.title}</span>
-                  </div>
-                ))}
-              </div>
-            ))}
-            {allGroups.length === 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: T.text3, fontSize: 12 }}>
-                Nenhum épico selecionado
-              </div>
-            )}
-          </div>
+      {/* Loading */}
+      {loading && <TimelineSkeleton />}
+
+      {/* Error */}
+      {!loading && error && (
+        <div style={{ margin: 20, padding: 16, borderRadius: 10, border: `1px solid ${T.crit}55`, background: T.critDim, color: T.text1, fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4, color: T.crit }}>Erro ao carregar a Timeline</div>
+          <div style={{ color: T.text2 }}>{error}</div>
         </div>
+      )}
 
-        {/* Timeline grid — single scroll container for bars + SVG overlay */}
-        <div style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative' }}>
-          <div
-            onMouseMove={onMouseMove}
-            onMouseUp={onMouseUp}
-            onMouseLeave={onMouseUp}
-            style={{ width: gridW, minWidth: gridW, position: 'relative', userSelect: 'none' }}
-          >
-            {/* Time axis header */}
-            <div style={{ height: 48, borderBottom: `1px solid ${T.border}`, position: 'relative', background: T.bgSurface, flexShrink: 0 }}>
-              {Array.from({ length: TOTAL_DAYS }, (_, i) => i + 1).map(day => (
-                <div key={day} style={{ position: 'absolute', left: (day - 1) * DAY_PX, top: 0, width: DAY_PX, height: 48, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 4 }}>
-                  <span style={{ fontSize: 9, color: day === TODAY_DAY ? T.accent : T.text3, fontWeight: day === TODAY_DAY ? 700 : 400 }}>{day}</span>
-                </div>
-              ))}
-              {WEEK_MARKERS.map(w => (
-                <div key={w.label} style={{ position: 'absolute', left: (w.day - 1) * DAY_PX, top: 4, fontSize: 10, color: T.text2, fontWeight: 700, paddingLeft: 3 }}>{w.label}</div>
-              ))}
+      {/* Body */}
+      {!loading && !error && (
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          {/* Sidebar */}
+          <div style={{ width: 220, flexShrink: 0, borderRight: `1px solid ${T.border}`, background: T.bgSurface, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <div style={{ height: HEADER_H, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 12px', flexShrink: 0 }}>
+              <span style={{ color: T.text3, fontSize: 11, fontWeight: 700 }}>PROJETO / ÉPICO / ISSUE</span>
             </div>
-
-            {/* Grid + bars + SVG overlay in a single positioned container */}
-            <div style={{ position: 'relative', height: svgH }}>
-
-              {/* Vertical grid lines */}
-              {Array.from({ length: TOTAL_DAYS }, (_, i) => i + 1).map(day => (
-                <div key={day} style={{ position: 'absolute', left: (day - 1) * DAY_PX, top: 0, bottom: 0, width: 1, background: day === TODAY_DAY ? T.accent : T.border, opacity: day === TODAY_DAY ? 0.8 : 0.4, zIndex: day === TODAY_DAY ? 3 : 1 }} />
-              ))}
-
-              {/* Sprint markers */}
-              {SPRINT_MARKERS.map(sm => (
-                <div key={sm.label} style={{ position: 'absolute', left: (sm.day - 1) * DAY_PX, top: 0, bottom: 0, width: 1, zIndex: 2 }}>
-                  <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, borderLeft: `1.5px dashed ${T.accent}`, opacity: 0.4 }} />
-                  <div style={{ position: 'absolute', top: 4, left: 3, fontSize: 9, color: T.accent, background: T.bgPage, padding: '0 3px', borderRadius: 2, fontWeight: 700, opacity: 0.8, whiteSpace: 'nowrap' }}>{sm.label}</div>
+            <div style={{ flex: 1, overflowY: 'auto' }}>
+              {rows.map(row => {
+                if (row.kind === 'project') return (
+                  <div key={`p-${row.id}`} style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px', borderBottom: `1px solid ${T.border}`, background: `${row.color}14`, borderLeft: `3px solid ${row.color}` }}>
+                    <span style={{ color: row.color, fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 10, color: T.text3 }}>{row.count}</span>
+                  </div>
+                )
+                if (row.kind === 'epic') return (
+                  <div key={`e-${row.id}`} style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px 0 22px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface2 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0, marginRight: 7 }} />
+                    <span style={{ color: row.color, fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
+                  </div>
+                )
+                const wi = row.item
+                return (
+                  <div key={`i-${row.id}`}
+                    style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px 0 32px', borderBottom: `1px solid ${T.border}`, background: hovered === row.id ? T.bgSurface2 : T.bgSurface }}
+                    onMouseEnter={() => setHovered(row.id)} onMouseLeave={() => setHovered(null)}>
+                    <span style={{ color: T.accent, fontSize: 10, fontWeight: 700, marginRight: 5, flexShrink: 0 }}>{wi.key}</span>
+                    <span style={{ color: T.text2, fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={wi.title}>{wi.title}</span>
+                  </div>
+                )
+              })}
+              {rows.length === 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: T.text3, fontSize: 12, textAlign: 'center', padding: 12 }}>
+                  Nenhum item no período
                 </div>
-              ))}
+              )}
+            </div>
+          </div>
 
-              {/* Today marker */}
-              <div style={{ position: 'absolute', left: (TODAY_DAY - 1) * DAY_PX, top: 0, bottom: 0, width: 2, background: T.accent, opacity: 0.7, zIndex: 4 }} />
+          {/* Timeline grid */}
+          <div style={{ flex: 1, overflowX: 'auto', overflowY: 'auto', position: 'relative' }}>
+            {rows.length === 0 ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.text3, fontSize: 13 }}>
+                Nenhum item no período
+              </div>
+            ) : (
+              <div
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onMouseLeave={onMouseUp}
+                style={{ width: gridW, minWidth: gridW, position: 'relative', userSelect: 'none' }}
+              >
+                {/* Time axis header */}
+                <div style={{ height: HEADER_H, borderBottom: `1px solid ${T.border}`, position: 'relative', background: T.bgSurface }}>
+                  {Array.from({ length: totalDays }, (_, i) => i).map(i => {
+                    const d = toDate(addDays(domainStart, i))
+                    return (
+                      <div key={i} style={{ position: 'absolute', left: i * DAY_PX, top: 0, width: DAY_PX, height: HEADER_H, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 4 }}>
+                        <span style={{ fontSize: 9, color: i === todayIdx ? T.accent : T.text3, fontWeight: i === todayIdx ? 700 : 400 }}>{d.getUTCDate()}</span>
+                      </div>
+                    )
+                  })}
+                  {weekMarkers.map(w => (
+                    <div key={w.idx} style={{ position: 'absolute', left: w.idx * DAY_PX, top: 4, fontSize: 10, color: T.text2, fontWeight: 700, paddingLeft: 3 }}>{w.label}</div>
+                  ))}
+                </div>
 
-              {/* Horizontal row stripes */}
-              {Array.from({ length: totalAbsRows }, (_, i) => i).map(row => (
-                <div key={row} style={{ position: 'absolute', left: 0, right: 0, top: row * ROW_H, height: ROW_H, borderBottom: `1px solid ${T.border}`, background: row % 2 === 0 ? 'transparent' : `${T.bgSurface}44` }} />
-              ))}
+                <div style={{ position: 'relative', height: svgH }}>
+                  {/* Vertical grid lines */}
+                  {Array.from({ length: totalDays }, (_, i) => i).map(i => (
+                    <div key={i} style={{ position: 'absolute', left: i * DAY_PX, top: 0, bottom: 0, width: 1, background: i === todayIdx ? T.accent : T.border, opacity: i === todayIdx ? 0.8 : 0.4, zIndex: i === todayIdx ? 3 : 1 }} />
+                  ))}
 
-              {/* Issue bars — positioned using rowMap for correct index after filtering */}
-              {allGroups.map(group => (
-                <div key={group.epicId ?? 'none'}>
-                  {/* Group header row (shaded, no bar) */}
-                  <div style={{ position: 'absolute', top: (groupHeaderRows[group.epicId ?? '__none__'] ?? 0) * ROW_H, left: 0, right: 0, height: ROW_H, background: T.bgSurface2, borderBottom: `1px solid ${T.border}` }} />
+                  {/* Sprint markers */}
+                  {sprintMarkers.map(sm => (
+                    <div key={sm.id} style={{ position: 'absolute', left: sm.idx * DAY_PX, top: 0, bottom: 0, width: 1, zIndex: 2 }}>
+                      <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, borderLeft: `1.5px dashed ${T.accent}`, opacity: 0.4 }} />
+                      <div style={{ position: 'absolute', top: 4, left: 3, fontSize: 9, color: T.accent, background: T.bgPage, padding: '0 3px', borderRadius: 2, fontWeight: 700, opacity: 0.8, whiteSpace: 'nowrap' }}>{sm.label}</div>
+                    </div>
+                  ))}
 
-                  {group.issues.map(issue => {
-                    const rowAbs = rowMap[issue.key]
-                    const bar    = bars[issue.key]
-                    if (bar == null || rowAbs == null) return null
-                    const color     = issueBarColor(issue)
-                    const left      = barLeft(bar.startDay)
-                    const width     = barWidth(bar.startDay, bar.endDay)
-                    const isDragging = dragging?.key === issue.key
-                    const isHov     = hovered === issue.key
+                  {/* Today marker */}
+                  {todayIdx >= 0 && todayIdx < totalDays && (
+                    <div style={{ position: 'absolute', left: todayIdx * DAY_PX, top: 0, bottom: 0, width: 2, background: T.accent, opacity: 0.7, zIndex: 4 }} />
+                  )}
+
+                  {/* Row stripes / group bands */}
+                  {rows.map((row, i) => (
+                    <div key={`r-${i}`} style={{
+                      position: 'absolute', left: 0, right: 0, top: i * ROW_H, height: ROW_H,
+                      borderBottom: `1px solid ${T.border}`,
+                      background: row.kind === 'project' ? `${row.color}14` : row.kind === 'epic' ? T.bgSurface2 : i % 2 === 0 ? 'transparent' : `${T.bgSurface}44`,
+                    }} />
+                  ))}
+
+                  {/* Bars */}
+                  {visibleItems.map(row => {
+                    const span = spans[row.id]
+                    const rowAbs = rowIndexById[row.id]
+                    if (!span || rowAbs == null) return null
+                    const wi = row.item
+                    const color = wi.is_blocked ? T.crit : (DB_STATUS_CFG[wi.status]?.color ?? T.text3)
+                    const left = barLeft(span.start)
+                    const width = barWidth(span)
+                    const isDragging = dragging?.id === row.id
+                    const isHov = hovered === row.id
+                    const profile = wi.assignee_id ? profileById.get(wi.assignee_id) : null
+                    const initials = profile?.avatar_initials ?? profile?.name?.slice(0, 1) ?? ''
 
                     return (
                       <div
-                        key={issue.key}
-                        onMouseDown={e => onMouseDown(e, issue.key)}
-                        onMouseEnter={() => setHovered(issue.key)}
+                        key={row.id}
+                        onMouseDown={e => onMouseDown(e, row.id)}
+                        onMouseEnter={() => setHovered(row.id)}
                         onMouseLeave={() => setHovered(null)}
+                        title={`${wi.key} — ${wi.title}\n${span.start} → ${span.end}`}
                         style={{
                           position: 'absolute',
                           top: rowAbs * ROW_H + 10,
@@ -398,65 +562,60 @@ export default function TimelinePage() {
                           background: `${color}28`,
                           border: `1.5px solid ${color}`,
                           borderRadius: 5,
-                          cursor: 'grab',
+                          cursor: isDragging ? 'grabbing' : 'grab',
                           display: 'flex', alignItems: 'center', padding: '0 6px', gap: 4, overflow: 'hidden',
                           zIndex: isDragging ? 10 : 2,
+                          opacity: saving.has(row.id) ? 0.6 : 1,
                           boxShadow: isDragging ? T.shadowModal : isHov ? '0 4px 18px rgba(0,0,0,0.4)' : 'none',
                           transform: isDragging ? 'scale(1.02)' : 'none',
                           transition: isDragging ? 'none' : 'box-shadow 0.15s, transform 0.15s',
                         }}
                       >
-                        <span style={{ fontSize: 9, fontWeight: 700, color, flexShrink: 0 }}>{issue.key}</span>
-                        {width > 60 && (
+                        <span style={{ fontSize: 9, fontWeight: 700, color, flexShrink: 0 }}>{wi.key}</span>
+                        {width > 80 && (
                           <span style={{ fontSize: 9, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                            {issue.title.slice(0, 18)}{issue.title.length > 18 ? '…' : ''}
+                            {wi.title}
                           </span>
                         )}
-                        {width > 90 && (
-                          <span style={{ fontSize: 8, fontWeight: 700, background: AV_COLOR[issue.assignee] ?? T.text3, color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {issue.assignee[0]}
+                        {width > 110 && initials && (
+                          <span style={{ fontSize: 8, fontWeight: 700, background: profile?.avatar_color ?? T.text3, color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {initials.slice(0, 2)}
                           </span>
                         )}
                       </div>
                     )
                   })}
+
+                  {/* SVG dependency overlay — same positioned container as the bars */}
+                  <svg
+                    style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' }}
+                    width={gridW}
+                    height={svgH}
+                  >
+                    <defs>
+                      <marker id="dep-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                        <path d="M0,0 L0,6 L6,3 z" fill={T.accent} opacity={0.6} />
+                      </marker>
+                    </defs>
+                    {curves.map(c => (
+                      <path
+                        key={c.key}
+                        d={`M ${c.x1} ${c.y1} C ${c.cx} ${c.y1}, ${c.cx} ${c.y2}, ${c.x2} ${c.y2}`}
+                        stroke={T.accent}
+                        strokeWidth={1.5}
+                        strokeDasharray="4 3"
+                        fill="none"
+                        opacity={0.45}
+                        markerEnd="url(#dep-arrow)"
+                      />
+                    ))}
+                  </svg>
                 </div>
-              ))}
-
-              {/* SVG dependency overlay — inside same positioned container as bars,
-                  so coordinates are always relative to the same origin.
-                  Recomputes on every render (bar drag state changes → new curves). */}
-              <svg
-                style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 6, overflow: 'visible' }}
-                width={gridW}
-                height={svgH}
-              >
-                <defs>
-                  <marker id="dep-arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                    <path d="M0,0 L0,6 L6,3 z" fill={T.accent} opacity={0.6} />
-                  </marker>
-                </defs>
-                {curves.map(c => {
-                  const { key, x1, y1, x2, y2, cx } = c
-                  return (
-                    <path
-                      key={key}
-                      d={`M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`}
-                      stroke={T.accent}
-                      strokeWidth={1.5}
-                      strokeDasharray="4 3"
-                      fill="none"
-                      opacity={0.45}
-                      markerEnd="url(#dep-arrow)"
-                    />
-                  )
-                })}
-              </svg>
-
-            </div>
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }
