@@ -692,6 +692,8 @@ function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
   return (
     <WorkItemDetail
       mode="drawer"
+      // Board issues carry the real work_items uuid: the panel then reads and persists from Supabase.
+      itemId={/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(issue.id ?? '') ? issue.id : undefined}
       data={issueToWID(issue)}
       onClose={onClose}
       onUpdate={updated => onUpdate(widToIssue(issue, updated))}

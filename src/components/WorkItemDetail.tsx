@@ -3,6 +3,13 @@ import { T } from './ds/tokens'
 import { AddRelationModal } from './AddRelationModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
+import {
+  getWorkItem, updateWorkItemField, addComment as dbAddComment,
+  toggleAcceptanceCriterion, addAcceptanceCriterion, removeAcceptanceCriterion,
+  addDependency, setWorkItemLabels, uiStatusFromDb, epicColor,
+  STATUS_TO_DB, PRIORITY_FROM_DB, PRIORITY_TO_DB,
+  type WorkItemDetailData, type EditableField,
+} from '../data/db/workItem'
 
 // ─── Exported data interfaces ──────────────────────────────────────────────────
 export interface WIComment      { author: string; authorName?: string; body: string; time: string }
@@ -647,9 +654,100 @@ function EpicSelector({ value, epics, onChange }: {
   )
 }
 
+// ─── Supabase ⇄ UI mapping ────────────────────────────────────────────────────
+function initialsOf(name?: string | null): string {
+  if (!name) return ''
+  return name.trim().split(/\s+/).slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('')
+}
+
+function fmtTime(iso?: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+}
+
+function toWorkItemData(d: WorkItemDetailData): WorkItemData {
+  const profileById = new Map(d.profiles.map(p => [p.id, p]))
+  const initials = (id?: string | null) => {
+    const p = id ? profileById.get(id) : undefined
+    return p ? (p.avatar_initials ?? initialsOf(p.name)) : ''
+  }
+  const it = d.item
+  const dueDate = it.due_date ?? undefined
+
+  return {
+    key: it.key,
+    type: it.type,
+    title: it.title,
+    status: uiStatusFromDb(it.status),
+    priority: PRIORITY_FROM_DB[(it.priority ?? '').toLowerCase()] ?? 'medium',
+    labels: d.labels,
+    assigneeInitials: initials(it.assignee_id),
+    assigneeName: d.assignee?.name,
+    reporterInitials: initials(it.reporter_id),
+    reporterName: d.reporter?.name,
+    epicKey: d.epic?.id,
+    epicLabel: d.epic?.name,
+    epicColor: epicColor(d.epic?.color ?? null),
+    sprintId: d.sprint?.id,
+    sprintName: d.sprint?.name,
+    blocked: it.is_blocked,
+    blockedReason: it.blocked_reason ?? undefined,
+    delayed: !!dueDate && new Date(dueDate) < new Date() && uiStatusFromDb(it.status) !== 'done',
+    severity: it.severity ?? undefined,
+    description: it.description ?? undefined,
+    dueDate,
+    points: it.story_points == null ? undefined : Number(it.story_points),
+    acItems: d.acceptance.map(a => ({ id: a.id, text: a.text, done: a.is_done })),
+    children: d.subtasks.map(s => ({
+      key: s.key, title: s.title, type: s.type,
+      status: uiStatusFromDb(s.status), assigneeInitials: initials(s.assignee_id),
+    })),
+    linkedIssues: d.dependencies.map(dep => ({
+      relType: dep.relation.relation_type,
+      key: dep.item.key,
+      title: dep.item.title,
+      status: uiStatusFromDb(dep.item.status),
+      priority: PRIORITY_FROM_DB[(dep.item.priority ?? '').toLowerCase()] ?? 'medium',
+      assigneeInitials: initials(dep.item.assignee_id),
+    })),
+    comments: d.comments.map(c => {
+      const p = c.author_id ? profileById.get(c.author_id) : undefined
+      return {
+        author: p ? (p.avatar_initials ?? initialsOf(p.name)) : '',
+        authorName: p?.name,
+        body: c.body,
+        time: fmtTime(c.created_at),
+      }
+    }),
+    history: d.history.map(h => {
+      const p = h.actor_id ? profileById.get(h.actor_id) : undefined
+      return {
+        authorInitials: p ? (p.avatar_initials ?? initialsOf(p.name)) : '',
+        authorName: p?.name ?? 'Sistema',
+        field: h.field === 'status' ? 'Status' : h.field,
+        from: h.from_value ? (STATUS_LABEL[uiStatusFromDb(h.from_value)] ?? h.from_value) : '—',
+        to: h.to_value ? (STATUS_LABEL[uiStatusFromDb(h.to_value)] ?? h.to_value) : '—',
+        time: fmtTime(h.created_at),
+      }
+    }),
+    createdAt: fmtTime(it.created_at),
+    updatedAt: fmtTime(it.updated_at),
+    parentId: it.parent_id ?? undefined,
+    availableEpics: d.epics.map(e => ({ id: e.id, label: e.name, color: epicColor(e.color) })),
+    availableMembers: d.profiles.map(p => ({
+      id: p.id, name: p.name, initials: p.avatar_initials ?? initialsOf(p.name),
+    })),
+    availableSprints: d.sprints.map(s => ({ id: s.id, name: s.name })),
+    availableLabels: d.availableLabels,
+    availableVersions: d.availableVersions,
+  }
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
-export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
+export function WorkItemDetail({ data, itemId, onUpdate, onClose, mode = 'drawer' }: {
   data:      WorkItemData
+  /** When provided, the panel reads and persists the real Supabase row. */
+  itemId?:   string
   onUpdate:  (updated: WorkItemData) => void
   onClose?:  () => void
   mode?:     'drawer' | 'page'
@@ -669,34 +767,111 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   const [commentText, setCommentText]= useState('')
   const [children,    setChildren]   = useState<WIChild[]>(data.children ?? [])
   const [linkedIssues,setLinkedIssues]=useState<WILinkedIssue[]>(data.linkedIssues ?? [])
-  const [loading,     setLoading]    = useState(mode === 'drawer')
+  const [loading,     setLoading]    = useState(mode === 'drawer' || !!itemId)
   const [toast,       setToast]      = useState<string | null>(null)
   const [history,     setHistory]    = useState<WIHistoryEntry[]>(data.history ?? [])
+  const [dbError,     setDbError]    = useState<string | null>(null)
 
+  // Raw Supabase payload for the loaded item (ids needed to persist changes).
+  const dbRef  = useRef<WorkItemDetailData | null>(null)
+  const localRef = useRef<WorkItemData>(local)
+  localRef.current = local
+
+  const actorProfileId = dbRef.current?.profiles.find(p => p.name === activeUser.name)?.id ?? null
+
+  function applyDetail(d: WorkItemDetailData) {
+    dbRef.current = d
+    const mapped = toWorkItemData(d)
+    setLocal(mapped)
+    setAcItems(mapped.acItems ?? [])
+    setComments(mapped.comments ?? [])
+    setChildren(mapped.children ?? [])
+    setLinkedIssues(mapped.linkedIssues ?? [])
+    setHistory(mapped.history ?? [])
+  }
+
+  // ── Load the real row when an itemId is given ───────────────────────────────
   useEffect(() => {
-    if (mode === 'drawer') {
-      const t = setTimeout(() => setLoading(false), 260)
-      return () => clearTimeout(t)
+    if (!itemId) {
+      if (mode === 'drawer') {
+        const t = setTimeout(() => setLoading(false), 260)
+        return () => clearTimeout(t)
+      }
+      return
     }
-  }, [mode])
+    let cancelled = false
+    setLoading(true); setDbError(null)
+    getWorkItem(itemId)
+      .then(d => { if (!cancelled) { applyDetail(d); setLoading(false) } })
+      .catch(err => { if (!cancelled) { setDbError(err instanceof Error ? err.message : String(err)); setLoading(false) } })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, mode])
+
+  // ── Persistence ──────────────────────────────────────────────────────────────
+  const persistPatch = useCallback(async (patch: Partial<WorkItemData>, prev: WorkItemData) => {
+    const db = dbRef.current
+    if (!itemId || !db) return
+    const ctx = { actorName: activeUser.name, actorId: actorProfileId }
+    const memberByName = (n?: string) => db.profiles.find(p => p.name === n)?.id ?? null
+
+    const jobs: Promise<unknown>[] = []
+    const put = (field: EditableField, value: string | number | boolean | null, previous: string | number | boolean | null, extra?: { fromLabel?: string; toLabel?: string }) =>
+      jobs.push(updateWorkItemField(itemId, field, value, previous, { ...ctx, ...extra }))
+
+    if ('title' in patch && patch.title !== prev.title) put('title', patch.title ?? '', prev.title)
+    if ('description' in patch && patch.description !== prev.description) put('description', patch.description ?? null, prev.description ?? null)
+    if ('status' in patch && patch.status !== prev.status) {
+      put('status', STATUS_TO_DB[patch.status ?? ''] ?? patch.status ?? '', STATUS_TO_DB[prev.status] ?? prev.status, {
+        fromLabel: STATUS_LABEL[prev.status] ?? prev.status,
+        toLabel:   STATUS_LABEL[patch.status ?? ''] ?? patch.status ?? '',
+      })
+    }
+    if ('priority' in patch && patch.priority !== prev.priority) put('priority', PRIORITY_TO_DB[patch.priority ?? 'medium'] ?? 'media', PRIORITY_TO_DB[prev.priority] ?? prev.priority)
+    if ('severity' in patch && patch.severity !== prev.severity) put('severity', patch.severity ?? null, prev.severity ?? null)
+    if ('points' in patch && patch.points !== prev.points) put('story_points', patch.points ?? null, prev.points ?? null)
+    if ('dueDate' in patch && patch.dueDate !== prev.dueDate) put('due_date', patch.dueDate || null, prev.dueDate || null)
+    if ('sprintId' in patch && patch.sprintId !== prev.sprintId) put('sprint_id', patch.sprintId ?? null, prev.sprintId ?? null)
+    if ('epicKey' in patch && patch.epicKey !== prev.epicKey) put('epic_id', patch.epicKey ?? null, prev.epicKey ?? null)
+    if ('fixVersions' in patch) put('fix_version', patch.fixVersions?.[0] ?? null, prev.fixVersions?.[0] ?? null)
+    if ('assigneeName' in patch || ('assigneeInitials' in patch && patch.assigneeInitials !== prev.assigneeInitials)) {
+      put('assignee_id', memberByName(patch.assigneeName), memberByName(prev.assigneeName))
+    }
+    if ('reporterName' in patch || ('reporterInitials' in patch && patch.reporterInitials !== prev.reporterInitials)) {
+      put('reporter_id', memberByName(patch.reporterName), memberByName(prev.reporterName))
+    }
+    if (patch.labels && patch.labels.join('|') !== prev.labels.join('|')) {
+      jobs.push(setWorkItemLabels(itemId, patch.labels, activeUser.name))
+    }
+
+    if (!jobs.length) return
+    try { await Promise.all(jobs) }
+    catch (err) { setDbError(err instanceof Error ? err.message : String(err)) }
+  }, [itemId, activeUser.name, actorProfileId])
 
   // ── Update helper ────────────────────────────────────────────────────────────
   const update = useCallback((patch: Partial<WorkItemData>) => {
-    setLocal(prev => {
-      const next = { ...prev, ...patch }
-      onUpdate(next)
-      return next
-    })
-  }, [onUpdate])
+    const prev = localRef.current
+    const next = { ...prev, ...patch }
+    localRef.current = next
+    setLocal(next)
+    onUpdate(next)
+    void persistPatch(patch, prev)
+  }, [onUpdate, persistPatch])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function handleStatusChange(s: string) {
     if (s === 'done') { setShowDone(true) }
-    else { update({ status: s }); setStatusOpen(false) }
+    else {
+      const from = STATUS_LABEL[local.status] ?? local.status
+      trackChange('Status', from, STATUS_LABEL[s] ?? s, { status: s })
+      setStatusOpen(false)
+    }
   }
 
   function handleDoneConfirm() {
-    update({ status: 'done' })
+    const from = STATUS_LABEL[local.status] ?? local.status
+    trackChange('Status', from, STATUS_LABEL.done, { status: 'done' })
     setShowDone(false)
     setStatusOpen(false)
   }
@@ -704,34 +879,68 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   function handleAddComment() {
     const t = commentText.trim()
     if (!t) return
-    const initials = activeUser.name.split(' ').slice(0,2).map((p: string)=>p[0]).join('')
+    const initials = initialsOf(activeUser.name)
     const c: WIComment = { author: initials, authorName: activeUser.name, body: t, time: 'agora' }
     const next = [...comments, c]
     setComments(next)
     update({ comments: next })
     setCommentText('')
+    if (itemId) {
+      dbAddComment(itemId, t, { authorId: actorProfileId, actorName: activeUser.name })
+        .catch(err => setDbError(err instanceof Error ? err.message : String(err)))
+    }
   }
 
   function toggleAc(id: string) {
+    const target = acItems.find(a => a.id === id)
     const next = acItems.map(a => a.id===id ? {...a,done:!a.done} : a)
     setAcItems(next); update({ acItems: next })
+    if (itemId && target) {
+      toggleAcceptanceCriterion(id, !target.done, itemId, activeUser.name)
+        .catch(err => setDbError(err instanceof Error ? err.message : String(err)))
+    }
   }
 
   function addAcItem() {
     const t = newAc.trim(); if (!t) return
-    const next = [...acItems, { id:`ac-${Date.now()}`, text:t, done:false }]
+    const tempId = `ac-${Date.now()}`
+    const next = [...acItems, { id: tempId, text:t, done:false }]
     setAcItems(next); update({ acItems: next }); setNewAc('')
+    if (itemId) {
+      addAcceptanceCriterion(itemId, t, acItems.length, activeUser.name)
+        .then(row => setAcItems(cur => cur.map(a => a.id === tempId ? { id: row.id, text: row.text, done: row.is_done } : a)))
+        .catch(err => setDbError(err instanceof Error ? err.message : String(err)))
+    }
   }
 
   function removeAcItem(id: string) {
     const next = acItems.filter(a => a.id !== id)
     setAcItems(next); update({ acItems: next })
+    if (itemId) {
+      removeAcceptanceCriterion(id, itemId, activeUser.name)
+        .catch(err => setDbError(err instanceof Error ? err.message : String(err)))
+    }
   }
 
   function handleAddRelation({ type, targetKey }: { type: string; targetKey: string }) {
+    setAddRelOpen(false)
+    if (itemId) {
+      addDependency(itemId, targetKey, type, activeUser.name)
+        .then(({ item }) => {
+          const link: WILinkedIssue = {
+            relType: type, key: item.key, title: item.title,
+            status: uiStatusFromDb(item.status),
+            priority: PRIORITY_FROM_DB[(item.priority ?? '').toLowerCase()] ?? 'medium',
+          }
+          const next = [...linkedIssues, link]
+          setLinkedIssues(next); update({ linkedIssues: next })
+        })
+        .catch(err => setDbError(err instanceof Error ? err.message : String(err)))
+      return
+    }
     const link: WILinkedIssue = { relType: type, key: targetKey, title: `Issue ${targetKey}`, status: 'todo', priority: 'medium' }
     const next = [...linkedIssues, link]
-    setLinkedIssues(next); update({ linkedIssues: next }); setAddRelOpen(false)
+    setLinkedIssues(next); update({ linkedIssues: next })
   }
 
   function showToast(msg: string) {
@@ -740,7 +949,7 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   }
 
   function trackChange(field: string, from: string, to: string, patch: Partial<WorkItemData>) {
-    const initials = activeUser.name.split(' ').slice(0, 2).map((p: string) => p[0]).join('')
+    const initials = initialsOf(activeUser.name)
     const entry: WIHistoryEntry = {
       authorInitials: initials,
       authorName:     activeUser.name,
@@ -754,18 +963,19 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
   }
 
   function handleEpicChange(id: string | null) {
-    const epic = (data.availableEpics ?? []).find(e => e.id === id)
+    const epic = (local.availableEpics ?? data.availableEpics ?? []).find(e => e.id === id)
     const from = local.epicLabel ?? 'Nenhum'
     const to   = epic?.label ?? 'Nenhum'
     trackChange('Épico', from, to, { epicKey: id ?? undefined, epicLabel: epic?.label, epicColor: epic?.color })
   }
 
   function handleAssignToMe() {
-    const initials = activeUser.name.split(' ').slice(0,2).map((p: string)=>p[0]).join('')
+    const initials = initialsOf(activeUser.name)
     const from = (local.assigneeName ?? local.assigneeInitials) || 'Nenhum'
     const to   = activeUser.name
     trackChange('Responsável', from, to, { assigneeInitials: initials, assigneeName: activeUser.name })
   }
+
 
   // ── Derived ───────────────────────────────────────────────────────────────────
   const acDone = acItems.filter(a=>a.done).length
@@ -910,6 +1120,17 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
                   onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border2;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>···</button>
               </div>
+
+              {/* Data error banner */}
+              {dbError && (
+                <div style={{ marginBottom:16, padding:'10px 14px', background:T.critDim, border:`1px solid ${T.crit}30`, borderRadius:8, display:'flex', gap:8 }}>
+                  <span style={{ color:T.crit, flexShrink:0 }}>⚠</span>
+                  <div>
+                    <p style={{ margin:'0 0 2px', fontSize:11, fontWeight:700, color:T.crit }}>Falha ao sincronizar com o banco</p>
+                    <p style={{ margin:0, fontSize:12, color:T.text2 }}>{dbError}</p>
+                  </div>
+                </div>
+              )}
 
               {/* Blocked banner */}
               {local.blocked && (
@@ -1104,11 +1325,11 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Assignee */}
               <DetailRow label="Responsável">
-                {canEdit && (data.availableMembers?.length ?? 0) > 0 ? (
+                {canEdit && ((local.availableMembers ?? data.availableMembers)?.length ?? 0) > 0 ? (
                   <div>
                     <MemberSelector
                       value={local.assigneeInitials}
-                      members={data.availableMembers!}
+                      members={(local.availableMembers ?? data.availableMembers)!}
                       allowNone
                       onChange={m => {
                         const from = (local.assigneeName ?? local.assigneeInitials) || 'Nenhum'
@@ -1131,10 +1352,10 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Labels */}
               <DetailRow label="Labels">
-                {canEdit && (data.availableLabels?.length ?? 0) > 0 ? (
+                {canEdit && ((local.availableLabels ?? data.availableLabels)?.length ?? 0) > 0 ? (
                   <LabelEditor
                     selected={local.labels}
-                    available={data.availableLabels!}
+                    available={(local.availableLabels ?? data.availableLabels)!}
                     onChange={labels => {
                       const from = local.labels.join(', ') || 'Nenhum'
                       const to   = labels.join(', ') || 'Nenhum'
@@ -1173,10 +1394,10 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Fix versions */}
               <DetailRow label="Fix versions">
-                {canEdit && (data.availableVersions?.length ?? 0) > 0 ? (
+                {canEdit && ((local.availableVersions ?? data.availableVersions)?.length ?? 0) > 0 ? (
                   <SearchableSelect
                     value={local.fixVersions?.[0]}
-                    options={(data.availableVersions ?? []).map(v => ({ id:v, label:v }))}
+                    options={((local.availableVersions ?? data.availableVersions) ?? []).map(v => ({ id:v, label:v }))}
                     onChange={id => {
                       const from = local.fixVersions?.join(', ') || 'Nenhuma'
                       const to   = id ?? 'Nenhuma'
@@ -1198,10 +1419,10 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Reporter */}
               <DetailRow label="Relator">
-                {canEdit && (data.availableMembers?.length ?? 0) > 0 ? (
+                {canEdit && ((local.availableMembers ?? data.availableMembers)?.length ?? 0) > 0 ? (
                   <MemberSelector
                     value={local.reporterInitials}
-                    members={data.availableMembers!}
+                    members={(local.availableMembers ?? data.availableMembers)!}
                     allowNone
                     onChange={m => {
                       const from = local.reporterName ?? local.reporterInitials ?? 'Nenhum'
@@ -1251,12 +1472,12 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
 
               {/* Sprint */}
               <DetailRow label="Sprint">
-                {canEdit && (data.availableSprints?.length ?? 0) > 0 ? (
+                {canEdit && ((local.availableSprints ?? data.availableSprints)?.length ?? 0) > 0 ? (
                   <SearchableSelect
                     value={local.sprintId}
-                    options={(data.availableSprints ?? []).map(s => ({ id:s.id, label:s.name }))}
+                    options={((local.availableSprints ?? data.availableSprints) ?? []).map(s => ({ id:s.id, label:s.name }))}
                     onChange={id => {
-                      const sprint = (data.availableSprints ?? []).find(s => s.id === id)
+                      const sprint = ((local.availableSprints ?? data.availableSprints) ?? []).find(s => s.id === id)
                       const from   = local.sprintName ?? 'Backlog'
                       const to     = sprint?.name ?? 'Backlog'
                       trackChange('Sprint', from, to, { sprintId: id ?? undefined, sprintName: sprint?.name })
@@ -1270,12 +1491,12 @@ export function WorkItemDetail({ data, onUpdate, onClose, mode = 'drawer' }: {
               </DetailRow>
 
               {/* Epic */}
-              {((data.availableEpics?.length ?? 0) > 0 || local.epicLabel) && (
+              {(((local.availableEpics ?? data.availableEpics)?.length ?? 0) > 0 || local.epicLabel) && (
                 <DetailRow label="Épico">
-                  {canEdit && (data.availableEpics?.length ?? 0) > 0 ? (
+                  {canEdit && ((local.availableEpics ?? data.availableEpics)?.length ?? 0) > 0 ? (
                     <EpicSelector
                       value={local.epicKey}
-                      epics={data.availableEpics!}
+                      epics={(local.availableEpics ?? data.availableEpics)!}
                       onChange={handleEpicChange}
                     />
                   ) : (
