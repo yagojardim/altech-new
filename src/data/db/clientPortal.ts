@@ -218,16 +218,16 @@ async function writeAudit(
 ): Promise<void> {
   try {
     await supabase.from('audit_logs').insert({
-    tenant_id: DEFAULT_TENANT_ID,
-    entity_type: entityType,
-    entity_id: entityId,
-    action,
-    actor_name: actorName,
+      tenant_id: DEFAULT_TENANT_ID,
+      entity_type: entityType,
+      entity_id: entityId,
+      action,
+      actor_name: actorName,
       before,
       after,
     })
   } catch (err) {
-    logAudit(err, entityType, action)
+    logger.error('clientPortal.writeAudit', err, { entityType, action })
   }
 }
 
