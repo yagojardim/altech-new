@@ -180,6 +180,7 @@ function EditUserModal({
   onClose:        ()=>void
   onSave:         (patch: EditDraft)=>void
 }) {
+  void activeUserName
   const [step, setStep] = useState<'basics'|'permissions'|'dashboards'>('basics')
 
   const currentDashIds = user.assigned_dashboards.map(d => d.dashboard_id as DashboardType)
