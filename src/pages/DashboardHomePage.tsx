@@ -15,9 +15,11 @@ import {
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
-  WORK_ITEMS, getBlockedItems, getSprintItems, getReadyItems,
+  useLiveDashboard, liveProjects, liveItems, liveCurrentSprintName, liveAggregates,
+  getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
-} from '../data/workItems'
+} from '../data/db/homeLive'
+
 import {
   getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
   addPoReply, getSignalsForTenant, getUnreadCountForTenant, type ClientSignal,
@@ -58,29 +60,44 @@ function applyFilters(items: WorkItem[], f: FilterState): WorkItem[] {
 function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
-      <ProjectMultiSelect projects={PROJECTS} selected={selected} onChange={onChange} />
+      <ProjectMultiSelect projects={liveProjects()} selected={selected} onChange={onChange} />
     </div>
   )
 }
 
-const PROJECTS = [
-  { id: 'proj_001', name: 'Website Relaunch', color: '#35c9ae' },
-  { id: 'proj_002', name: 'Infra Migration',  color: '#a78bfa' },
-  { id: 'proj_003', name: 'ERP Corporativo',  color: '#f5a524' },
-  { id: 'proj_004', name: 'Mobile App v2',    color: '#60a5fa' },
-]
-const ALL_PROJ_IDS = new Set(PROJECTS.map(p => p.id))
+/** Project options come from the database (tenant-scoped). */
+const PROJECTS = () => liveProjects()
+const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
+
+/** Selection defaults to "all projects" and re-syncs once the data lands. */
+function useProjSel(): [Set<string>, (s: Set<string>) => void] {
+  const [sel, setSel] = useState<Set<string>>(() => ALL_PROJ_IDS())
+  const count = liveProjects().length
+  useEffect(() => {
+    if (sel.size === 0 && count > 0) setSel(ALL_PROJ_IDS())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count])
+  return [sel, setSel]
+}
 
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
-  if (sel.size >= PROJECTS.length) return items
+  if (sel.size === 0 || sel.size >= liveProjects().length) return items
   return items.filter(w => sel.has(w.project_id ?? ''))
 }
+
+
 const SQUADS = [
   { id: 'squad_growth',   name: 'Growth' },
   { id: 'squad_platform', name: 'Platform' },
   { id: 'squad_design',   name: 'Design' },
 ]
-const SPRINTS = ['Sprint 14', 'Sprint 15']
+/** Sprint filter options come from the sprints in scope. */
+const SPRINTS = () => {
+  const names = new Set<string>()
+  liveItems().forEach(w => { if (w.sprint) names.add(w.sprint) })
+  return [...names]
+}
+
 
 // ─── Panel grid wrapper ───────────────────────────────────────────────────────
 function Grid({ cols = '1fr 1fr', children }: { cols?: string; children: ReactNode }) {
@@ -138,7 +155,7 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
   const _scope = getActiveScope()
   const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
@@ -190,7 +207,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
       <UnifiedMural dashId="admin" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -252,23 +269,21 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer: openPmoDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
-  const rags: { name: string; squad: string; rag: RagStatus; pct: number; days: string; reason?: string }[] = [
-    { name: 'Website Relaunch', squad: 'Growth',   rag: 'healthy', pct: 68, days: '42d restantes' },
-    { name: 'ERP Corporativo',  squad: 'Platform', rag: 'risk',    pct: 41, days: '18d restantes', reason: 'Aprovação de design atrasada 4d' },
-    { name: 'Infra Migration',  squad: 'Platform', rag: 'blocked', pct: 22, days: '5d restantes',  reason: 'Credenciais de prod ausentes' },
-    { name: 'Mobile App v2',    squad: 'Growth',   rag: 'healthy', pct: 85, days: '60d restantes' },
-  ]
+  const agg  = liveAggregates()
+  const rags = (agg?.rag ?? []).filter(r => selProj.size === 0 || selProj.has(r.id))
+  const c    = agg?.counts
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'pmo:projects', value: '4', label: 'Projetos Ativos', sub: '2 no prazo', disclaimer: 'projetos com sprint ativa ou em andamento', miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:4},{label:'S12',value:4},{label:'S13',value:4,current:true}]} showAvg={false} />, onClick: () => onNav('projects-list') },
-    { id: 'pmo:risk', value: '2', label: 'Em Risco / Atrasados', sub: '1 crítico', disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:1},{value:2},{value:3},{value:2},{value:1},{label:'S13',value:2}]} color="#f5a524" />, onClick: () => onNav('reports') },
-    { id: 'pmo:predictability', value: '71%', label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', miniViz: <MiniBarChart data={[{label:'S8',value:18},{label:'S9',value:22},{label:'S10',value:19},{label:'S11',value:25},{label:'S12',value:21},{label:'S13',value:22,current:true}]} />, onClick: () => openChart('velocity') },
-    { id: 'pmo:delivery', value: '67%', label: 'Planejado × Concluído', sub: 'Q2 2025', disclaimer: 'comparativo de entrega vs. compromisso da sprint', miniViz: <MiniBarChart data={[{label:'S8',value:62},{label:'S9',value:65},{label:'S10',value:71},{label:'S11',value:68},{label:'S12',value:70},{label:'S13',value:67,current:true}]} />, onClick: () => openChart('criados') },
+    { id: 'pmo:projects', value: String(c?.activeProjects ?? 0), label: 'Projetos Ativos', sub: `${rags.filter(r => r.rag === 'healthy').length} no prazo`, disclaimer: 'projetos ativos no tenant', onClick: () => onNav('projects-list') },
+    { id: 'pmo:risk', value: String(c?.atRisk ?? 0), label: 'Em Risco / Atrasados', sub: `${rags.filter(r => r.rag === 'blocked').length} crítico(s)`, disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: (c?.atRisk ?? 0) > 0, onClick: () => onNav('reports') },
+    { id: 'pmo:predictability', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', onClick: () => openChart('velocity') },
+    { id: 'pmo:delivery', value: `${agg?.consolidatedPct ?? 0}%`, label: 'Planejado × Concluído', sub: `${agg?.done ?? 0}/${agg?.planned ?? 0} itens`, disclaimer: 'itens concluídos sobre o total planejado', onClick: () => openChart('criados') },
   ]
+
 
   return (
     <>
@@ -278,25 +293,29 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="pmo" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
         <SCard title="Saúde por Projeto (RAG)">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rags.length === 0 && <EmptyState message="Nenhum projeto no escopo selecionado." />}
             {rags.map(r => (
-              <RagCard key={r.name} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.days} reason={r.reason} onClick={() => onNav('project')} />
+              <RagCard key={r.id} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.daysLabel} reason={r.reason} onClick={() => onNav('project')} />
             ))}
           </div>
         </SCard>
+
 
         <WorkQueue title="Bloqueadores Críticos" items={blocked} onOpen={openPmoDrawer}
           showDaysBlocked onViewAll={() => onNav('list')}
           emptyMsg="Nenhum bloqueador ativo. Boa sinal! 🟢" />
 
         <ColSpan>
-          <ProgressCard pct={67} label="Ritmo de Entrega — Portfólio" velocity="Velocity média: 38pt/sprint" onClick={() => onNav('reports')} />
+          <ProgressCard pct={agg?.consolidatedPct ?? 0} label="Ritmo de Entrega — Portfólio"
+            velocity={`Velocity média: ${agg?.velocityAvg ?? 0}pt/sprint`} onClick={() => onNav('reports')} />
         </ColSpan>
+
 
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
@@ -311,30 +330,35 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
 function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
-  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
+  const [selProj, setSelProj] = useProjSel()
+  const sprint14 = applyFilters(byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj), filters)
   const blocked  = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
+  const agg         = liveAggregates()
+  const sprintName  = liveCurrentSprintName()
   const pmDone      = sprint14.filter(w => w.status === 'done').length
   const pmTotal     = sprint14.length || 1
   const pmProgress  = Math.round((pmDone / pmTotal) * 100)
-  const pmPtTotal   = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const pmPtTotal   = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 1
   const pmPtDone    = sprint14.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
-  const team = [
-    { name: 'Ana Lima',     i: 'AL', c: '#fb923c', ativas: 4, cap: 5 },
-    { name: 'Lucas F.',     i: 'LF', c: '#34d399', ativas: 6, cap: 5 },
-    { name: 'Rafael M.',    i: 'RM', c: '#60a5fa', ativas: 2, cap: 5 },
-    { name: 'Bruno S.',     i: 'BS', c: '#fbbf24', ativas: 3, cap: 5 },
-  ]
+  const scopeRag    = (agg?.rag ?? []).filter(r => selProj.size === 0 || selProj.has(r.id))
+  const mainRag     = scopeRag[0]
+  const sprintSum   = (agg?.currentSprints ?? []).find(s => selProj.size === 0 || selProj.has(s.projectId))
+  const daysLeft    = mainRag?.daysLabel ?? '—'
+
+  const team = (agg?.workload ?? []).slice(0, 6).map(w => ({
+    name: w.name, i: w.initials, c: w.color, ativas: w.active, cap: 5,
+  }))
 
   const nativeCards: MuralNativeCard[] = [
     { id: 'pm:progress', value: `${pmProgress}%`, label: 'Progresso do Projeto', sub: `${pmDone}/${pmTotal} itens concluídos`, disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <BurndownChart variant="thumbnail" sprintTotal={pmPtTotal} sprintRemaining={pmPtTotal - pmPtDone} />, onClick: () => onNav('project') },
-    { id: 'pm:deadline', value: '18d', label: 'Prazo Restante', sub: 'Entrega: 28 ago', disclaimer: 'dias até a data de entrega planejada', miniViz: <MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />, onClick: () => onNav('gantt') },
-    { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
-    { id: 'pm:scope', value: '+12%', label: 'Risco de Escopo', sub: 'vs planejamento', disclaimer: 'variação de escopo vs. o planejado', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />, onClick: () => openChart('criados') },
+    { id: 'pm:deadline', value: daysLeft, label: 'Prazo Restante', sub: mainRag?.periodEnd ? `Entrega: ${mainRag.periodEnd}` : 'sem data definida', disclaimer: 'dias até a data de entrega planejada', onClick: () => onNav('gantt') },
+    { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: blocked.length > 0, onClick: () => onNav('list') },
+    { id: 'pm:scope', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'planejado × entregue', disclaimer: 'entrega efetiva vs. compromisso', color: T.warn, alert: (agg?.predictability ?? 100) < 80, onClick: () => openChart('criados') },
   ]
+
 
   return (
     <>
@@ -344,15 +368,22 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="project-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
-        <RagCard name="Website Relaunch" squad="Growth · Sprint 14" rag="risk" pct={72} daysLabel="18d restantes" reason="Escopo +12% — replanejamento necessário" onClick={() => onNav('project')} />
+        {mainRag
+          ? <RagCard name={mainRag.name} squad={`${mainRag.squad}${sprintName ? ` · ${sprintName}` : ''}`} rag={mainRag.rag}
+              pct={mainRag.pct} daysLabel={mainRag.daysLabel} reason={mainRag.reason} onClick={() => onNav('project')} />
+          : <EmptyState message="Nenhum projeto no escopo selecionado." />}
 
-        <ProgressCard pct={67} label="Planejado × Concluído" velocity="Sprint 14 — 38pt concluídos" onClick={() => openChart('criados')} />
+        <ProgressCard pct={agg?.consolidatedPct ?? 0} label="Planejado × Concluído"
+          velocity={`${agg?.donePoints ?? 0}pt concluídos de ${agg?.plannedPoints ?? 0}pt`} onClick={() => openChart('criados')} />
 
-        <SprintDonutCard sprintName="Sprint 14" done={28} total={38} items={sprint14} onOpen={openDrawer} onViewSprint={() => onNav('project')} />
+        <SprintDonutCard sprintName={sprintSum?.name ?? sprintName ?? 'Sprint atual'}
+          done={sprintSum?.done ?? pmDone} total={sprintSum?.total ?? sprint14.length}
+          items={sprint14} onOpen={openDrawer} onViewSprint={() => onNav('project')} />
+
 
         <WorkQueue title="Bloqueadores & Riscos" items={blocked} onOpen={openDrawer}
           showDaysBlocked onViewAll={() => onNav('list')}
@@ -388,7 +419,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 // ─── 4. PRODUCT MANAGER ──────────────────────────────────────────────────────
 function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
 
   const funnel = [
     { stage: 'Visitantes',   value: 12400, pct: 100 },
@@ -422,7 +453,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="product-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -678,15 +709,15 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
 function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
-  const alertItems = applyFilters(byProjects(getBacklogWithAlerts('proj_001'), selProj), filters)
-  const readyItems = applyFilters(byProjects(getReadyItems('proj_001'), selProj), filters)
+  const [selProj, setSelProj] = useProjSel()
+  const alertItems = applyFilters(byProjects(getBacklogWithAlerts(), selProj), filters)
+  const readyItems = applyFilters(byProjects(getReadyItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
   const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
 
   // Compute KPI values from real mock data (respecting selProj filter)
-  const sprint14Items   = byProjects(getSprintItems('Sprint 14'), selProj)
+  const sprint14Items   = byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj)
   const totalSprintPts  = sprint14Items.reduce((s, w) => s + (w.points ?? 0), 0) || 38
   const readyPts        = readyItems.reduce((s, w) => s + (w.points ?? 0), 0)
   const coverageReady   = totalSprintPts > 0 ? Math.round((readyPts / totalSprintPts) * 100) : 0
@@ -718,7 +749,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -756,9 +787,9 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
-  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
+  const sprint14 = applyFilters(byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj), filters)
   const parados = sprint14.filter(w => w.status === 'blocked' || (w.days_blocked ?? 0) >= 2)
 
   const aging = [
@@ -791,7 +822,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -854,9 +885,9 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const inReview = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
+    byProjects(liveItems().filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
     filters
   )
 
@@ -873,7 +904,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   ]
 
   const { openChart: openTLChart, chartModal: tlChartModal } = useChartModal()
-  const critBugs = WORK_ITEMS.filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
+  const critBugs = liveItems().filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
 
   const nativeCards: MuralNativeCard[] = [
     { id: 'tl:health', value: '74%', label: 'Saúde Técnica', sub: 'cobertura de testes', disclaimer: 'score composto de cobertura, débito e estabilidade', color: T.warn, miniViz: <MiniBarChart data={[{label:'S8',value:70},{label:'S9',value:72},{label:'S10',value:69},{label:'S11',value:73},{label:'S12',value:71},{label:'S13',value:74,current:true}]} />, onClick: () => openTLChart('health') },
@@ -890,7 +921,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="tech-lead" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -937,16 +968,19 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
+  const { activeUser } = useSession()
+  const mine = (w: WorkItem) => w.assignee?.name === activeUser.name
 
   const myItems = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'), selProj),
+    byProjects(liveItems().filter(mine), selProj),
     filters
   ).sort((a, b) => {
     const order: Record<string, number> = { blocked: 0, 'in-review': 1, 'in-progress': 2, testing: 3, todo: 4, backlog: 5 }
     return (order[a.status] ?? 9) - (order[b.status] ?? 9)
   })
-  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters).filter(w => w.assignee?.name === 'Lucas Ferreira')
+  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters).filter(mine)
+
   const recent = [
     { label: 'Merge PR #280 (fix: ordenação)', date: 'há 4h',   color: T.success },
     { label: 'ALT-143 movida para Bloqueado',  date: 'há 1h',   color: T.crit },
@@ -967,7 +1001,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="dev" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -995,9 +1029,9 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
 function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const designItems = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
+    byProjects(liveItems().filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
     filters
   )
 
@@ -1025,7 +1059,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="ux" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1069,9 +1103,9 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
 function QaPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useProjSel()
   const testing = applyFilters(byProjects(getTestingItems(), selProj), filters)
-  const bugs    = applyFilters(byProjects(WORK_ITEMS.filter(w => w.type === 'bug'), selProj), filters)
+  const bugs    = applyFilters(byProjects(liveItems().filter(w => w.type === 'bug'), selProj), filters)
   const cobertura = [
     { criterio: 'Critérios de aceite validados', pct: 68 },
     { criterio: 'Casos de teste documentados',   pct: 45 },
@@ -1096,7 +1130,7 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
       <UnifiedMural dashId="qa" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS} squads={SQUADS} sprints={SPRINTS} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1146,6 +1180,21 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
 
 // ─── Panel dispatcher ────────────────────────────────────────────────────────
 function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNav: (v: string) => void; onInvite?: () => void }) {
+  // Subscribes every panel below to the shared Supabase aggregate store.
+  const { data, loading, error, reload } = useLiveDashboard()
+
+  if (error) {
+    return (
+      <div style={{ padding: 20, borderRadius: 10, background: `${T.crit}14`, border: `1px solid ${T.crit}44`, color: T.crit, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flex: 1 }}>{error}</span>
+        <button onClick={reload} style={{ fontSize: 12, color: T.crit, background: 'none', border: `1px solid ${T.crit}55`, borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}>
+          Tentar novamente
+        </button>
+      </div>
+    )
+  }
+  if (!data && loading) return <LoadingState rows={5} />
+
   switch (type) {
     case 'admin':           return <AdminPanel          onNav={onNav} onInvite={onInvite} />
     case 'pmo':             return <PmoPanel            onNav={onNav} />
@@ -1159,6 +1208,7 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
     case 'qa':              return <QaPanel             onNav={onNav} />
   }
 }
+
 
 // ─── Add Card Modal (reports + hidden native cards) ───────────────────────────
 function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNative, onClose, mode = 'mural' }: {
@@ -1373,7 +1423,7 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
   const canAdd    = available.length > 0
 
   // Real sprint data for charts that support extra props
-  const sprintItems   = byProjects(getSprintItems('Sprint 14'), selProj ?? new Set(ALL_PROJ_IDS))
+  const sprintItems   = byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj ?? ALL_PROJ_IDS())
   const sprintPtTotal = sprintItems.reduce((s, w) => s + (w.points ?? 0), 0) || 38
   const sprintPtDone  = sprintItems.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 

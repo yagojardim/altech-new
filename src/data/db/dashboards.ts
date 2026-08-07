@@ -1,0 +1,398 @@
+// Dashboards data access layer — read-only aggregations over the connected Supabase project.
+// Every read is scoped by tenant_id (never cross-tenant) and, optionally, by the
+// projects the user can see (project_members scope). No writes happen here.
+import { supabase } from '../../integrations/supabase/client'
+import type { Database } from '../../integrations/supabase/types'
+import { T } from '../../components/ds/tokens'
+import { DEFAULT_TENANT_ID } from './timeline'
+import { PRIORITY_FROM_DB } from './board'
+import type { WorkItem, WorkStatus, RagStatus } from '../../components/ds/DashboardKit'
+
+export { DEFAULT_TENANT_ID }
+
+type Tables = Database['public']['Tables']
+
+type ProjectRow = Pick<Tables['projects']['Row'], 'id' | 'key' | 'name' | 'status' | 'period_start' | 'period_end' | 'metadata'>
+type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'project_id' | 'name' | 'state' | 'start_date' | 'end_date' | 'velocity'>
+type ProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials' | 'avatar_color' | 'department'>
+type ItemRow = Pick<
+  Tables['work_items']['Row'],
+  | 'id' | 'key' | 'title' | 'description' | 'type' | 'status' | 'priority' | 'severity'
+  | 'project_id' | 'sprint_id' | 'epic_id' | 'assignee_id' | 'reporter_id' | 'story_points'
+  | 'is_blocked' | 'blocked_reason' | 'due_date' | 'created_at' | 'updated_at' | 'completed_at'
+  | 'acceptance_status' | 'progress'
+>
+type DependencyRow = Pick<Tables['dependencies']['Row'], 'source_id' | 'target_id' | 'relation_type'>
+type LabelJoinRow = { work_item_id: string; labels: { name: string } | { name: string }[] | null }
+
+/** DB statuses (snake_case) → DashboardKit statuses (kebab-case). */
+export const STATUS_FROM_DB: Record<string, WorkStatus> = {
+  backlog: 'backlog', todo: 'todo', ready: 'ready',
+  in_progress: 'in-progress', in_review: 'in-review', testing: 'testing',
+  blocked: 'blocked', done: 'done', cancelled: 'cancelled',
+}
+
+const TYPE_FROM_DB: Record<string, WorkItem['type']> = {
+  story: 'story', task: 'task', bug: 'bug', epic: 'epic', subtask: 'subtask',
+}
+
+const PROJECT_PALETTE = [T.accent, T.success, T.purple, T.warn, T.indigo, T.crit]
+
+export function dashProjectColor(project: { metadata: unknown }, index: number): string {
+  const meta = project.metadata as Record<string, unknown> | null
+  const c = meta && typeof meta.color === 'string' ? meta.color : null
+  return c && c.startsWith('#') ? c : PROJECT_PALETTE[index % PROJECT_PALETTE.length]
+}
+
+export interface RagProject {
+  id: string
+  key: string
+  name: string
+  squad: string
+  color: string
+  rag: RagStatus
+  reason?: string
+  pct: number
+  done: number
+  total: number
+  points: number
+  donePoints: number
+  blockedCount: number
+  daysLeft: number
+  daysLabel: string
+  periodEnd: string | null
+}
+
+export interface SprintSummary {
+  id: string
+  name: string
+  projectId: string
+  projectName: string
+  startDate: string | null
+  endDate: string | null
+  done: number
+  total: number
+  pct: number
+  points: number
+  donePoints: number
+  daysLeft: number
+  items: WorkItem[]
+}
+
+export interface WorkloadEntry {
+  profileId: string
+  name: string
+  initials: string
+  color: string
+  active: number
+  points: number
+}
+
+export interface DashboardProjectOption { id: string; name: string; color: string }
+
+export interface DashboardAggregates {
+  projects: DashboardProjectOption[]
+  rag: RagProject[]
+  consolidatedPct: number
+  planned: number
+  done: number
+  plannedPoints: number
+  donePoints: number
+  currentSprints: SprintSummary[]
+  blockers: WorkItem[]
+  openDependencies: { source: WorkItem; target: WorkItem; relation: string }[]
+  upcoming: WorkItem[]
+  workload: WorkloadEntry[]
+  items: WorkItem[]
+  counts: {
+    projects: number
+    activeProjects: number
+    atRisk: number
+    blocked: number
+    bugs: number
+    criticalBugs: number
+    unassigned: number
+    ready: number
+    testing: number
+    people: number
+  }
+  velocityAvg: number
+  predictability: number
+}
+
+function missingTableMessage(table: string, message: string): string {
+  if (/does not exist|schema cache|Could not find the table/i.test(message)) {
+    return `A tabela "${table}" não existe no Supabase conectado. Rode a migration do schema canônico antes de usar os dashboards.`
+  }
+  return message
+}
+
+const DAY = 86400000
+export function daysBetween(a: Date, b: Date): number {
+  return Math.round((b.getTime() - a.getTime()) / DAY)
+}
+
+/** Resolves the project ids a profile may see (project_members). Empty ⇒ all tenant projects. */
+export async function fetchScopedProjectIds(profileId?: string | null): Promise<string[] | null> {
+  if (!profileId) return null
+  const { data, error } = await supabase
+    .from('project_members').select('project_id')
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('profile_id', profileId)
+  if (error) return null
+  const ids = (data ?? []).map(r => r.project_id)
+  return ids.length > 0 ? ids : null
+}
+
+export function toWorkItem(
+  row: ItemRow,
+  profiles: Map<string, ProfileRow>,
+  sprints: Map<string, SprintRow>,
+  labels: Map<string, string[]>,
+): WorkItem {
+  const assignee = row.assignee_id ? profiles.get(row.assignee_id) : undefined
+  const reporter = row.reporter_id ? profiles.get(row.reporter_id) : undefined
+  const person = (p?: ProfileRow) => p
+    ? { name: p.name, initials: p.avatar_initials ?? p.name.slice(0, 2).toUpperCase(), color: p.avatar_color ?? T.accent }
+    : undefined
+  const sprint = row.sprint_id ? sprints.get(row.sprint_id) : undefined
+  const blockedSince = row.updated_at ? Math.max(0, daysBetween(new Date(row.updated_at), new Date())) : 0
+
+  return {
+    id: row.id,
+    key: row.key,
+    title: row.title,
+    type: TYPE_FROM_DB[row.type] ?? 'task',
+    status: row.is_blocked ? 'blocked' : (STATUS_FROM_DB[row.status] ?? 'backlog'),
+    priority: PRIORITY_FROM_DB[(row.priority ?? '').toLowerCase()] ?? 'medium',
+    assignee: person(assignee),
+    reporter: person(reporter),
+    sprint: sprint?.name,
+    project_id: row.project_id,
+    squad_id: assignee?.department ?? '',
+    points: row.story_points != null ? Number(row.story_points) : undefined,
+    description: row.description ?? undefined,
+    tags: labels.get(row.id) ?? [],
+    created_at: row.created_at ?? undefined,
+    due_date: row.due_date ?? undefined,
+    days_blocked: row.is_blocked ? blockedSince : undefined,
+  }
+}
+
+/**
+ * Loads every aggregate the dashboards need in a single round-trip.
+ * `projectIds` narrows the read to the selected/allowed projects.
+ */
+export async function fetchDashboardAggregates(projectIds?: string[]): Promise<DashboardAggregates> {
+  const tid = DEFAULT_TENANT_ID
+  const scoped = projectIds && projectIds.length > 0 ? projectIds : null
+
+  let projectsQ = supabase.from('projects')
+    .select('id, key, name, status, period_start, period_end, metadata')
+    .eq('tenant_id', tid).is('archived_at', null).order('name')
+  if (scoped) projectsQ = projectsQ.in('id', scoped)
+
+  let itemsQ = supabase.from('work_items')
+    .select('id, key, title, description, type, status, priority, severity, project_id, sprint_id, epic_id, assignee_id, reporter_id, story_points, is_blocked, blocked_reason, due_date, created_at, updated_at, completed_at, acceptance_status, progress')
+    .eq('tenant_id', tid).is('archived_at', null).order('key')
+  if (scoped) itemsQ = itemsQ.in('project_id', scoped)
+
+  let sprintsQ = supabase.from('sprints')
+    .select('id, project_id, name, state, start_date, end_date, velocity')
+    .eq('tenant_id', tid).is('archived_at', null)
+  if (scoped) sprintsQ = sprintsQ.in('project_id', scoped)
+
+  const [projects, items, sprints, profiles, deps, labels] = await Promise.all([
+    projectsQ.returns<ProjectRow[]>(),
+    itemsQ.returns<ItemRow[]>(),
+    sprintsQ.returns<SprintRow[]>(),
+    supabase.from('profiles').select('id, name, avatar_initials, avatar_color, department')
+      .eq('tenant_id', tid).is('archived_at', null).returns<ProfileRow[]>(),
+    supabase.from('dependencies').select('source_id, target_id, relation_type')
+      .eq('tenant_id', tid).returns<DependencyRow[]>(),
+    supabase.from('work_item_labels').select('work_item_id, labels(name)').eq('tenant_id', tid),
+  ])
+
+  const failed = [
+    ['projects', projects.error], ['work_items', items.error], ['sprints', sprints.error],
+    ['profiles', profiles.error], ['dependencies', deps.error], ['work_item_labels', labels.error],
+  ].find(([, err]) => err) as [string, { message: string }] | undefined
+  if (failed) throw new Error(missingTableMessage(failed[0], failed[1].message))
+
+  const projectRows = projects.data ?? []
+  const itemRows = items.data ?? []
+  const sprintRows = sprints.data ?? []
+  const profileRows = profiles.data ?? []
+
+  const profileMap = new Map(profileRows.map(p => [p.id, p]))
+  const sprintMap = new Map(sprintRows.map(s => [s.id, s]))
+  const labelMap = new Map<string, string[]>()
+  for (const row of (labels.data ?? []) as LabelJoinRow[]) {
+    const rel = row.labels
+    if (!rel) continue
+    const list = Array.isArray(rel) ? rel : [rel]
+    labelMap.set(row.work_item_id, [...(labelMap.get(row.work_item_id) ?? []), ...list.map(l => l.name)])
+  }
+
+  const workItems = itemRows.map(r => toWorkItem(r, profileMap, sprintMap, labelMap))
+  const byId = new Map(workItems.map(w => [w.id, w]))
+  const today = new Date()
+
+  // ── RAG per project ────────────────────────────────────────────────────────
+  const rag: RagProject[] = projectRows.map((p, idx) => {
+    const rows = itemRows.filter(i => i.project_id === p.id)
+    const total = rows.length
+    const done = rows.filter(i => i.status === 'done').length
+    const points = rows.reduce((s, i) => s + Number(i.story_points ?? 0), 0)
+    const donePoints = rows.filter(i => i.status === 'done').reduce((s, i) => s + Number(i.story_points ?? 0), 0)
+    const blockedCount = rows.filter(i => i.is_blocked).length
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+    const end = p.period_end ? new Date(p.period_end) : null
+    const daysLeft = end ? daysBetween(today, end) : 0
+    const overdueItems = rows.filter(i => i.due_date && i.status !== 'done' && new Date(i.due_date) < today).length
+
+    let status: RagStatus = 'healthy'
+    let reason: string | undefined
+    if (blockedCount > 0) {
+      status = 'blocked'
+      const first = rows.find(i => i.is_blocked)
+      reason = first?.blocked_reason ?? `${blockedCount} item(ns) bloqueado(s)`
+    } else if (end && daysLeft < 0) {
+      status = 'risk'; reason = `Período encerrado há ${Math.abs(daysLeft)}d com ${total - done} item(ns) em aberto`
+    } else if (overdueItems > 0) {
+      status = 'risk'; reason = `${overdueItems} item(ns) com prazo vencido`
+    } else if (end && daysLeft <= 14 && pct < 70) {
+      status = 'risk'; reason = `${pct}% concluído a ${daysLeft}d do fim do período`
+    }
+    if (status !== 'healthy' && !reason) reason = 'Atenção necessária'
+
+    const squadNames = new Set(
+      rows.map(i => (i.assignee_id ? profileMap.get(i.assignee_id)?.department : null)).filter(Boolean) as string[],
+    )
+
+    return {
+      id: p.id, key: p.key, name: p.name,
+      squad: squadNames.size === 1 ? [...squadNames][0] : p.key,
+      color: dashProjectColor(p, idx),
+      rag: status, reason,
+      pct, done, total, points, donePoints, blockedCount,
+      daysLeft,
+      daysLabel: !end ? 'sem período definido'
+        : daysLeft >= 0 ? `${daysLeft}d restantes` : `${Math.abs(daysLeft)}d de atraso`,
+      periodEnd: p.period_end,
+    }
+  })
+
+  const totalItems = itemRows.length
+  const doneItems = itemRows.filter(i => i.status === 'done').length
+  const plannedPoints = itemRows.reduce((s, i) => s + Number(i.story_points ?? 0), 0)
+  const donePoints = itemRows.filter(i => i.status === 'done').reduce((s, i) => s + Number(i.story_points ?? 0), 0)
+
+  // ── Current (active) sprint per project ────────────────────────────────────
+  const currentSprints: SprintSummary[] = sprintRows
+    .filter(s => s.state === 'active')
+    .map(s => {
+      const rows = itemRows.filter(i => i.sprint_id === s.id)
+      const total = rows.length
+      const done = rows.filter(i => i.status === 'done').length
+      const end = s.end_date ? new Date(s.end_date) : null
+      return {
+        id: s.id, name: s.name, projectId: s.project_id,
+        projectName: projectRows.find(p => p.id === s.project_id)?.name ?? '—',
+        startDate: s.start_date, endDate: s.end_date,
+        done, total,
+        pct: total > 0 ? Math.round((done / total) * 100) : 0,
+        points: rows.reduce((acc, i) => acc + Number(i.story_points ?? 0), 0),
+        donePoints: rows.filter(i => i.status === 'done').reduce((acc, i) => acc + Number(i.story_points ?? 0), 0),
+        daysLeft: end ? daysBetween(today, end) : 0,
+        items: rows.map(r => byId.get(r.id)!).filter(Boolean),
+      }
+    })
+
+  // ── Blockers & open dependencies ───────────────────────────────────────────
+  const blockers = workItems
+    .filter(w => w.status === 'blocked')
+    .sort((a, b) => (b.days_blocked ?? 0) - (a.days_blocked ?? 0))
+
+  const openDependencies = (deps.data ?? [])
+    .map(d => ({ source: byId.get(d.source_id), target: byId.get(d.target_id), relation: d.relation_type }))
+    .filter(d => d.source && d.target && d.target.status !== 'done')
+    .map(d => ({ source: d.source!, target: d.target!, relation: d.relation }))
+
+  // ── Upcoming deliveries ────────────────────────────────────────────────────
+  const upcoming = workItems
+    .filter(w => w.status !== 'done' && w.due_date)
+    .sort((a, b) => (a.due_date ?? '').localeCompare(b.due_date ?? ''))
+    .slice(0, 12)
+
+  // ── Workload per person ────────────────────────────────────────────────────
+  const workload: WorkloadEntry[] = profileRows
+    .map(p => {
+      const rows = itemRows.filter(i => i.assignee_id === p.id && i.status !== 'done' && i.status !== 'cancelled')
+      return {
+        profileId: p.id,
+        name: p.name,
+        initials: p.avatar_initials ?? p.name.slice(0, 2).toUpperCase(),
+        color: p.avatar_color ?? T.accent,
+        active: rows.length,
+        points: rows.reduce((s, i) => s + Number(i.story_points ?? 0), 0),
+      }
+    })
+    .filter(w => w.active > 0)
+    .sort((a, b) => b.points - a.points)
+
+  // ── Velocity & predictability from completed sprints ───────────────────────
+  const completed = sprintRows
+    .filter(s => s.state === 'completed')
+    .sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))
+  const velocities = completed.map(s => {
+    if (s.velocity != null) return Number(s.velocity)
+    return itemRows.filter(i => i.sprint_id === s.id && i.status === 'done')
+      .reduce((acc, i) => acc + Number(i.story_points ?? 0), 0)
+  })
+  const velocityAvg = velocities.length ? Math.round((velocities.reduce((a, b) => a + b, 0) / velocities.length) * 10) / 10 : 0
+
+  const committed = completed.reduce((s, sp) => s + itemRows.filter(i => i.sprint_id === sp.id).length, 0)
+  const delivered = completed.reduce((s, sp) => s + itemRows.filter(i => i.sprint_id === sp.id && i.status === 'done').length, 0)
+  const predictability = committed > 0 ? Math.round((delivered / committed) * 100) : 0
+
+  const bugs = itemRows.filter(i => i.type === 'bug' && i.status !== 'done')
+
+  return {
+    projects: projectRows.map((p, i) => ({ id: p.id, name: p.name, color: dashProjectColor(p, i) })),
+    rag,
+    consolidatedPct: totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0,
+    planned: totalItems,
+    done: doneItems,
+    plannedPoints,
+    donePoints,
+    currentSprints,
+    blockers,
+    openDependencies,
+    upcoming,
+    workload,
+    items: workItems,
+    counts: {
+      projects: projectRows.length,
+      activeProjects: projectRows.filter(p => p.status === 'active').length,
+      atRisk: rag.filter(r => r.rag !== 'healthy').length,
+      blocked: blockers.length,
+      bugs: bugs.length,
+      criticalBugs: bugs.filter(b => ['critica', 'crítica', 'critical', 'alta'].includes((b.priority ?? '').toLowerCase())).length,
+      unassigned: itemRows.filter(i => !i.assignee_id && i.status !== 'done').length,
+      ready: itemRows.filter(i => i.status === 'ready' || i.status === 'todo').length,
+      testing: itemRows.filter(i => i.status === 'in_review' || i.status === 'testing').length,
+      people: profileRows.length,
+    },
+    velocityAvg,
+    predictability,
+  }
+}
+
+/** Lightweight project options for filters (tenant-scoped). */
+export async function listDashboardProjects(): Promise<DashboardProjectOption[]> {
+  const { data, error } = await supabase.from('projects')
+    .select('id, name, metadata')
+    .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null).order('name')
+  if (error) throw new Error(missingTableMessage('projects', error.message))
+  return (data ?? []).map((p, i) => ({ id: p.id, name: p.name, color: dashProjectColor(p, i) }))
+}

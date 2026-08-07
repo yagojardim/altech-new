@@ -9,23 +9,18 @@ import {
 } from '../data/dashboardAssignments'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST,
+  ReportsDataProvider, useReportsData,
 } from '../data/reportRegistry'
+import { ProjectMultiSelect } from '../components/ds/DashboardKit'
+import { listDashboardProjects, type DashboardProjectOption } from '../data/db/dashboards'
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const px = (n: number) => `${n}px`
 
-// ── types ─────────────────────────────────────────────────────────────────────
-type Sprint = 's13' | 's14' | 's15'
-
-const SPRINT_LABELS: Record<Sprint, string> = {
-  s13: 'S13 – Concluído',
-  s14: 'S14 – Ativo',
-  s15: 'S15 – Planejado',
-}
-
 // Card list sourced from the registry (single source of truth)
 type ReportCardDef = { id: string; title: string; subtitle: string; span2: boolean }
 const REPORT_CARDS: ReportCardDef[] = REPORT_CARDS_LIST
+
 
 // ── Local toast ───────────────────────────────────────────────────────────────
 function useToast() {
@@ -482,10 +477,42 @@ function CardContent({ id }: { id: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
+  const [projects, setProjects] = useState<DashboardProjectOption[]>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [projError, setProjError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    listDashboardProjects()
+      .then(list => { if (alive) { setProjects(list); setSelected(new Set(list.map(p => p.id))) } })
+      .catch((e: Error) => { if (alive) setProjError(e.message) })
+    return () => { alive = false }
+  }, [])
+
+  const all = projects.length > 0 && selected.size === projects.length
+  const projectIds = all || selected.size === 0 ? undefined : [...selected]
+
+  return (
+    <ReportsDataProvider projectIds={projectIds}>
+      <ReportsPageInner
+        projects={projects}
+        selected={selected}
+        onSelected={setSelected}
+        projError={projError}
+      />
+    </ReportsDataProvider>
+  )
+}
+
+function ReportsPageInner({ projects, selected, onSelected, projError }: {
+  projects: DashboardProjectOption[]
+  selected: Set<string>
+  onSelected: (s: Set<string>) => void
+  projError: string | null
+}) {
   const user      = getActiveUser()
   const canManage = can(user.permissions, 'manage:dashboard-cards')
 
-  const [sprint,     setSprint]    = useState<Sprint>('s14')
   const [batchOpen,  setBatchOpen] = useState(false)
   const [popCard,    setPopCard]   = useState<ReportCardDef | null>(null)
   const popAnchorRef = useRef<HTMLElement | null>(null)
@@ -493,6 +520,7 @@ export default function ReportsPage() {
   // tick forces re-render of all cards after an assignment is saved
   const [tick, setTick] = useState(0)
   const { msg: toastMsg, toast } = useToast()
+  const { data, loading, error, reload } = useReportsData()
 
   function openAssign(card: ReportCardDef, anchorEl: HTMLElement) {
     popAnchorRef.current = anchorEl
@@ -513,11 +541,12 @@ export default function ReportsPage() {
   }
 
   const kpis = [
-    { label: 'Total Issues',   value: '42',    color: T.text1 },
-    { label: 'Velocity atual', value: '22 pts', color: T.accent },
-    { label: 'Avg Lead Time',  value: '8.4 d', color: T.warn },
-    { label: 'Bug rate',       value: '19%',   color: T.crit },
+    { label: 'Total Issues',   value: data ? String(data.totals.issues) : '—',        color: T.text1 },
+    { label: 'Velocity atual', value: data ? `${data.totals.velocity} pts` : '—',      color: T.accent },
+    { label: 'Avg Lead Time',  value: data ? `${data.totals.leadAvg} d` : '—',         color: T.warn },
+    { label: 'Bug rate',       value: data ? `${data.totals.bugRate}%` : '—',          color: T.crit },
   ]
+
 
   return (
     <div style={{ background: T.bgPage, minHeight: '100vh', color: T.text1, fontFamily: 'Inter, sans-serif' }}>
@@ -552,17 +581,15 @@ export default function ReportsPage() {
 
         {/* Filter row */}
         <div style={{ display: 'flex', alignItems: 'center', gap: px(10), flexWrap: 'wrap', marginBottom: px(16) }}>
-          <select
-            value={sprint} onChange={e => setSprint(e.target.value as Sprint)}
-            style={{ background: T.bgSurface2, border: `1px solid ${T.border2}`, color: T.text1, fontSize: px(13), padding: `${px(6)} ${px(12)}`, borderRadius: px(8), cursor: 'pointer' }}
-          >
-            {(Object.keys(SPRINT_LABELS) as Sprint[]).map(k => (
-              <option key={k} value={k}>{SPRINT_LABELS[k]}</option>
-            ))}
-          </select>
-          <div style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), border: `1px solid ${T.accentBorder}`, background: T.accentDim, color: T.accent, fontSize: px(12), fontWeight: 500 }}>
-            Jul 1 – Jul 14, 2026
-          </div>
+          <ProjectMultiSelect projects={projects} selected={selected} onChange={onSelected} />
+          {data?.burndown.sprintName && (
+            <div style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), border: `1px solid ${T.accentBorder}`, background: T.accentDim, color: T.accent, fontSize: px(12), fontWeight: 500 }}>
+              {data.burndown.sprintName}
+            </div>
+          )}
+          {loading && !data && (
+            <span style={{ fontSize: px(12), color: T.text3 }}>Carregando agregados…</span>
+          )}
           {kpis.map((k, i) => (
             <div key={i} style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), background: T.bgSurface2, border: `1px solid ${T.border}`, fontSize: px(12), color: T.text2, display: 'flex', alignItems: 'center', gap: px(6) }}>
               <span>{k.label}:</span>
@@ -572,6 +599,16 @@ export default function ReportsPage() {
         </div>
       </div>
 
+      {/* ── Error banner ── */}
+      {(error || projError) && (
+        <div style={{ margin: `${px(16)} ${px(24)} 0`, padding: `${px(10)} ${px(14)}`, borderRadius: px(8), background: `${T.crit}14`, border: `1px solid ${T.crit}44`, color: T.crit, fontSize: px(12), display: 'flex', alignItems: 'center', gap: px(10) }}>
+          <span style={{ flex: 1 }}>{error ?? projError}</span>
+          <button onClick={reload} style={{ fontSize: px(11), color: T.crit, background: 'none', border: `1px solid ${T.crit}55`, borderRadius: 6, padding: '3px 10px', cursor: 'pointer' }}>
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {/* ── Report grid ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: px(16), padding: px(24) }}>
         {REPORT_CARDS.map(def => (
@@ -580,6 +617,7 @@ export default function ReportsPage() {
           </ReportCard>
         ))}
       </div>
+
 
       {/* ── Assign popover ── */}
       {popCard && (
