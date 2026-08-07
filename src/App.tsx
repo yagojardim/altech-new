@@ -155,7 +155,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         <InviteMemberModal onClose={()=>setInvite(false)} />
       )}
       <Shell currentView={view} onViewChange={v => { if (v === 'team') setTeamInitialTab('membros'); setView(v) }} onCreateIssue={()=>setCreate(true)}>
-        {view==='home'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><DashboardHomePage onNav={v => {
+        {view==='home'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><div className="p-4 pb-0"><SupabaseProbe /></div><DashboardHomePage onNav={v => {
           if (v === 'team:convites') { setTeamInitialTab('convites'); setView('team') }
           else if (v === 'team:membros') { setTeamInitialTab('membros'); setView('team') }
           else if (ALL_VIEWS.includes(v as View)) setView(v as View)
