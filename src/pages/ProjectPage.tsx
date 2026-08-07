@@ -11,6 +11,10 @@ import {
   PRIORITY_FROM_DB,
   type BoardItemRow, type BoardData,
 } from '../data/db/board'
+import {
+  startSprint as dbStartSprint,
+  completeSprint as dbCompleteSprint,
+} from '../data/db/sprints'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -319,11 +323,13 @@ function getCardTags(issue: Issue): CardTag[] {
 // ─── Iniciar Sprint modal ─────────────────────────────────────────────────────
 interface StartSprintModalProps {
   sprint: SprintDef
-  onConfirm: (id: string, goal: string) => void
+  onConfirm: (id: string, goal: string, name: string) => void
   onClose: () => void
+  /** Real number of items in the sprint (from Supabase when available). */
+  issueCount?: number
 }
 
-function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps) {
+function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountProp }: StartSprintModalProps) {
   const [name, setName]         = useState(sprint.name)
   const [durType, setDurType]   = useState<'weeks' | 'days'>('weeks')
   const [durVal, setDurVal]     = useState(2)
@@ -331,7 +337,7 @@ function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps)
   const [endDate, setEnd]       = useState(sprint.end)
   const [goal, setGoal]         = useState(sprint.goal ?? '')
 
-  const issueCount = INIT_ISSUES.filter(i => i.sprint === sprint.id).length
+  const issueCount = issueCountProp ?? INIT_ISSUES.filter(i => i.sprint === sprint.id).length
 
   return (
     <div
@@ -468,7 +474,7 @@ function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps)
             Cancelar
           </button>
           <button
-            onClick={() => onConfirm(sprint.id, goal)}
+            onClick={() => onConfirm(sprint.id, goal, name)}
             className="h-8 px-4 text-[13px] font-semibold rounded-lg text-white transition-all"
             style={{ background: DS.accent }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.15)' }}
@@ -1686,10 +1692,15 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 }
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
+  canManageSprint: boolean
+  loading: boolean
+  error: string | null
+  onStartSprint: (sprint: SprintDef) => void
+  onCompleteSprint: (sprint: SprintDef) => void
 }) {
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
@@ -1703,9 +1714,41 @@ function SprintsTab({ issues, sprints, onUpdateIssue }: {
     })
   }
 
+  if (loading) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
+          {[0, 1, 2].map(i => (
+            <div key={i} className="rounded-xl h-28 skeleton"
+              style={{ background: S.surface, border: `1px solid ${S.border}`, opacity: 0.6 }} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="rounded-xl px-4 py-3 text-[12px]"
+            style={{ background: `${DS.crit}12`, border: `1px solid ${DS.crit}44`, color: DS.crit }}>
+            Falha ao carregar as sprints: {error}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
+        {sprints.length === 0 && (
+          <div className="rounded-xl px-4 py-8 text-center text-[12px]"
+            style={{ background: S.surface, border: `1px solid ${S.border}`, color: S.t3 }}>
+            Nenhuma sprint neste projeto
+          </div>
+        )}
         {sprints.map(sprint => {
           const si      = issues.filter(i => i.sprint === sprint.id)
           const total   = si.reduce((s, i) => s + i.points, 0)
@@ -1754,7 +1797,44 @@ function SprintsTab({ issues, sprints, onUpdateIssue }: {
                         <p className="text-[9px]" style={{ color: S.t3 }}>bloqueados</p>
                       </div>
                     )}
+                    {sprint.state !== 'completed' && (
+                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        {sprint.state === 'planned' ? (
+                          <button
+                            onClick={canManageSprint ? () => onStartSprint(sprint) : undefined}
+                            disabled={!canManageSprint}
+                            title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (sprint:manage)' : `Iniciar ${sprint.name}`}
+                            className="h-7 px-3 text-[11px] font-semibold rounded-lg transition-all"
+                            style={{
+                              background: canManageSprint ? DS.accent : S.surface2,
+                              color: canManageSprint ? '#fff' : S.t3,
+                              border: canManageSprint ? 'none' : `1px solid ${S.border}`,
+                              cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                              opacity: canManageSprint ? 1 : 0.6,
+                            }}
+                          >
+                            Iniciar Sprint
+                          </button>
+                        ) : (
+                          <button
+                            onClick={canManageSprint ? () => onCompleteSprint(sprint) : undefined}
+                            disabled={!canManageSprint}
+                            title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (sprint:manage)' : `Encerrar ${sprint.name}`}
+                            className="h-7 px-3 text-[11px] font-medium rounded-lg transition-colors"
+                            style={{
+                              border: `1px solid ${S.border}`,
+                              color: canManageSprint ? S.t2 : S.t3,
+                              cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                              opacity: canManageSprint ? 1 : 0.5,
+                            }}
+                          >
+                            Encerrar
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                 </div>
 
                 {sprint.state !== 'planned' && (
@@ -1873,6 +1953,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
+  const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
   // ── Board (Kanban) — real data from Supabase ────────────────────────────
@@ -1961,49 +2042,39 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const activeSprint      = sprints.find(s => s.state === 'active')
   const activeSid         = activeSprint?.id ?? 's14'
 
-  function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
+  // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
+  //    sprint_scope_events/audit_logs) and re-read so Board and Timeline follow.
+  async function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
     if (!completingSprint) return
-    const sprintId      = completingSprint.id
-    const nextPlanned   = sprints.find(s => s.state === 'planned')
-    const destination   = moveRemaining === 'next-sprint' && nextPlanned ? 'next-sprint' : 'backlog'
-    const destSprintId  = destination === 'next-sprint' ? nextPlanned!.id : undefined
-    const destLabel     = destination === 'next-sprint' ? nextPlanned!.name : 'backlog'
-
-    const sprintIssues  = issues.filter(i => i.sprint === sprintId)
-    const doneItems     = sprintIssues.filter(i => i.status === 'done')
-    const remaining     = sprintIssues.filter(i => i.status !== 'done')
-    const velocity      = doneItems.reduce((s, i) => s + i.points, 0)
-
-    // Move non-done issues
-    setIssues(prev => prev.map(i => {
-      if (i.sprint !== sprintId || i.status === 'done') return i
-      return destination === 'next-sprint'
-        ? { ...i, sprint: destSprintId }
-        : { ...i, sprint: undefined, status: 'backlog' as const }
-    }))
-
-    // Mark sprint completed
-    setSprints(prev => prev.map(s => s.id === sprintId
-      ? { ...s, state: 'completed' as const, velocity, completedAt: new Date().toLocaleDateString('pt-BR') }
-      : s
-    ))
-
-    // Audit log
-    _SPRINT_AUDIT.push({
-      ts:     new Date().toISOString(),
-      who:    activeUser.name,
-      action: `Encerrou ${completingSprint.name}: ${doneItems.length} concluídos, ${remaining.length} movidos → ${destLabel}`,
-    })
-
-    // Toast feedback
-    const fallbackNote = moveRemaining === 'next-sprint' && !nextPlanned
-      ? ' (sem próxima sprint planejada, movido para backlog)'
-      : ''
-    const n = remaining.length
-    setToast(`Sprint encerrada — ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
-    setTimeout(() => setToast(null), 4500)
+    const sprint = completingSprint
     setCompletingSprint(null)
+    try {
+      const result = await dbCompleteSprint(sprint.id, moveRemaining, activeUser.name)
+      await loadBoard()
+      const destLabel = result.destinationSprint ? result.destinationSprint.name : 'backlog'
+      const fallbackNote = moveRemaining === 'next-sprint' && !result.destinationSprint
+        ? ' (sem próxima sprint planejada, movido para backlog)'
+        : ''
+      const n = result.movedCount
+      setToast(`${sprint.name} encerrada — velocity ${result.velocity}pts · ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
+    } catch (err) {
+      setToast(`Falha ao encerrar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 4500)
   }
+
+  async function handleStartSprintDb(sprintId: string, goal: string, name: string) {
+    setStartingSprint(null)
+    try {
+      await dbStartSprint(sprintId, { goal, name }, activeUser.name)
+      await loadBoard()
+      setToast(`${name} iniciada`)
+    } catch (err) {
+      setToast(`Falha ao iniciar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 4000)
+  }
+
 
   const tabBadges: Partial<Record<Tab, number>> = {
     Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
@@ -2115,7 +2186,16 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
       )}
       {tab === 'Sprints' && (
-        <SprintsTab issues={issues} sprints={sprints} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
+        <SprintsTab
+          issues={dbIssues}
+          sprints={dbSprints}
+          canManageSprint={canManageSprint}
+          loading={boardLoading}
+          error={boardError}
+          onStartSprint={s=>setStartingSprint(s)}
+          onCompleteSprint={s=>setCompletingSprint(s)}
+          onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+        />
       )}
 
     </div>
@@ -2151,8 +2231,16 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         }}
       />
     )}
+    {startingSprint && (
+      <StartSprintModal
+        sprint={startingSprint}
+        issueCount={dbIssues.filter(i => i.sprint === startingSprint.id).length}
+        onConfirm={(id, goal, name) => { void handleStartSprintDb(id, goal, name) }}
+        onClose={() => setStartingSprint(null)}
+      />
+    )}
     {completingSprint && (() => {
-      const sprintIssues  = issues.filter(i => i.sprint === completingSprint.id)
+      const sprintIssues  = dbIssues.filter(i => i.sprint === completingSprint.id)
       const doneCount     = sprintIssues.filter(i => i.status === 'done').length
       const totalCount    = sprintIssues.length
       const remainCount   = sprintIssues.filter(i => i.status !== 'done').length
@@ -2160,9 +2248,9 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
         <CompleteSprintModal
           sprint={completingSprint}
           stats={{ done: doneCount, total: totalCount, remaining: remainCount }}
-          nextSprintName={sprints.find(s => s.state === 'planned')?.name}
+          nextSprintName={dbSprints.find(s => s.state === 'planned')?.name}
           onClose={() => setCompletingSprint(null)}
-          onConfirm={handleCompleteSprint}
+          onConfirm={m => { void handleCompleteSprint(m) }}
         />
       )
     })()}
