@@ -5,7 +5,9 @@ import { MOCK_USERS, MOCK_TENANT } from '../data/session'
 import { useSession } from '../data/SessionContext'
 import { getAllSignals, markReadByPo, type ClientSignal } from '../data/clientSignals'
 
-type View = 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
+type View =
+  | 'boards-list' | 'modules' | 'timesheet' | 'hours-approval' | 'client-messages'
+  | 'home' | 'foundations' | 'dashboard' | 'project' | 'issue' | 'client' | 'task-drawer' | 'projects-list' | 'gantt' | 'calendar' | 'list' | 'timeline' | 'epics' | 'releases' | 'filters' | 'navigator' | 'reports' | 'automations' | 'config' | 'team' | 'my-tasks' | 'login' | 'role-dashboard' | 'client-access' | 'client-login'
 
 interface HeaderProps {
   onCreateIssue?: () => void
@@ -13,7 +15,7 @@ interface HeaderProps {
   onViewChange:   (v: string) => void
 }
 
-const viewLabels: Record<View, string> = {
+const viewLabels: Partial<Record<View, string>> = {
   'home':          'Início',
   'foundations':   'Design System',
   'projects-list': 'Projetos & Tarefas',
@@ -113,7 +115,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
 
   function handleNotifClick(n: typeof NOTIFICATIONS[number]) {
     if ('signalId' in n && n.signalId) {
-      markReadByPo(n.signalId)
+      markReadByPo(String(n.signalId))
       setTick(t => t + 1)
     } else {
       setReadStatic(prev => new Set([...prev, n.id]))

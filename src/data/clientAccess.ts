@@ -47,10 +47,12 @@ export function updateClientPassword(id: string, newPassword: string): void {
   )
 }
 
-export function createClientAccess(record: Omit<ClientAccessRecord, 'id' | 'created_at'>): ClientAccessRecord {
+export function createClientAccess(
+  record: Omit<ClientAccessRecord, 'id' | 'created_at' | 'password_must_change'> & { password_must_change?: boolean },
+): ClientAccessRecord {
   const newRec: ClientAccessRecord = {
-    password_must_change: true,  // always true for new records (temp password)
     ...record,
+    password_must_change: record.password_must_change ?? true, // temp password by default
     id:         `ca_${String(_counter++).padStart(3, '0')}`,
     created_at: new Date().toISOString(),
   }

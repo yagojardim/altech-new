@@ -2,6 +2,7 @@
  * Altech Report Registry — single source of truth for all chart components.
  * Used by ReportsPage, AssignedReportCards, and any chart modal.
  */
+import type { ReactElement } from 'react'
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
 
@@ -451,7 +452,7 @@ export interface ReportEntry {
   title:     string
   subtitle:  string
   span2:     boolean
-  Component: (props?: { variant?: 'thumbnail' | 'full' }) => JSX.Element
+  Component: (props: any) => ReactElement
 }
 
 export const REPORT_REGISTRY: Record<string, ReportEntry> = {

@@ -180,6 +180,7 @@ function EditUserModal({
   onClose:        ()=>void
   onSave:         (patch: EditDraft)=>void
 }) {
+  void activeUserName
   const [step, setStep] = useState<'basics'|'permissions'|'dashboards'>('basics')
 
   const currentDashIds = user.assigned_dashboards.map(d => d.dashboard_id as DashboardType)
@@ -325,6 +326,7 @@ function EditUserModal({
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                 {(Object.entries(PERMISSION_MATRIX) as [Capability, typeof PERMISSION_MATRIX[Capability]][]).map(([cap, rule])=>{
                   const vis = capabilityVisibility(draft.role, cap)
+                  void vis
                   const isOptIn = rule.optIn.includes(draft.role)
                   const isGranted = draft.optIns.includes(cap)
                   const isDefault = rule.default.includes(draft.role)

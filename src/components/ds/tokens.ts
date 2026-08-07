@@ -26,6 +26,7 @@ export const T = {
   warn:        '#F59E0B',
   warnDim:     'rgba(245,158,11,0.12)',
   crit:        '#EF4444',
+  danger:      '#EF4444',
   critDim:     'rgba(239,68,68,0.12)',
   neutral:     '#5C5C7A',
   neutralDim:  'rgba(92,92,122,0.12)',

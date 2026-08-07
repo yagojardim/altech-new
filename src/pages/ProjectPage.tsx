@@ -657,8 +657,8 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     assignee:                  updated.assigneeInitials,
     reporter:                  updated.reporterInitials,
     sprint:                    updated.sprintId,
-    points:                    updated.points,
-    dueDate:                   updated.dueDate,
+    points:                    updated.points ?? 0,
+    dueDate:                   updated.dueDate ?? '',
     fix_versions:              updated.fixVersions,
     blocked:                   updated.blocked,
     blocked_reason:            updated.blockedReason,
@@ -803,6 +803,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
   function openComposer(colId: string) {
     setComposerCol(colId); setComposerText(''); setMenuColId(null)
   }
+  void openComposer
   function submitComposer(col: ColState) {
     const title = composerText.trim()
     if (!title) { setComposerCol(null); return }

@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react'
+import { useState, useEffect, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
 import { T } from '../components/ds/tokens'
 import {
@@ -1449,7 +1449,7 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
               extraProps.sprintTotal     = sprintPtTotal
               extraProps.sprintRemaining = sprintPtTotal - sprintPtDone
             }
-            const Comp = entry.Component as (p: { variant?: 'thumbnail' | 'full' } & Record<string, unknown>) => JSX.Element
+            const Comp = entry.Component as (p: { variant?: 'thumbnail' | 'full' } & Record<string, unknown>) => ReactElement
             return (
               <div
                 key={slot.cardId}
