@@ -4,6 +4,7 @@ import { T } from './ds/tokens'
 import { MOCK_USERS, MOCK_TENANT } from '../data/session'
 import { useSession } from '../data/SessionContext'
 import { getAllSignals, markReadByPo, type ClientSignal } from '../data/clientSignals'
+import { useClientPortal } from '../data/clientPortalStore'
 
 type View =
   | 'boards-list' | 'modules' | 'timesheet' | 'hours-approval' | 'client-messages'
@@ -90,6 +91,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
   void tick
 
   const { activeUser, setActiveUser } = useSession()
+  useClientPortal()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc

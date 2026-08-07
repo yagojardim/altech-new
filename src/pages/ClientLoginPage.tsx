@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { useClientPortal } from '../data/clientPortalStore'
 import { getClientAccessByEmail } from '../data/clientAccess'
 import { MOCK_TENANT } from '../data/session'
 
@@ -14,6 +15,7 @@ const PA = '#34d399'
 const PADim = 'rgba(52,211,153,0.12)'
 
 export default function ClientLoginPage({ onSuccess }: Props) {
+  useClientPortal()
   const [loginState, setLoginState] = useState<PortalLoginState>('idle')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

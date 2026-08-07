@@ -3,19 +3,28 @@ import { T } from '../components/ds/tokens'
 import { generateTempPassword } from '../data/security'
 import { createClientAccess } from '../data/clientAccess'
 import { MOCK_TENANT } from '../data/session'
+import { useSession } from '../data/SessionContext'
+import { useClientPortal } from '../data/clientPortalStore'
 import { copyToClipboard } from '../utils/copyToClipboard'
 
 interface Props {
   onBack: () => void
 }
 
-const PROJECTS = [
-  { id: 'ep01', name: 'Website Relaunch', code: 'EP-01', quarter: 'Q2 2025', status: 'Sprint 14 ativo', issues: 8, color: '#7d92ff' },
-  { id: 'ep02', name: 'Infra & Eng', code: 'EP-02', quarter: 'Q2 2025', status: 'Sprint 14 ativo', issues: 5, color: '#35c9ae' },
-  { id: 'ep03', name: 'Pesquisa & Conteúdo', code: 'EP-03', quarter: 'Q3 2025', status: 'Planejado', issues: 4, color: '#a78bfa' },
-]
+const PROJ_PALETTE = ['#7d92ff', '#35c9ae', '#a78bfa', '#e6b23c', '#f0805c']
 
 export default function ClientAccessPage({ onBack }: Props) {
+  const { activeUser } = useSession()
+  const portal = useClientPortal()
+  const PROJECTS = portal.projects.map((p, i) => ({
+    id: p.id,
+    name: p.name,
+    code: p.name.slice(0, 2).toUpperCase(),
+    quarter: p.period_end ? p.period_end.slice(0, 7) : '—',
+    status: p.status,
+    issues: 0,
+    color: PROJ_PALETTE[i % PROJ_PALETTE.length],
+  }))
   const [step, setStep] = useState(1)
   const [clientName, setClientName] = useState('')
   const [clientEmail, setClientEmail] = useState('')
@@ -52,6 +61,8 @@ export default function ClientAccessPage({ onBack }: Props) {
       permission,
       client_can_approve: clientCanApprove,
       client_can_preview: clientCanPreview,
+      project_names:      PROJECTS.filter(p => selectedProjects.includes(p.id)).map(p => p.name),
+      actor_name:         activeUser?.name,
     })
     setDone(true)
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
 import { T } from '../components/ds/tokens'
+import { useClientPortal } from '../data/clientPortalStore'
 import {
   KpiCard, RagCard, ProgressCard, WorkQueue, SprintDonutCard,
   WorkItemDetailDrawer, FilterBar, ProjectMultiSelect,
@@ -509,6 +510,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 
 // ─── Client Feed Card (PO and all management roles) ──────────────────────────
 function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string }) {
+  useClientPortal()
   const { activeUser } = useSession()
   const [tick,       setTick]       = useState(0)
   const [openReply,  setOpenReply]  = useState<string | null>(null)

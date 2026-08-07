@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useClientPortal } from '../data/clientPortalStore'
 import {
   addClientSignal, getSignalsForItem, markReadByPo,
   getClientUnreadReplies, markReplyReadByClient, markAllClientRepliesRead,
@@ -1836,6 +1837,7 @@ export default function ClientPortalPage({
   onLogout?: () => void
 }) {
   const { toasts, add: showToast } = useLocalToast()
+  useClientPortal()
   const [selected, setSelected] = useState<Set<string>>(new Set(['p1']))
   const [notifTick, setNotifTick] = useState(0)
   const [showPwdModal, setShowPwdModal] = useState(mustChangePassword)
