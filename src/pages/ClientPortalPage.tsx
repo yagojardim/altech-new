@@ -1425,8 +1425,8 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
     if (pid) unreadByProject.set(pid, (unreadByProject.get(pid) ?? 0) + 1)
   }
 
-  const project = PROJECTS.find(p => p.id === selId)!
-  const rawSignals = getSignalsForProject(project.name, MOCK_TENANT.tenant_id)
+  const project = PROJECTS.find(p => p.id === selId) ?? PROJECTS[0]
+  const rawSignals = project ? getSignalsForProject(project.name, MOCK_TENANT.tenant_id) : []
   const thread = flattenClientThread(rawSignals, CLIENT_AUTHOR)
 
   useEffect(() => {
@@ -1435,7 +1435,7 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
 
   function handleSend() {
     const body = draft.trim()
-    if (!body) return
+    if (!body || !project) return
     addClientSignal({
       project: project.name,
       tenant_id: MOCK_TENANT.tenant_id,
