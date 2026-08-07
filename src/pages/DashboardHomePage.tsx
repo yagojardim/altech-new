@@ -335,25 +335,30 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const blocked  = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
+  const agg         = liveAggregates()
+  const sprintName  = liveCurrentSprintName()
   const pmDone      = sprint14.filter(w => w.status === 'done').length
   const pmTotal     = sprint14.length || 1
   const pmProgress  = Math.round((pmDone / pmTotal) * 100)
-  const pmPtTotal   = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 38
+  const pmPtTotal   = sprint14.reduce((s, w) => s + (w.points ?? 0), 0) || 1
   const pmPtDone    = sprint14.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
-  const team = [
-    { name: 'Ana Lima',     i: 'AL', c: '#fb923c', ativas: 4, cap: 5 },
-    { name: 'Lucas F.',     i: 'LF', c: '#34d399', ativas: 6, cap: 5 },
-    { name: 'Rafael M.',    i: 'RM', c: '#60a5fa', ativas: 2, cap: 5 },
-    { name: 'Bruno S.',     i: 'BS', c: '#fbbf24', ativas: 3, cap: 5 },
-  ]
+  const scopeRag    = (agg?.rag ?? []).filter(r => selProj.size === 0 || selProj.has(r.id))
+  const mainRag     = scopeRag[0]
+  const sprintSum   = (agg?.currentSprints ?? []).find(s => selProj.size === 0 || selProj.has(s.projectId))
+  const daysLeft    = mainRag?.daysLabel ?? '—'
+
+  const team = (agg?.workload ?? []).slice(0, 6).map(w => ({
+    name: w.name, i: w.initials, c: w.color, ativas: w.active, cap: 5,
+  }))
 
   const nativeCards: MuralNativeCard[] = [
     { id: 'pm:progress', value: `${pmProgress}%`, label: 'Progresso do Projeto', sub: `${pmDone}/${pmTotal} itens concluídos`, disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <BurndownChart variant="thumbnail" sprintTotal={pmPtTotal} sprintRemaining={pmPtTotal - pmPtDone} />, onClick: () => onNav('project') },
-    { id: 'pm:deadline', value: '18d', label: 'Prazo Restante', sub: 'Entrega: 28 ago', disclaimer: 'dias até a data de entrega planejada', miniViz: <MiniSparkline data={[{label:'S10',value:60},{value:45},{value:32},{label:'S13',value:18}]} color="#60a5fa" />, onClick: () => onNav('gantt') },
-    { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:4},{value:3},{value:5},{value:2},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
-    { id: 'pm:scope', value: '+12%', label: 'Risco de Escopo', sub: 'vs planejamento', disclaimer: 'variação de escopo vs. o planejado', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:2},{value:5},{value:7},{value:9},{value:11},{label:'S13',value:12}]} color="#f5a524" />, onClick: () => openChart('criados') },
+    { id: 'pm:deadline', value: daysLeft, label: 'Prazo Restante', sub: mainRag?.periodEnd ? `Entrega: ${mainRag.periodEnd}` : 'sem data definida', disclaimer: 'dias até a data de entrega planejada', onClick: () => onNav('gantt') },
+    { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: blocked.length > 0, onClick: () => onNav('list') },
+    { id: 'pm:scope', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'planejado × entregue', disclaimer: 'entrega efetiva vs. compromisso', color: T.warn, alert: (agg?.predictability ?? 100) < 80, onClick: () => openChart('criados') },
   ]
+
 
   return (
     <>
