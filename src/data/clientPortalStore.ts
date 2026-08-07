@@ -8,15 +8,41 @@ import type { ClientSignalRow, PortalProject } from './db/clientPortal'
 import type { ClientSignal } from './clientSignals'
 import type { ClientAccessRecord } from './clientAccess'
 
+/** Client-safe, denormalised view of everything the portal is allowed to show. */
+export interface ScopeProject {
+  id: string; name: string; progress: number
+  sprint: string; sprintPct: number; status: 'on-track' | 'at-risk'
+}
+export interface ScopeSprint { name: string; pct: number; status: string; ends: string }
+export interface ScopeDelivery {
+  id: string; title: string; status: 'done' | 'review' | 'progress'
+  project: string; date: string
+}
+export interface ScopeMilestone {
+  id: string; date: string; title: string; desc: string; status: 'upcoming' | 'done'
+}
+export interface PortalScope {
+  projects: ScopeProject[]
+  sprints: ScopeSprint[]
+  deliveries: ScopeDelivery[]
+  roadmap: ScopeMilestone[]
+}
+
 interface PortalState {
   signals: ClientSignal[]
   users: ClientAccessRecord[]
   projects: PortalProject[]
+  scope: PortalScope
   loading: boolean
   error: string | null
 }
 
-let state: PortalState = { signals: [], users: [], projects: [], loading: false, error: null }
+const EMPTY_SCOPE: PortalScope = { projects: [], sprints: [], deliveries: [], roadmap: [] }
+
+let state: PortalState = {
+  signals: [], users: [], projects: [], scope: EMPTY_SCOPE, loading: false, error: null,
+}
+
 let version = 0
 const listeners = new Set<() => void>()
 
