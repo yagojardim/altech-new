@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, type CSSProperties } from 'react'
 import { T } from '../components/ds/tokens'
-import { ISSUES, type Issue } from '../data/issues'
+import { listDeadlines, type DeadlineItem } from '../data/db/calendar'
 import {
   getAllEvents, addEvent, updateEvent, removeEvent,
   addGoogleEvents, removeGoogleEvents, genMeetLink,
@@ -108,7 +108,7 @@ function EventChip({ ev, onClick }: { ev: CalendarEvent; onClick: () => void }) 
 const PRIORITY_DOT: Record<string, string> = {
   critical: '#EF4444', high: '#F59E0B', medium: '#3B82F6', low: '#5C5C7A',
 }
-function IssueDueChip({ issue }: { issue: Issue }) {
+function IssueDueChip({ issue }: { issue: DeadlineItem }) {
   const dotColor = PRIORITY_DOT[issue.priority] ?? T.text3
   const isOverdue = new Date(issue.dueDateIso) < new Date() && issue.status !== 'done'
   return (
@@ -127,9 +127,12 @@ function IssueDueChip({ issue }: { issue: Issue }) {
   )
 }
 
-/** Issues due on a given calendar day */
-function issuesDueOnDay(day: Date): Issue[] {
-  return ISSUES.filter(i => sameDay(new Date(i.dueDateIso), day))
+/** Real work item deadlines loaded from Supabase (module scope so nested views can read them). */
+let DEADLINES: DeadlineItem[] = []
+
+/** Work items due on a given calendar day */
+function issuesDueOnDay(day: Date): DeadlineItem[] {
+  return DEADLINES.filter(i => sameDay(new Date(`${i.dueDateIso}T00:00:00`), day))
 }
 
 // ─── Week event block ─────────────────────────────────────────────────────────
@@ -930,6 +933,17 @@ export default function CalendarPage() {
   function refresh() { setTick(t => t + 1) }
   void tick
 
+  // Real deadlines (work_items.due_date) from Supabase
+  const [deadlineError, setDeadlineError] = useState<string | null>(null)
+  useEffect(() => {
+    let alive = true
+    listDeadlines()
+      .then(rows => { if (!alive) return; DEADLINES = rows; setTick(t => t + 1) })
+      .catch(err => { if (alive) setDeadlineError(err instanceof Error ? err.message : String(err)) })
+    return () => { alive = false }
+  }, [])
+
+
   function navToday() { setAnchor(new Date(today)); setView('day') }
   function navPrev()  {
     const d = new Date(anchor)
@@ -998,6 +1012,11 @@ export default function CalendarPage() {
 
   return (
     <div style={{ background: T.bgPage, height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', overflow: 'hidden' }}>
+      {deadlineError && (
+        <div style={{ padding: '6px 16px', fontSize: 12, color: T.crit, background: T.critDim, borderBottom: `1px solid ${T.border}` }}>
+          Não foi possível carregar os prazos: {deadlineError}
+        </div>
+      )}
 
       {/* ── Toolbar ─────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0, flexWrap: 'wrap' }}>

@@ -1,105 +1,43 @@
-import { useState, useRef, useEffect } from 'react'
-import { CreateIssueModal } from '../components/CreateIssueModal'
-import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { WorkItemDetail } from '../components/WorkItemDetail'
 import { T } from '../components/ds/tokens'
 import {
-  ISSUES, EPICS, SPRINTS, STATUS_CFG, TYPE_ICON, AV_COLOR,
-  type IssueStatus, type Issue,
-} from '../data/issues'
+  listEpics, createEpicIssue, linkItemToEpic, epicColor as epicColorOf,
+  type EpicsData, type EpicItemRow, type EpicRow,
+} from '../data/db/epics'
+import { DB_STATUS_CFG } from '../data/db/timeline'
+import { getActiveUser } from '../data/session'
 
-const PRESET_COLORS = [T.accent, T.warn, T.purple, T.success, T.crit]
+const STATUSES = ['backlog', 'todo', 'in_progress', 'in_review', 'done'] as const
 
-const STATUSES: IssueStatus[] = ['backlog', 'todo', 'in-progress', 'in-review', 'done']
-
-// ─── Assignee name map (initials → display name) ──────────────────────────────
-const AV_NAME: Record<string, string> = {
-  AL: 'Ana Lima', NM: 'Natalia Moreira', JN: 'João Nunes',
-  CS: 'Camila Santos', RM: 'Rafael Mendes', LF: 'Lucas Ferreira',
+const TYPE_GLYPH: Record<string, { icon: string; color: string }> = {
+  story: { icon: '◇', color: T.accent }, bug: { icon: '⬟', color: T.crit },
+  task: { icon: '☑', color: T.text2 }, subtask: { icon: '◻', color: T.text3 },
+  epic: { icon: '⚡', color: T.warn }, feature: { icon: '▣', color: T.purple },
 }
+function typeGlyph(t: string) { return TYPE_GLYPH[t] ?? { icon: '•', color: T.text3 } }
+function statusCfg(s: string) { return DB_STATUS_CFG[s] ?? { label: s, color: T.text3 } }
 
-// ─── Map Issue → WorkItemData for WorkItemDetail ──────────────────────────────
-function issueToWID(issue: Issue, allIssues: Issue[]): WorkItemData {
-  const epic = EPICS.find(e => e.id === issue.epic)
-  const sprint = SPRINTS.find(s => s.id === issue.sprint)
-  const children = allIssues
-    .filter(i => i.epic === issue.epic && i.key !== issue.key && i.type === 'subtask')
-    .map(i => ({ key: i.key, type: i.type, title: i.title, status: i.status, points: i.points, assigneeInitials: i.assignee }))
-
-  return {
-    key:              issue.key,
-    type:             issue.type,
-    title:            issue.title,
-    status:           issue.status,
-    priority:         issue.priority,
-    labels:           issue.labels,
-    assigneeInitials: issue.assignee,
-    assigneeName:     AV_NAME[issue.assignee],
-    epicKey:          epic?.key,
-    epicLabel:        epic?.label,
-    epicColor:        epic?.color,
-    sprintId:         issue.sprint,
-    sprintName:       sprint?.name,
-    blocked:          issue.blocked,
-    delayed:          issue.delayed,
-    dueDate:          issue.dueDateIso,
-    points:           issue.points,
-    children:         issue.type === 'story' || issue.type === 'epic' ? children : undefined,
-    availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
-    availableMembers: Object.keys(AV_NAME).map(k => ({ id: k, name: AV_NAME[k], initials: k })),
-    availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
-    availableLabels:  ['Design', 'Eng', 'UX', 'Content', 'SEO', 'Mobile', 'Web', 'Research', 'Brand', 'Hero'],
-    createdAt:        '2025-04-01T09:00:00Z',
-    updatedAt:        new Date().toISOString(),
-  }
-}
-
-// ─── Map WorkItemData updates back to Issue fields ────────────────────────────
-function widToIssue(issue: Issue, updated: WorkItemData): Issue {
-  return {
-    ...issue,
-    title:    updated.title,
-    status:   updated.status as IssueStatus,
-    priority: updated.priority as Issue['priority'],
-    labels:   updated.labels,
-    assignee: updated.assigneeInitials,
-    points:   updated.points ?? issue.points,
-    blocked:  updated.blocked,
-    delayed:  updated.delayed,
-    epic:     updated.epicKey ?? issue.epic,
-    sprint:   updated.sprintId ?? issue.sprint,
-  }
-}
-
-// ─── Issue search dropdown (for linking unlinked issues into an epic) ─────────
+// ─── Issue search dropdown (link an existing item into the epic) ──────────────
 function IssueSearchDropdown({
-  epicId, epicColor, issues, onLink,
-}: { epicId: string; epicColor: string; issues: Issue[]; onLink: (key: string) => void }) {
-  const [query,  setQuery]  = useState('')
-  const [open,   setOpen]   = useState(false)
+  epicId, color, items, onLink,
+}: { epicId: string; color: string; items: EpicItemRow[]; onLink: (id: string) => void }) {
+  const [query, setQuery] = useState('')
+  const [open, setOpen] = useState(false)
   const [cursor, setCursor] = useState(-1)
-  const ref      = useRef<HTMLDivElement>(null)
+  const ref = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const linkedKeys = new Set(issues.filter(i => i.epic === epicId).map(i => i.key))
-
-  const results = query.trim().length < 1 ? [] : issues.filter(i => {
-    if (linkedKeys.has(i.key)) return false
+  const results = query.trim().length < 1 ? [] : items.filter(i => {
+    if (i.epic_id === epicId) return false
     const q = query.toLowerCase()
-    const epicLabel = EPICS.find(e => e.id === i.epic)?.label ?? ''
-    return (
-      i.key.toLowerCase().includes(q) ||
-      i.title.toLowerCase().includes(q) ||
-      epicLabel.toLowerCase().includes(q) ||
-      i.labels.some(l => l.toLowerCase().includes(q))
-    )
+    return i.key.toLowerCase().includes(q) || i.title.toLowerCase().includes(q)
   }).slice(0, 8)
 
   useEffect(() => {
     if (!open) return
     function h(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false); setQuery(''); setCursor(-1)
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) { setOpen(false); setQuery(''); setCursor(-1) }
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -109,8 +47,7 @@ function IssueSearchDropdown({
     if (e.key === 'ArrowDown') { e.preventDefault(); setCursor(c => Math.min(c + 1, results.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor(c => Math.max(c - 1, 0)) }
     else if (e.key === 'Enter' && cursor >= 0 && results[cursor]) {
-      e.preventDefault()
-      onLink(results[cursor].key); setQuery(''); setOpen(false); setCursor(-1)
+      e.preventDefault(); onLink(results[cursor].id); setQuery(''); setOpen(false); setCursor(-1)
     } else if (e.key === 'Escape') { setOpen(false); setQuery(''); setCursor(-1) }
   }
 
@@ -120,10 +57,9 @@ function IssueSearchDropdown({
     <div ref={ref} style={{ position: 'relative', marginTop: 12 }}>
       <div style={{
         display: 'flex', alignItems: 'center', gap: 8,
-        background: T.bgSurface2, border: `1px solid ${epicColor}50`,
+        background: T.bgSurface2, border: `1px solid ${color}50`,
         borderRadius: 8, padding: '7px 12px',
-        boxShadow: open ? `0 0 0 2px ${epicColor}20` : 'none',
-        transition: 'box-shadow 0.15s',
+        boxShadow: open ? `0 0 0 2px ${color}20` : 'none', transition: 'box-shadow 0.15s',
       }}>
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0 }}>
           <circle cx="5.5" cy="5.5" r="4" stroke={T.text3} strokeWidth="1.2"/>
@@ -135,7 +71,7 @@ function IssueSearchDropdown({
           onChange={e => { setQuery(e.target.value); setOpen(true); setCursor(-1) }}
           onFocus={() => { if (query.trim()) setOpen(true) }}
           onKeyDown={handleKeyDown}
-          placeholder="Buscar e adicionar issues por título, key, épico ou funcionalidade…"
+          placeholder="Buscar e adicionar issues por título ou key…"
           style={{ flex: 1, background: 'none', border: 'none', outline: 'none', fontSize: 12, color: T.text2 }}
         />
         {query && (
@@ -156,28 +92,26 @@ function IssueSearchDropdown({
               Nenhuma issue fora do épico corresponde a "{query}"
             </div>
           ) : (
-            results.map((issue, idx) => {
-              const sc = STATUS_CFG[issue.status]
-              const ti = TYPE_ICON[issue.type]
+            results.map((item, idx) => {
+              const sc = statusCfg(item.status)
+              const ti = typeGlyph(item.type)
               const isCursor = idx === cursor
               return (
                 <div
-                  key={issue.key}
-                  onMouseDown={e => { e.preventDefault(); onLink(issue.key); setQuery(''); setOpen(false); setCursor(-1) }}
+                  key={item.id}
+                  onMouseDown={e => { e.preventDefault(); onLink(item.id); setQuery(''); setOpen(false); setCursor(-1) }}
                   onMouseEnter={() => setCursor(idx)}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-                    cursor: 'pointer',
-                    background: isCursor ? `${epicColor}18` : 'transparent',
-                    borderTop: idx > 0 ? `1px solid ${T.border}` : 'none',
-                    transition: 'background 0.1s',
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', cursor: 'pointer',
+                    background: isCursor ? `${color}18` : 'transparent',
+                    borderTop: idx > 0 ? `1px solid ${T.border}` : 'none', transition: 'background 0.1s',
                   }}
                 >
                   <span style={{ color: ti.color, fontSize: 13, flexShrink: 0 }}>{ti.icon}</span>
-                  <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{issue.key}</span>
-                  <span style={{ fontSize: 12, color: T.text1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{issue.title}</span>
-                  <span style={{ fontSize: 10, color: sc.color, background: sc.bg, borderRadius: 20, padding: '1px 7px', flexShrink: 0 }}>{sc.label}</span>
-                  <span style={{ fontSize: 10, color: epicColor, background: `${epicColor}14`, borderRadius: 4, padding: '1px 6px', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{item.key}</span>
+                  <span style={{ fontSize: 12, color: T.text1, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</span>
+                  <span style={{ fontSize: 10, color: sc.color, background: `${sc.color}18`, borderRadius: 20, padding: '1px 7px', flexShrink: 0 }}>{sc.label}</span>
+                  <span style={{ fontSize: 10, color, background: `${color}14`, borderRadius: 4, padding: '1px 6px', flexShrink: 0, whiteSpace: 'nowrap' }}>
                     + Vincular
                   </span>
                 </div>
@@ -186,6 +120,60 @@ function IssueSearchDropdown({
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Inline "create issue in this epic" form ──────────────────────────────────
+function InlineCreateIssue({
+  color, busy, onCreate,
+}: { color: string; busy: boolean; onCreate: (title: string, type: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState('')
+  const [type, setType] = useState('story')
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        style={{
+          marginTop: 12, fontSize: 12, color: T.text3, background: 'transparent',
+          border: `1px dashed ${T.border2}`, borderRadius: 8, padding: '8px 16px',
+          cursor: 'pointer', width: '100%', textAlign: 'left',
+        }}
+      >
+        + Criar issue neste épico
+      </button>
+    )
+  }
+
+  return (
+    <div style={{
+      marginTop: 12, display: 'flex', gap: 8, alignItems: 'center',
+      background: T.bgSurface2, border: `1px solid ${color}40`, borderRadius: 8, padding: 8,
+    }}>
+      <select value={type} onChange={e => setType(e.target.value)}
+        style={{ background: T.bgSurface, color: T.text2, border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 12, padding: '5px 6px' }}>
+        <option value="story">Story</option>
+        <option value="task">Task</option>
+        <option value="bug">Bug</option>
+      </select>
+      <input
+        autoFocus value={title} onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter' && title.trim()) { onCreate(title.trim(), type); setTitle(''); setOpen(false) } if (e.key === 'Escape') setOpen(false) }}
+        placeholder="Título da issue…"
+        style={{ flex: 1, background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 6, outline: 'none', fontSize: 12, color: T.text1, padding: '6px 8px' }}
+      />
+      <button
+        disabled={!title.trim() || busy}
+        onClick={() => { if (title.trim()) { onCreate(title.trim(), type); setTitle(''); setOpen(false) } }}
+        style={{
+          fontSize: 12, fontWeight: 600, color: '#fff', background: color, opacity: !title.trim() || busy ? 0.5 : 1,
+          border: 'none', borderRadius: 6, padding: '6px 14px', cursor: 'pointer',
+        }}
+      >{busy ? 'Criando…' : 'Criar'}</button>
+      <button onClick={() => { setOpen(false); setTitle('') }}
+        style={{ background: 'none', border: 'none', color: T.text3, cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
     </div>
   )
 }
@@ -212,37 +200,67 @@ function DonutRing({ pct, size = 48, color }: { pct: number; size?: number; colo
   )
 }
 
-function Avatar({ initials, size = 26 }: { initials: string; size?: number }) {
-  const bg = AV_COLOR[initials] ?? T.text3
+function Avatar({ initials, color, size = 26 }: { initials: string; color?: string | null; size?: number }) {
   return (
     <div style={{
-      width: size, height: size, borderRadius: '50%', background: bg,
+      width: size, height: size, borderRadius: '50%', background: color || T.text3,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.38, fontWeight: 700, color: '#fff', flexShrink: 0,
     }}>{initials}</div>
   )
 }
 
+function StateBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12,
+      padding: 32, textAlign: 'center', fontSize: 13, color: T.text3,
+    }}>{children}</div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function EpicsPage() {
-  const [epicCreate, setEpicCreate] = useState(false)
-  const [epicColors, setEpicColors] = useState<Record<string, string>>(
-    () => Object.fromEntries(EPICS.map(e => [e.id, e.color]))
-  )
+  const [data, setData] = useState<EpicsData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [pickerOpen, setPickerOpen] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
 
-  // Local mutable issue store so edits persist within session
-  const [issues, setIssues] = useState<Issue[]>([...ISSUES])
+  const activeUser = getActiveUser()
 
-  // WorkItemDetail drawer
-  const [detailKey, setDetailKey] = useState<string | null>(null)
-  const detailIssue = detailKey ? issues.find(i => i.key === detailKey) : null
-  const detailData = detailIssue ? issueToWID(detailIssue, issues) : null
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try { setData(await listEpics()) }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setLoading(false) }
+  }, [])
 
-  function handleUpdate(updated: WorkItemData) {
-    setIssues(prev => prev.map(i => i.key === updated.key ? widToIssue(i, updated) : i))
+  useEffect(() => { void load() }, [load])
+
+  async function handleCreate(epic: EpicRow, title: string, type: string) {
+    setBusy(true)
+    try {
+      await createEpicIssue({
+        epicId: epic.id, projectId: epic.project_id, title, type, actorName: activeUser?.name,
+      })
+      await load()
+    } catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setBusy(false) }
   }
+
+  async function handleLink(epicId: string, itemId: string) {
+    setBusy(true)
+    try { await linkItemToEpic(itemId, epicId, activeUser?.name ?? 'Sistema'); await load() }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setBusy(false) }
+  }
+
+  const epics = data?.epics ?? []
+  const items = data?.items ?? []
+  const profileById = new Map((data?.profiles ?? []).map(p => [p.id, p]))
+  const projectById = new Map((data?.projects ?? []).map(p => [p.id, p]))
 
   return (
     <>
@@ -250,81 +268,72 @@ export default function EpicsPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <span style={{ fontSize: 22, fontWeight: 700, color: T.text1 }}>Épicos</span>
         <span style={{ fontSize: 13, color: T.text3, background: T.neutralDim, borderRadius: 20, padding: '2px 10px' }}>
-          {EPICS.length} épicos
+          {epics.length} épicos
         </span>
       </div>
 
+      {loading && <StateBox>Carregando épicos…</StateBox>}
+      {!loading && error && (
+        <StateBox><span style={{ color: T.crit }}>Erro ao carregar épicos: {error}</span></StateBox>
+      )}
+      {!loading && !error && epics.length === 0 && (
+        <StateBox>Nenhum épico cadastrado neste tenant.</StateBox>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-        {EPICS.map(epic => {
-          const color = epicColors[epic.id] ?? epic.color
-          const epicIssues = issues.filter(i => i.epic === epic.id)
-          const done = epicIssues.filter(i => i.status === 'done').length
-          const total = epicIssues.length
+        {!loading && !error && epics.map(epic => {
+          const color = epicColorOf(epic.color)
+          const epicItems = items.filter(i => i.epic_id === epic.id)
+          const done = epicItems.filter(i => i.status === 'done').length
+          const total = epicItems.length
           const pct = total > 0 ? Math.round((done / total) * 100) : 0
-          const points = epicIssues.reduce((s, i) => s + i.points, 0)
-          const assignees = [...new Set(epicIssues.map(i => i.assignee))]
+          const points = epicItems.reduce((s, i) => s + Number(i.story_points ?? 0), 0)
+          const features = (data?.features ?? []).filter(f => f.epic_id === epic.id)
+          const assignees = [...new Set(epicItems.map(i => i.assignee_id).filter(Boolean))] as string[]
           const isExpanded = expanded[epic.id]
+          const owner = epic.owner_id ? profileById.get(epic.owner_id) : undefined
+          const project = projectById.get(epic.project_id)
 
           const statusCounts = Object.fromEntries(
-            STATUSES.map(s => [s, epicIssues.filter(i => i.status === s).length])
+            STATUSES.map(s => [s, epicItems.filter(i => i.status === s).length])
           )
 
           return (
             <div key={epic.id} style={{
               background: T.bgSurface, border: `1px solid ${T.border}`,
               borderRadius: 12, overflow: 'hidden',
-              boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
-              display: 'flex',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.3)', display: 'flex',
             }}>
-              {/* Left color bar / color picker */}
-              <div style={{ position: 'relative' }}>
-                <div
-                  onClick={() => setPickerOpen(pickerOpen === epic.id ? null : epic.id)}
-                  style={{
-                    width: 6, height: '100%', minHeight: 180, background: color,
-                    cursor: 'pointer', transition: 'opacity 0.15s',
-                  }}
-                  title="Alterar cor"
-                />
-                {pickerOpen === epic.id && (
-                  <div style={{
-                    position: 'absolute', top: 8, left: 14, zIndex: 100,
-                    background: T.bgSurface2, border: `1px solid ${T.border2}`,
-                    borderRadius: 8, padding: 8, display: 'flex', flexDirection: 'column', gap: 6,
-                    boxShadow: T.shadowModal,
-                  }}>
-                    {PRESET_COLORS.map(c => (
-                      <div key={c} onClick={(e) => {
-                        e.stopPropagation()
-                        setEpicColors(prev => ({ ...prev, [epic.id]: c }))
-                        setPickerOpen(null)
-                      }} style={{
-                        width: 20, height: 20, borderRadius: '50%', background: c,
-                        cursor: 'pointer', border: c === color ? `2px solid ${T.text1}` : '2px solid transparent',
-                      }} />
-                    ))}
-                  </div>
-                )}
-              </div>
+              <div style={{ width: 6, minHeight: 180, background: color, flexShrink: 0 }} />
 
-              {/* Main content */}
-              <div style={{ flex: 1, padding: '20px 24px' }}>
+              <div style={{ flex: 1, padding: '20px 24px', minWidth: 0 }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color, fontFamily: 'monospace', letterSpacing: 1 }}>
                     {epic.key}
                   </span>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>{epic.label}</span>
-                  <span style={{
-                    fontSize: 11, color: T.text3, background: T.neutralDim,
-                    borderRadius: 20, padding: '2px 10px', border: `1px solid ${T.border}`,
-                  }}>{epic.quarter}</span>
-                  <div style={{ marginLeft: 'auto' }}>
-                    <Avatar initials={epic.owner} size={28} />
-                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>{epic.name}</span>
+                  {project && (
+                    <span style={{ fontSize: 11, color: T.text3, background: T.neutralDim, borderRadius: 20, padding: '2px 10px', border: `1px solid ${T.border}` }}>
+                      {project.name}
+                    </span>
+                  )}
+                  {epic.quarter && (
+                    <span style={{
+                      fontSize: 11, color: T.text3, background: T.neutralDim,
+                      borderRadius: 20, padding: '2px 10px', border: `1px solid ${T.border}`,
+                    }}>{epic.quarter}</span>
+                  )}
+                  {owner && (
+                    <div style={{ marginLeft: 'auto' }}>
+                      <Avatar initials={owner.avatar_initials ?? owner.name.slice(0, 2).toUpperCase()} color={owner.avatar_color} size={28} />
+                    </div>
+                  )}
                 </div>
 
-                <p style={{ fontSize: 13, color: T.text2, margin: '0 0 16px', lineHeight: 1.5 }}>{epic.desc}</p>
+                {epic.description && (
+                  <p style={{ fontSize: 13, color: T.text2, margin: '0 0 16px', lineHeight: 1.5 }}>{epic.description}</p>
+                )}
 
                 {/* Progress + stats row */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -339,7 +348,7 @@ export default function EpicsPage() {
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {STATUSES.map(s => {
                       const cnt = statusCounts[s] ?? 0
-                      const cfg = STATUS_CFG[s]
+                      const cfg = statusCfg(s)
                       return (
                         <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <div style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
@@ -359,9 +368,25 @@ export default function EpicsPage() {
                   </div>
                 </div>
 
+                {/* Features */}
+                {features.length > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
+                    <span style={{ fontSize: 11, color: T.text3 }}>Funcionalidades:</span>
+                    {features.map(f => (
+                      <span key={f.id} title={f.description ?? undefined} style={{
+                        fontSize: 11, color: T.text2, background: T.bgSurface2,
+                        border: `1px solid ${T.border}`, borderRadius: 20, padding: '2px 10px',
+                      }}>{f.name}</span>
+                    ))}
+                  </div>
+                )}
+
                 {/* Assignees */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 16 }}>
-                  {assignees.slice(0, 6).map(a => <Avatar key={a} initials={a} size={24} />)}
+                  {assignees.slice(0, 6).map(id => {
+                    const p = profileById.get(id)
+                    return <Avatar key={id} initials={p?.avatar_initials ?? p?.name.slice(0, 2).toUpperCase() ?? '??'} color={p?.avatar_color} size={24} />
+                  })}
                   {assignees.length > 6 && (
                     <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>+{assignees.length - 6}</span>
                   )}
@@ -382,47 +407,47 @@ export default function EpicsPage() {
                 {/* Expanded issue list */}
                 {isExpanded && (
                   <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
-                    {epicIssues.length === 0 ? (
+                    {epicItems.length === 0 ? (
                       <p style={{ fontSize: 13, color: T.text3 }}>Nenhuma issue neste épico.</p>
                     ) : (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {epicIssues.map(issue => {
-                          const ti = TYPE_ICON[issue.type]
-                          const sc = STATUS_CFG[issue.status]
-                          const isActive = detailKey === issue.key
+                        {epicItems.map(item => {
+                          const ti = typeGlyph(item.type)
+                          const sc = statusCfg(item.status)
+                          const isActive = detailId === item.id
+                          const p = item.assignee_id ? profileById.get(item.assignee_id) : undefined
                           return (
                             <div
-                              key={issue.key}
+                              key={item.id}
                               role="button"
                               tabIndex={0}
-                              onClick={() => setDetailKey(issue.key)}
-                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailKey(issue.key) } }}
+                              onClick={() => setDetailId(item.id)}
+                              onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailId(item.id) } }}
                               style={{
                                 display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '8px 10px', borderRadius: 8,
                                 background: isActive ? `${color}14` : T.bgSurface2,
                                 border: `1px solid ${isActive ? color + '60' : T.border}`,
-                                cursor: 'pointer', transition: 'all 0.12s',
-                                outline: 'none',
+                                cursor: 'pointer', transition: 'all 0.12s', outline: 'none',
                               }}
                               onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = `${color}0A`; e.currentTarget.style.borderColor = `${color}40` }}
                               onMouseLeave={e => { e.currentTarget.style.background = isActive ? `${color}14` : T.bgSurface2; e.currentTarget.style.borderColor = isActive ? `${color}60` : T.border }}
                             >
                               <span style={{ color: ti.color, fontSize: 14, flexShrink: 0 }}>{ti.icon}</span>
-                              <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{issue.key}</span>
+                              <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>{item.key}</span>
                               <span style={{ fontSize: 13, color: T.text1, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {issue.title}
+                                {item.title}
                               </span>
+                              {item.is_blocked && <span style={{ fontSize: 11, color: T.crit }}>🔴</span>}
                               <span style={{
-                                fontSize: 11, color: sc.color, background: sc.bg,
+                                fontSize: 11, color: sc.color, background: `${sc.color}18`,
                                 borderRadius: 20, padding: '2px 8px', flexShrink: 0,
                               }}>{sc.label}</span>
-                              <Avatar initials={issue.assignee} size={22} />
+                              {p && <Avatar initials={p.avatar_initials ?? p.name.slice(0, 2).toUpperCase()} color={p.avatar_color} size={22} />}
                               <span style={{
                                 fontSize: 11, color: T.text3, background: T.neutralDim,
                                 borderRadius: 4, padding: '1px 6px', flexShrink: 0,
-                              }}>{issue.points}pt</span>
-                              {/* Open indicator */}
+                              }}>{Number(item.story_points ?? 0)}pt</span>
                               <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0, opacity: isActive ? 1 : 0.3, transition: 'opacity 0.12s' }}>
                                 <path d="M4 2.5l3.5 3.5L4 9.5" stroke={color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                               </svg>
@@ -431,26 +456,19 @@ export default function EpicsPage() {
                         })}
                       </div>
                     )}
-                    {/* Search to link existing issues */}
+
                     <IssueSearchDropdown
                       epicId={epic.id}
-                      epicColor={color}
-                      issues={issues}
-                      onLink={key => setIssues(prev => prev.map(i => i.key === key ? { ...i, epic: epic.id } : i))}
+                      color={color}
+                      items={items.filter(i => i.project_id === epic.project_id)}
+                      onLink={id => void handleLink(epic.id, id)}
                     />
 
-                    {/* Add issue CTA */}
-                    <button
-                      onClick={e => { e.stopPropagation(); setEpicCreate(true) }}
-                      style={{
-                        marginTop: 12, fontSize: 12, color: T.text3,
-                        background: 'transparent', border: `1px dashed ${T.border2}`,
-                        borderRadius: 8, padding: '8px 16px', cursor: 'pointer',
-                        width: '100%', textAlign: 'left',
-                      }}
-                    >
-                      + Criar issue neste épico
-                    </button>
+                    <InlineCreateIssue
+                      color={color}
+                      busy={busy}
+                      onCreate={(title, type) => void handleCreate(epic, title, type)}
+                    />
                   </div>
                 )}
               </div>
@@ -460,17 +478,15 @@ export default function EpicsPage() {
       </div>
     </div>
 
-    {/* WorkItemDetail drawer */}
-    {detailData && (
+    {/* WorkItemDetail drawer — reads and persists the real row */}
+    {detailId && (
       <WorkItemDetail
-        data={detailData}
+        itemId={detailId}
         mode="drawer"
-        onUpdate={handleUpdate}
-        onClose={() => setDetailKey(null)}
+        onUpdate={() => { /* persistence happens inside the panel */ }}
+        onClose={() => { setDetailId(null); void load() }}
       />
     )}
-
-    {epicCreate && <CreateIssueModal onClose={() => setEpicCreate(false)} onCreate={() => setEpicCreate(false)} />}
     </>
   )
 }

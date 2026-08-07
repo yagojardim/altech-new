@@ -1,48 +1,87 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { T } from '../components/ds/tokens'
 import { NewReleaseModal } from '../components/NewReleaseModal'
-import { ISSUES, RELEASES, STATUS_CFG, type Release } from '../data/issues'
+import { listReleases, type ReleasesData, type ReleaseRow } from '../data/db/releases'
+import { DB_STATUS_CFG } from '../data/db/timeline'
+import { WorkItemDetail } from '../components/WorkItemDetail'
 
-function stateColor(state: Release['state']) {
+function stateColor(state: string) {
   if (state === 'released') return T.success
-  if (state === 'in-progress') return T.accent
+  if (state === 'in_progress' || state === 'in-progress') return T.accent
   return T.text3
 }
-function stateBg(state: Release['state']) {
+function stateBg(state: string) {
   if (state === 'released') return T.successDim
-  if (state === 'in-progress') return T.accentDim
+  if (state === 'in_progress' || state === 'in-progress') return T.accentDim
   return T.neutralDim
 }
-function stateLabel(state: Release['state']) {
+function stateLabel(state: string) {
   if (state === 'released') return 'Lançada'
-  if (state === 'in-progress') return 'Em andamento'
+  if (state === 'in_progress' || state === 'in-progress') return 'Em andamento'
   return 'Planejada'
 }
+function isInProgress(state: string) { return state === 'in_progress' || state === 'in-progress' }
 
-function daysUntil(dateStr: string) {
-  const months: Record<string, number> = {
-    jan: 0, fev: 1, mar: 2, abr: 3, mai: 4, jun: 5,
-    jul: 6, ago: 7, set: 8, out: 9, nov: 10, dez: 11,
-  }
-  const parts = dateStr.toLowerCase().split(' ')
-  if (parts.length < 3) return null
-  const day = parseInt(parts[0])
-  const month = months[parts[1]]
-  const year = parseInt(parts[2])
-  if (isNaN(day) || month === undefined || isNaN(year)) return null
-  const target = new Date(year, month, day)
-  const now = new Date()
-  const diff = Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  return diff
+function fmtDate(iso: string | null): string {
+  if (!iso) return 'Sem data'
+  const d = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  const MONTHS = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+function daysUntil(iso: string | null): number | null {
+  if (!iso) return null
+  const target = new Date(`${iso}T00:00:00`)
+  if (Number.isNaN(target.getTime())) return null
+  return Math.ceil((target.getTime() - Date.now()) / 86400000)
+}
+function statusCfg(s: string) { return DB_STATUS_CFG[s] ?? { label: s, color: T.text3 } }
+
+function StateBox({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12,
+      padding: 32, textAlign: 'center', fontSize: 13, color: T.text3,
+    }}>{children}</div>
+  )
 }
 
 export default function ReleasesPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
-  const [newRelOpen, setNewRelOpen] = useState(false)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<ReleaseRow | null>(null)
+  const [data, setData] = useState<ReleasesData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [detailId, setDetailId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true); setError(null)
+    try { setData(await listReleases()) }
+    catch (err) { setError(err instanceof Error ? err.message : String(err)) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const releases = data?.releases ?? []
+  const items = data?.items ?? []
+  const projects = data?.projects ?? []
+  const profileById = new Map((data?.profiles ?? []).map(p => [p.id, p]))
+  const projectById = new Map(projects.map(p => [p.id, p]))
 
   return (
     <div style={{ padding: 32, maxWidth: 860, margin: '0 auto' }}>
-      {newRelOpen && <NewReleaseModal onClose={() => setNewRelOpen(false)} onSave={() => setNewRelOpen(false)} />}
+      {modalOpen && (
+        <NewReleaseModal
+          onClose={() => { setModalOpen(false); setEditing(null) }}
+          onSaved={() => { void load() }}
+          projects={projects}
+          items={items}
+          release={editing}
+        />
+      )}
+
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 28 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -50,26 +89,31 @@ export default function ReleasesPage() {
           <span style={{
             fontSize: 13, color: T.text3, background: T.neutralDim,
             borderRadius: 20, padding: '2px 10px',
-          }}>{RELEASES.length} releases</span>
+          }}>{releases.length} releases</span>
         </div>
         <button style={{
           fontSize: 13, color: T.text1, background: T.accentDim,
           border: `1px solid ${T.accentBorder ?? T.accent}`, borderRadius: 8,
           padding: '8px 18px', cursor: 'pointer', fontWeight: 600,
-        }} onClick={() => setNewRelOpen(true)}>+ Nova release</button>
+        }} onClick={() => { setEditing(null); setModalOpen(true) }}>+ Nova release</button>
       </div>
+
+      {loading && <StateBox>Carregando releases…</StateBox>}
+      {!loading && error && <StateBox><span style={{ color: T.crit }}>Erro ao carregar releases: {error}</span></StateBox>}
+      {!loading && !error && releases.length === 0 && <StateBox>Nenhuma release cadastrada ainda.</StateBox>}
 
       {/* Release list */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {RELEASES.map(release => {
-          const releaseIssues = ISSUES.filter(i => i.releaseId === release.id)
+        {!loading && !error && releases.map(release => {
+          const releaseIssues = items.filter(i => i.release_id === release.id)
           const done = releaseIssues.filter(i => i.status === 'done').length
           const total = releaseIssues.length
           const pct = total > 0 ? Math.round((done / total) * 100) : 0
           const color = stateColor(release.state)
           const isReleased = release.state === 'released'
           const isExpanded = expanded[release.id]
-          const days = release.state === 'in-progress' ? daysUntil(release.date) : null
+          const days = isInProgress(release.state) ? daysUntil(release.release_date) : null
+          const project = projectById.get(release.project_id)
 
           return (
             <div key={release.id} style={{
@@ -80,7 +124,6 @@ export default function ReleasesPage() {
             }}>
               {/* Top row */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
-                {/* Version badge */}
                 <span style={{
                   fontSize: 13, fontWeight: 700, color, background: stateBg(release.state),
                   borderRadius: 8, padding: '3px 12px', fontFamily: 'monospace',
@@ -91,14 +134,12 @@ export default function ReleasesPage() {
                 <span style={{ fontSize: 15, fontWeight: 700, color: isReleased ? T.text2 : T.text1 }}>
                   {release.name}
                 </span>
-                <span style={{ fontSize: 12, color: T.text3 }}>{release.date}</span>
-                {/* State badge */}
+                {project && <span style={{ fontSize: 11, color: T.text3, background: T.neutralDim, borderRadius: 20, padding: '2px 10px' }}>{project.name}</span>}
+                <span style={{ fontSize: 12, color: T.text3 }}>{fmtDate(release.release_date)}</span>
                 <span style={{
                   fontSize: 11, color, background: stateBg(release.state),
-                  borderRadius: 20, padding: '2px 10px',
-                  border: `1px solid ${color}30`,
+                  borderRadius: 20, padding: '2px 10px', border: `1px solid ${color}30`,
                 }}>{stateLabel(release.state)}</span>
-                {/* Countdown */}
                 {days !== null && (
                   <span style={{
                     fontSize: 11, color: days <= 7 ? T.crit : T.warn,
@@ -111,10 +152,15 @@ export default function ReleasesPage() {
                 )}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
                   {total > 0 && (
-                    <span style={{ fontSize: 12, color: T.text3 }}>
-                      {done}/{total} issues
-                    </span>
+                    <span style={{ fontSize: 12, color: T.text3 }}>{done}/{total} issues</span>
                   )}
+                  <button
+                    onClick={() => { setEditing(release); setModalOpen(true) }}
+                    style={{
+                      fontSize: 11, color: T.text2, background: 'transparent',
+                      border: `1px solid ${T.border}`, borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+                    }}
+                  >Editar</button>
                 </div>
               </div>
 
@@ -139,12 +185,11 @@ export default function ReleasesPage() {
                       borderRadius: 4, transition: 'width 0.4s',
                     }} />
                   </div>
-                  {/* Status breakdown mini */}
                   <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
-                    {(['done', 'in-progress', 'in-review', 'todo', 'backlog'] as const).map(s => {
+                    {(['done', 'in_progress', 'in_review', 'todo', 'backlog'] as const).map(s => {
                       const cnt = releaseIssues.filter(i => i.status === s).length
                       if (cnt === 0) return null
-                      const cfg = STATUS_CFG[s]
+                      const cfg = statusCfg(s)
                       return (
                         <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           <div style={{ width: 7, height: 7, borderRadius: '50%', background: cfg.color }} />
@@ -161,7 +206,7 @@ export default function ReleasesPage() {
                 <button
                   onClick={() => setExpanded(p => ({ ...p, [release.id]: !p[release.id] }))}
                   style={{
-                    fontSize: 12, color: color, background: stateBg(release.state),
+                    fontSize: 12, color, background: stateBg(release.state),
                     border: `1px solid ${color}40`, borderRadius: 6, padding: '5px 14px',
                     cursor: 'pointer', fontWeight: 600,
                   }}
@@ -175,13 +220,21 @@ export default function ReleasesPage() {
                 <div style={{ marginTop: 14, borderTop: `1px solid ${T.border}`, paddingTop: 12 }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {releaseIssues.map(issue => {
-                      const sc = STATUS_CFG[issue.status]
+                      const sc = statusCfg(issue.status)
+                      const assignee = issue.assignee_id ? profileById.get(issue.assignee_id) : undefined
                       return (
-                        <div key={issue.key} style={{
-                          display: 'flex', alignItems: 'center', gap: 10,
-                          padding: '7px 10px', background: T.bgSurface2,
-                          borderRadius: 8, border: `1px solid ${T.border}`,
-                        }}>
+                        <div
+                          key={issue.id}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => setDetailId(issue.id)}
+                          onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setDetailId(issue.id) } }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '7px 10px', background: T.bgSurface2,
+                            borderRadius: 8, border: `1px solid ${T.border}`, cursor: 'pointer',
+                          }}
+                        >
                           <span style={{ fontSize: 11, color: T.text3, fontFamily: 'monospace', width: 62, flexShrink: 0 }}>
                             {issue.key}
                           </span>
@@ -190,10 +243,12 @@ export default function ReleasesPage() {
                             textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                           }}>{issue.title}</span>
                           <span style={{
-                            fontSize: 11, color: sc.color, background: sc.bg,
+                            fontSize: 11, color: sc.color, background: `${sc.color}18`,
                             borderRadius: 20, padding: '2px 8px', flexShrink: 0,
                           }}>{sc.label}</span>
-                          <span style={{ fontSize: 11, color: T.text3, flexShrink: 0 }}>{issue.assignee}</span>
+                          <span style={{ fontSize: 11, color: T.text3, flexShrink: 0 }}>
+                            {assignee?.avatar_initials ?? assignee?.name ?? '—'}
+                          </span>
                         </div>
                       )
                     })}
@@ -206,14 +261,25 @@ export default function ReleasesPage() {
       </div>
 
       {/* CTA */}
-      <div style={{ marginTop: 24 }}>
-        <button style={{
-          width: '100%', padding: '14px', textAlign: 'center',
-          fontSize: 13, color: T.text3,
-          background: 'transparent', border: `1px dashed ${T.border2}`,
-          borderRadius: 12, cursor: 'pointer',
-        }} onClick={() => setNewRelOpen(true)}>+ Criar release</button>
-      </div>
+      {!loading && !error && (
+        <div style={{ marginTop: 24 }}>
+          <button style={{
+            width: '100%', padding: '14px', textAlign: 'center',
+            fontSize: 13, color: T.text3,
+            background: 'transparent', border: `1px dashed ${T.border2}`,
+            borderRadius: 12, cursor: 'pointer',
+          }} onClick={() => { setEditing(null); setModalOpen(true) }}>+ Criar release</button>
+        </div>
+      )}
+
+      {detailId && (
+        <WorkItemDetail
+          itemId={detailId}
+          mode="drawer"
+          onUpdate={() => { /* the panel persists on its own */ }}
+          onClose={() => { setDetailId(null); void load() }}
+        />
+      )}
     </div>
   )
 }
