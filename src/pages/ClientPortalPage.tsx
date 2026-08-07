@@ -141,6 +141,7 @@ function ClientCommentInput({
 }) {
   const [open, setOpen] = useState(false)
   const [val, setVal]   = useState('')
+  const canComment = getClientPermissions(MOCK_TENANT.tenant_id, CLIENT_AUTHOR).client_can_comment
 
   function send() {
     const body = val.trim()
@@ -161,6 +162,12 @@ function ClientCommentInput({
     onSent(body)
     setVal('')
     setOpen(false)
+  }
+
+  if (!canComment) {
+    return (
+      <span className="text-[10px]" style={{ color: C.txt3 }}>Acesso somente leitura</span>
+    )
   }
 
   if (!open) {
