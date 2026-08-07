@@ -16,7 +16,7 @@ export interface ScopeProject {
 export interface ScopeSprint { name: string; pct: number; status: string; ends: string }
 export interface ScopeDelivery {
   id: string; title: string; status: 'done' | 'review' | 'progress'
-  project: string; date: string
+  project: string; date: string; due: string; overdueDays: number
 }
 export interface ScopeMilestone {
   id: string; date: string; title: string; desc: string; status: 'upcoming' | 'done'
@@ -160,9 +160,13 @@ function buildScope(scopes: api.ClientPortalScope[]): PortalScope {
       })
     }
     for (const d of sc.deliveries) {
+      const overdueDays = d.status !== 'done' && d.due_date
+        ? Math.max(0, Math.floor((Date.now() - new Date(d.due_date).getTime()) / 86400000))
+        : 0
       deliveries.push({
         id: d.id, title: d.title, status: d.status, project: name,
         date: fmtShort(d.completed_at ?? d.due_date),
+        due: fmtShort(d.due_date), overdueDays,
       })
     }
     for (const r of sc.roadmap) {
