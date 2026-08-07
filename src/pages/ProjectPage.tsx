@@ -325,9 +325,11 @@ interface StartSprintModalProps {
   sprint: SprintDef
   onConfirm: (id: string, goal: string, name: string) => void
   onClose: () => void
+  /** Real number of items in the sprint (from Supabase when available). */
+  issueCount?: number
 }
 
-function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps) {
+function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountProp }: StartSprintModalProps) {
   const [name, setName]         = useState(sprint.name)
   const [durType, setDurType]   = useState<'weeks' | 'days'>('weeks')
   const [durVal, setDurVal]     = useState(2)
@@ -335,7 +337,7 @@ function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps)
   const [endDate, setEnd]       = useState(sprint.end)
   const [goal, setGoal]         = useState(sprint.goal ?? '')
 
-  const issueCount = INIT_ISSUES.filter(i => i.sprint === sprint.id).length
+  const issueCount = issueCountProp ?? INIT_ISSUES.filter(i => i.sprint === sprint.id).length
 
   return (
     <div
@@ -2232,6 +2234,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
     {startingSprint && (
       <StartSprintModal
         sprint={startingSprint}
+        issueCount={dbIssues.filter(i => i.sprint === startingSprint.id).length}
         onConfirm={(id, goal, name) => { void handleStartSprintDb(id, goal, name) }}
         onClose={() => setStartingSprint(null)}
       />
