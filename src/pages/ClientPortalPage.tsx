@@ -1418,6 +1418,7 @@ function sigProjectId(sigProject: string): string | null {
 
 function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
   const [selId, setSelId] = useState<string>(PROJECTS[0]?.id ?? '')
+  const chatCanComment = getClientPermissions(MOCK_TENANT.tenant_id, CLIENT_AUTHOR).client_can_comment
   const [draft, setDraft] = useState('')
   const [tick, setTick] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1442,7 +1443,7 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
 
   function handleSend() {
     const body = draft.trim()
-    if (!body || !project) return
+    if (!body || !project || !chatCanComment) return
     addClientSignal({
       project: project.name,
       tenant_id: MOCK_TENANT.tenant_id,
@@ -1635,12 +1636,17 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
           )}
         </div>
 
-        {/* Composer */}
+        {/* Composer — hidden for read-only (viewer) portal access */}
         <div
           className="flex-shrink-0 px-6 py-4"
           style={{ borderTop: `1px solid ${C.border}`, background: C.surface }}
         >
-          <div
+          {!chatCanComment && (
+            <p className="text-[11px] text-center py-2" style={{ color: C.txt3 }}>
+              Seu acesso é somente leitura. Fale com a equipe Altech para poder responder.
+            </p>
+          )}
+          {chatCanComment && <div
             className="flex items-end gap-3 rounded-2xl px-4 py-3"
             style={{ background: C.surface2, border: `1px solid ${C.border2}` }}
           >
@@ -1669,7 +1675,7 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
             >
               Enviar
             </button>
-          </div>
+          </div>}
           <p className="text-[9px] mt-2 text-center" style={{ color: C.txt3 }}>
             Suas mensagens são visíveis para a equipe Altech · Inspection Mode
           </p>
