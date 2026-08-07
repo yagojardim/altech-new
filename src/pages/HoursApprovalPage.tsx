@@ -1,15 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { T } from '../components/ds/tokens'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
-import { updateApprovedSquads } from '../data/session'
+import { WorkItemDetail } from '../components/WorkItemDetail'
 import {
-  getEntriesBySquads, approveEntry, rejectEntry, batchApprove, batchReject,
-  SQUADS, type TimesheetEntry, type TimesheetStatus,
-} from '../data/timesheets'
+  resolveProfileIdByName, listSquads, getApproverSquads, setApproverSquads,
+  listPendingForApprover, approveEntries, rejectEntries,
+  type TimesheetEntry, type TimesheetStatus, type SquadOption,
+} from '../data/db/timesheets'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDate(d: string) {
+  if (!d) return ''
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
 }
@@ -18,9 +20,13 @@ function exportCSV(rows: TimesheetEntry[], filename: string) {
   const headers = ['Colaborador','Data','Projeto','Demanda','Horas','Descrição','Status','Squad']
   const lines = [
     headers,
-    ...rows.map(e => [e.user_name, e.date, e.project_name, e.item_label, String(e.hours), e.description, e.status, e.squad_id ?? '']),
+    ...rows.map(e => [
+      e.user_name, e.date, e.project_name,
+      `${e.item_key ?? ''} ${e.item_title ?? ''}`.trim(),
+      String(e.hours), e.description ?? '', e.status, e.squad_name ?? '',
+    ]),
   ].map(row => row.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url; a.download = filename; a.click()
@@ -28,14 +34,14 @@ function exportCSV(rows: TimesheetEntry[], filename: string) {
 }
 
 const STATUS_META: Record<TimesheetStatus, { label: string; bg: string; txt: string; dot: string }> = {
-  saved:     { label: 'Salvo',      bg: `${T.border}22`,  txt: T.text3,   dot: T.border2  },
-  submitted: { label: 'Aguardando', bg: `${T.warn}18`,    txt: T.warn,    dot: T.warn     },
-  approved:  { label: 'Aprovado',   bg: `${T.success}18`, txt: T.success, dot: T.success  },
-  rejected:  { label: 'Rejeitado',  bg: `${T.danger}18`,  txt: T.danger,  dot: T.danger   },
+  draft:     { label: 'Salvo',     bg: `${T.border}22`,  txt: T.text3,   dot: T.border2 },
+  submitted: { label: 'Enviado',   bg: `${T.warn}18`,    txt: T.warn,    dot: T.warn    },
+  approved:  { label: 'Aprovado',  bg: `${T.success}18`, txt: T.success, dot: T.success },
+  rejected:  { label: 'Rejeitado', bg: `${T.crit}18`,    txt: T.crit,    dot: T.crit    },
 }
 
 function StatusBadge({ status }: { status: TimesheetStatus }) {
-  const m = STATUS_META[status]
+  const m = STATUS_META[status] ?? STATUS_META.draft
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 99, background: m.bg, fontSize: 11, color: m.txt, fontWeight: 600 }}>
       <span style={{ width: 6, height: 6, borderRadius: 99, background: m.dot, flexShrink: 0 }} />
@@ -64,7 +70,7 @@ function RejectModal({ count, onConfirm, onCancel }: { count: number; onConfirm:
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
           <button onClick={onCancel} style={{ padding: '8px 16px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
           <button onClick={() => reason.trim() && onConfirm(reason.trim())} disabled={!reason.trim()}
-            style={{ padding: '8px 16px', borderRadius: 8, background: reason.trim() ? T.danger : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: reason.trim() ? 'pointer' : 'not-allowed' }}>
+            style={{ padding: '8px 16px', borderRadius: 8, background: reason.trim() ? T.crit : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: reason.trim() ? 'pointer' : 'not-allowed' }}>
             Rejeitar
           </button>
         </div>
@@ -74,7 +80,9 @@ function RejectModal({ count, onConfirm, onCancel }: { count: number; onConfirm:
 }
 
 // ─── Squad Setup ──────────────────────────────────────────────────────────────
-function SquadSetup({ userId, current, onSave }: { userId: string; current: string[]; onSave: (squads: string[]) => void }) {
+function SquadSetup({ squads, current, saving, onSave }: {
+  squads: SquadOption[]; current: string[]; saving: boolean; onSave: (squads: string[]) => void
+}) {
   const [selected, setSelected] = useState<string[]>(current)
 
   function toggle(id: string) {
@@ -85,8 +93,11 @@ function SquadSetup({ userId, current, onSave }: { userId: string; current: stri
     <div style={{ maxWidth: 480, margin: '60px auto', background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 14, padding: 28, boxShadow: T.shadowModal }}>
       <div style={{ fontSize: 16, fontWeight: 700, color: T.text1, marginBottom: 6 }}>Squads que você aprova</div>
       <div style={{ fontSize: 12, color: T.text3, marginBottom: 20 }}>Selecione os squads cujos lançamentos aparecem para você revisar.</div>
+      {squads.length === 0 && (
+        <div style={{ fontSize: 12, color: T.text3, marginBottom: 20 }}>Nenhum squad cadastrado no tenant.</div>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
-        {SQUADS.map(s => {
+        {squads.map(s => {
           const on = selected.includes(s.id)
           return (
             <button key={s.id} onClick={() => toggle(s.id)} style={{
@@ -106,94 +117,139 @@ function SquadSetup({ userId, current, onSave }: { userId: string; current: stri
           )
         })}
       </div>
-      <button onClick={() => { updateApprovedSquads(userId, selected); onSave(selected) }}
-        disabled={selected.length === 0}
-        style={{ width: '100%', padding: '10px', borderRadius: 9, background: selected.length > 0 ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: selected.length > 0 ? 'pointer' : 'not-allowed' }}>
-        Confirmar
+      <button onClick={() => onSave(selected)}
+        disabled={selected.length === 0 || saving}
+        style={{ width: '100%', padding: '10px', borderRadius: 9, background: selected.length > 0 && !saving ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: selected.length > 0 && !saving ? 'pointer' : 'not-allowed' }}>
+        {saving ? 'Salvando…' : 'Confirmar'}
       </button>
     </div>
   )
 }
 
+const inputSt: React.CSSProperties = { padding: '6px 10px', borderRadius: 7, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text1, fontSize: 12, outline: 'none' }
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function HoursApprovalPage() {
-  const { activeUser, setActiveUser } = useSession()
-  const { permissions, user_id: userId, name: userName, tenant_id: tenantId, approved_squads } = activeUser
+  const { activeUser } = useSession()
+  const { permissions, name: userName } = activeUser
+  const allowed = can(permissions, 'approve:hours')
 
-  const [tick, setTick] = useState(0)
-  const refresh = () => setTick(t => t + 1)
-  const [mySquads, setMySquads] = useState<string[]>(approved_squads ?? [])
-  const [setupDone, setSetupDone] = useState((approved_squads ?? []).length > 0)
+  const [profileId, setProfileId] = useState<string | null>(null)
+  const [squads, setSquads] = useState<SquadOption[]>([])
+  const [mySquads, setMySquads] = useState<string[]>([])
+  const [entries, setEntries] = useState<TimesheetEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [savingSquads, setSavingSquads] = useState(false)
+  const [error, setError] = useState('')
+  const [editingSquads, setEditingSquads] = useState(false)
 
-  if (!can(permissions, 'approve:hours')) {
+  const [filterStatus, setFilterStatus] = useState<TimesheetStatus | 'all'>('submitted')
+  const [filterSquad, setFilterSquad] = useState('all')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [rejectTarget, setRejectTarget] = useState<'single' | 'batch' | null>(null)
+  const [rejectId, setRejectId] = useState('')
+  const [toast, setToast] = useState('')
+  const [detailItemId, setDetailItemId] = useState<string | null>(null)
+
+  const loadQueue = useCallback(async (pid: string) => {
+    setLoading(true)
+    const queue = await listPendingForApprover(pid)
+    setEntries(queue.entries)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (!allowed) { setLoading(false); return }
+    let alive = true
+    void (async () => {
+      setLoading(true)
+      const [pid, allSquads] = await Promise.all([resolveProfileIdByName(userName), listSquads()])
+      if (!alive) return
+      setSquads(allSquads)
+      setProfileId(pid)
+      if (!pid) {
+        setError(`Não encontramos o perfil "${userName}" no banco. Verifique o cadastro em Pessoas.`)
+        setLoading(false)
+        return
+      }
+      setError('')
+      const mine = await getApproverSquads(pid)
+      if (!alive) return
+      setMySquads(mine)
+      if (mine.length === 0) { setLoading(false); return }
+      await loadQueue(pid)
+    })()
+    return () => { alive = false }
+  }, [allowed, userName, loadQueue])
+
+  if (!allowed) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.text3, fontSize: 14 }}>Sem permissão para aprovar horas.</div>
   }
 
-  if (!setupDone) {
+  async function handleSaveSquads(next: string[]) {
+    if (!profileId) return
+    setSavingSquads(true)
+    await setApproverSquads(profileId, next, userName)
+    setMySquads(next)
+    setSavingSquads(false)
+    setEditingSquads(false)
+    await loadQueue(profileId)
+  }
+
+  if (error) {
     return (
-      <SquadSetup userId={userId} current={mySquads} onSave={squads => { setMySquads(squads); setSetupDone(true); setActiveUser(userId) }} />
+      <div style={{ padding: '28px 32px', maxWidth: 720, margin: '0 auto' }}>
+        <div style={{ background: `${T.crit}12`, border: `1px solid ${T.crit}44`, borderRadius: 10, padding: '14px 18px', color: T.crit, fontSize: 13 }}>{error}</div>
+      </div>
     )
   }
 
-  void tick
-  const allEntries = getEntriesBySquads(mySquads, tenantId)
+  if (loading && entries.length === 0 && mySquads.length === 0 && !editingSquads) {
+    return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.text3, fontSize: 13 }}>Carregando…</div>
+  }
 
-  // ─── Filter state ──────────────────────────────────────────────────────────
-  const [filterStatus, setFilterStatus] = useState<TimesheetStatus | 'all'>('submitted')
-  const [filterSquad, setFilterSquad] = useState('all')
+  if (editingSquads || mySquads.length === 0) {
+    return (
+      <SquadSetup squads={squads} current={mySquads} saving={savingSquads}
+        onSave={next => { void handleSaveSquads(next) }} />
+    )
+  }
 
-  const filtered = allEntries.filter(e => {
+  const filtered = entries.filter(e => {
     if (filterStatus !== 'all' && e.status !== filterStatus) return false
     if (filterSquad !== 'all' && e.squad_id !== filterSquad) return false
     return true
   })
 
-  // ─── Selection ──────────────────────────────────────────────────────────────
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [rejectTarget, setRejectTarget] = useState<'single' | 'batch' | null>(null)
-  const [rejectId, setRejectId] = useState<string>('')
-  const [toast, setToast] = useState('')
+  const submittedInView = filtered.filter(e => e.status === 'submitted')
+  const allChecked = submittedInView.length > 0 && submittedInView.every(e => selected.has(e.id))
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(''), 3000) }
 
   function toggleSelect(id: string) {
-    setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    setSelected(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n })
   }
   function toggleAll() {
-    const submittedIds = filtered.filter(e => e.status === 'submitted').map(e => e.id)
-    if (submittedIds.every(id => selected.has(id))) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(submittedIds))
-    }
+    if (allChecked) setSelected(new Set())
+    else setSelected(new Set(submittedInView.map(e => e.id)))
   }
-  const submittedInView = filtered.filter(e => e.status === 'submitted')
-  const allChecked = submittedInView.length > 0 && submittedInView.every(e => selected.has(e.id))
 
-  function handleApprove(id: string) {
-    approveEntry(id, userName); refresh(); showToast('Aprovado.')
-    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+  async function runDecision(ids: string[], decision: 'approved' | 'rejected', reason?: string) {
+    if (!profileId) return
+    const n = decision === 'approved'
+      ? await approveEntries(ids, profileId, userName)
+      : await rejectEntries(ids, profileId, userName, reason ?? '')
+    setSelected(new Set())
+    await loadQueue(profileId)
+    showToast(n > 0
+      ? `${n} lançamento(s) ${decision === 'approved' ? 'aprovado(s)' : 'rejeitado(s)'}.`
+      : 'Nenhum lançamento foi alterado.')
   }
-  function handleRejectOpen(id: string) { setRejectId(id); setRejectTarget('single') }
+
   function handleRejectConfirm(reason: string) {
-    if (rejectTarget === 'single') {
-      rejectEntry(rejectId, userName, reason); showToast('Rejeitado.')
-      setSelected(prev => { const n = new Set(prev); n.delete(rejectId); return n })
-    } else {
-      batchReject(Array.from(selected), userName, reason); showToast(`${selected.size} lançamento(s) rejeitado(s).`); setSelected(new Set())
-    }
-    setRejectTarget(null); setRejectId(''); refresh()
-  }
-  function handleBatchApprove() {
-    batchApprove(Array.from(selected), userName); showToast(`${selected.size} lançamento(s) aprovado(s).`); setSelected(new Set()); refresh()
-  }
-
-  function handleExportAll() {
-    exportCSV(filtered, `horas-${filterSquad === 'all' ? 'todos' : filterSquad}.csv`)
-  }
-  function handleBatchExport() {
-    const rows = filtered.filter(e => selected.has(e.id))
-    exportCSV(rows, `horas-selecionados.csv`)
+    const ids = rejectTarget === 'single' ? [rejectId] : Array.from(selected)
+    setRejectTarget(null); setRejectId('')
+    void runDecision(ids, 'rejected', reason)
   }
 
   // Group by squad
@@ -203,9 +259,6 @@ export default function HoursApprovalPage() {
     if (!bySquad[k]) bySquad[k] = []
     bySquad[k].push(e)
   }
-  const squadOrder = [...mySquads.filter(s => bySquad[s]), ...Object.keys(bySquad).filter(k => !mySquads.includes(k))]
-
-  const inputSt: React.CSSProperties = { padding: '6px 10px', borderRadius: 7, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text1, fontSize: 12, outline: 'none' }
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1080, margin: '0 auto', position: 'relative' }}>
@@ -221,31 +274,39 @@ export default function HoursApprovalPage() {
           onCancel={() => { setRejectTarget(null); setRejectId('') }}
         />
       )}
+      {detailItemId && (
+        <WorkItemDetail
+          itemId={detailItemId}
+          mode="drawer"
+          onUpdate={() => { /* the panel persists on its own */ }}
+          onClose={() => setDetailItemId(null)}
+        />
+      )}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700, color: T.text1 }}>Aprovar Horas</div>
           <div style={{ fontSize: 12, color: T.text3, marginTop: 2 }}>
-            Squads: {mySquads.map(s => SQUADS.find(x => x.id === s)?.name ?? s).join(', ')}
-            <button onClick={() => setSetupDone(false)} style={{ marginLeft: 8, fontSize: 10, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Editar</button>
+            Squads: {mySquads.map(s => squads.find(x => x.id === s)?.name ?? s).join(', ')}
+            <button onClick={() => setEditingSquads(true)} style={{ marginLeft: 8, fontSize: 10, color: T.accent, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Editar</button>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {selected.size > 0 && (
             <>
-              <button onClick={handleBatchExport} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
+              <button onClick={() => exportCSV(filtered.filter(e => selected.has(e.id)), 'horas-selecionados.csv')} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
                 ↓ CSV ({selected.size})
               </button>
-              <button onClick={() => setRejectTarget('batch')} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.danger, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => setRejectTarget('batch')} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.crit, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Rejeitar ({selected.size})
               </button>
-              <button onClick={handleBatchApprove} style={{ padding: '7px 14px', borderRadius: 8, background: T.success, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+              <button onClick={() => { void runDecision(Array.from(selected), 'approved') }} style={{ padding: '7px 14px', borderRadius: 8, background: T.success, border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 Aprovar ({selected.size})
               </button>
             </>
           )}
-          <button onClick={handleExportAll} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
+          <button onClick={() => exportCSV(filtered, `horas-${filterSquad === 'all' ? 'todos' : filterSquad}.csv`)} style={{ padding: '7px 14px', borderRadius: 8, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 12, cursor: 'pointer' }}>
             ↓ Exportar CSV
           </button>
         </div>
@@ -265,25 +326,28 @@ export default function HoursApprovalPage() {
         ))}
         <select value={filterSquad} onChange={e => setFilterSquad(e.target.value)} style={{ ...inputSt, marginLeft: 'auto' }}>
           <option value="all">Todos os squads</option>
-          {mySquads.map(s => <option key={s} value={s}>{SQUADS.find(x => x.id === s)?.name ?? s}</option>)}
+          {mySquads.map(s => <option key={s} value={s}>{squads.find(x => x.id === s)?.name ?? s}</option>)}
         </select>
       </div>
 
       {/* Table */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, padding: '60px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>
+          Carregando lançamentos…
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, padding: '60px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>
           Nenhum lançamento para os filtros selecionados.
         </div>
       ) : (
-        Object.entries(bySquad).filter(([k]) => squadOrder.includes(k)).sort(([a], [b]) => squadOrder.indexOf(a) - squadOrder.indexOf(b)).map(([squadId, entries]) => {
-          const squadName = SQUADS.find(s => s.id === squadId)?.name ?? squadId
+        Object.entries(bySquad).map(([squadId, squadEntries]) => {
+          const squadName = squads.find(s => s.id === squadId)?.name ?? 'Sem squad'
           return (
             <div key={squadId} style={{ marginBottom: 20 }}>
-              {/* Squad header */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', marginBottom: 4 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 99, background: T.accent }} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: T.text2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{squadName}</span>
-                <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>{entries.length} lançamento{entries.length !== 1 ? 's' : ''}</span>
+                <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>{squadEntries.length} lançamento{squadEntries.length !== 1 ? 's' : ''}</span>
               </div>
 
               <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -299,7 +363,7 @@ export default function HoursApprovalPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {entries.map(entry => {
+                    {squadEntries.map(entry => {
                       const isChecked = selected.has(entry.id)
                       return (
                         <tr key={entry.id} style={{ borderBottom: `1px solid ${T.border}`, background: isChecked ? `${T.accent}09` : 'transparent', transition: 'background 0.1s' }}
@@ -321,20 +385,25 @@ export default function HoursApprovalPage() {
                           <td style={{ padding: '10px 12px', fontSize: 12, color: T.text2, whiteSpace: 'nowrap' }}>{fmtDate(entry.date)}</td>
                           <td style={{ padding: '10px 12px', fontSize: 11, color: T.text3, whiteSpace: 'nowrap' }}>{entry.project_name}</td>
                           <td style={{ padding: '10px 12px', fontSize: 12, color: T.text1 }}>
-                            <span style={{ fontFamily: 'monospace', fontSize: 11, color: T.accent, background: `${T.accent}12`, borderRadius: 4, padding: '1px 5px', marginRight: 4 }}>{entry.item_id}</span>
-                            <span style={{ color: T.text2 }}>{entry.item_label.split('·').slice(1).join('·').trim() || ''}</span>
+                            {entry.work_item_id ? (
+                              <button onClick={() => setDetailItemId(entry.work_item_id)}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>
+                                <span style={{ fontFamily: 'monospace', fontSize: 11, color: T.accent, background: `${T.accent}12`, borderRadius: 4, padding: '1px 5px', marginRight: 4 }}>{entry.item_key}</span>
+                                <span style={{ color: T.text2 }}>{entry.item_title}</span>
+                              </button>
+                            ) : <span style={{ color: T.text3 }}>—</span>}
                           </td>
                           <td style={{ padding: '10px 12px', fontSize: 13, fontWeight: 700, color: T.text1, whiteSpace: 'nowrap' }}>{entry.hours}h</td>
                           <td style={{ padding: '10px 12px', fontSize: 12, color: T.text2, maxWidth: 180 }}>
                             <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.description || '—'}</span>
-                            {entry.reject_reason && <span style={{ display: 'block', fontSize: 10, color: T.danger, marginTop: 2 }}>✕ {entry.reject_reason}</span>}
+                            {entry.reject_reason && <span style={{ display: 'block', fontSize: 10, color: T.crit, marginTop: 2 }}>✕ {entry.reject_reason}</span>}
                           </td>
                           <td style={{ padding: '10px 12px' }}><StatusBadge status={entry.status} /></td>
                           <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                             {entry.status === 'submitted' && (
                               <div style={{ display: 'flex', gap: 4 }}>
-                                <button onClick={() => handleApprove(entry.id)} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.success}18`, border: `1px solid ${T.success}44`, color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓</button>
-                                <button onClick={() => handleRejectOpen(entry.id)} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.danger}12`, border: `1px solid ${T.danger}44`, color: T.danger, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✕</button>
+                                <button onClick={() => { void runDecision([entry.id], 'approved') }} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.success}18`, border: `1px solid ${T.success}44`, color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓</button>
+                                <button onClick={() => { setRejectId(entry.id); setRejectTarget('single') }} style={{ padding: '4px 10px', borderRadius: 6, background: `${T.crit}12`, border: `1px solid ${T.crit}44`, color: T.crit, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✕</button>
                               </div>
                             )}
                           </td>
