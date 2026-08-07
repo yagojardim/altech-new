@@ -149,7 +149,7 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
   const _scope = getActiveScope()
   const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
@@ -263,7 +263,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer: openPmoDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
@@ -322,8 +322,8 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
 function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
-  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
+  const [selProj, setSelProj] = useProjSel()
+  const sprint14 = applyFilters(byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj), filters)
   const blocked  = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
@@ -399,7 +399,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 // ─── 4. PRODUCT MANAGER ──────────────────────────────────────────────────────
 function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
 
   const funnel = [
     { stage: 'Visitantes',   value: 12400, pct: 100 },
@@ -689,7 +689,7 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
 function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const alertItems = applyFilters(byProjects(getBacklogWithAlerts('proj_001'), selProj), filters)
   const readyItems = applyFilters(byProjects(getReadyItems('proj_001'), selProj), filters)
   const { openChart, chartModal } = useChartModal()
@@ -697,7 +697,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
 
   // Compute KPI values from real mock data (respecting selProj filter)
-  const sprint14Items   = byProjects(getSprintItems('Sprint 14'), selProj)
+  const sprint14Items   = byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj)
   const totalSprintPts  = sprint14Items.reduce((s, w) => s + (w.points ?? 0), 0) || 38
   const readyPts        = readyItems.reduce((s, w) => s + (w.points ?? 0), 0)
   const coverageReady   = totalSprintPts > 0 ? Math.round((readyPts / totalSprintPts) * 100) : 0
@@ -767,9 +767,9 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
-  const sprint14 = applyFilters(byProjects(getSprintItems('Sprint 14'), selProj), filters)
+  const sprint14 = applyFilters(byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj), filters)
   const parados = sprint14.filter(w => w.status === 'blocked' || (w.days_blocked ?? 0) >= 2)
 
   const aging = [
@@ -865,7 +865,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const inReview = applyFilters(
     byProjects(liveItems().filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
     filters
@@ -948,7 +948,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS()))
+  const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
   const mine = (w: WorkItem) => w.assignee?.name === activeUser.name
 
@@ -1009,7 +1009,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
 function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const designItems = applyFilters(
     byProjects(liveItems().filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
     filters
@@ -1083,7 +1083,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
 function QaPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(ALL_PROJ_IDS())
+  const [selProj, setSelProj] = useProjSel()
   const testing = applyFilters(byProjects(getTestingItems(), selProj), filters)
   const bugs    = applyFilters(byProjects(liveItems().filter(w => w.type === 'bug'), selProj), filters)
   const cobertura = [
@@ -1387,7 +1387,7 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
   const canAdd    = available.length > 0
 
   // Real sprint data for charts that support extra props
-  const sprintItems   = byProjects(getSprintItems('Sprint 14'), selProj ?? ALL_PROJ_IDS())
+  const sprintItems   = byProjects(getSprintItems(liveCurrentSprintName() ?? undefined), selProj ?? ALL_PROJ_IDS())
   const sprintPtTotal = sprintItems.reduce((s, w) => s + (w.points ?? 0), 0) || 38
   const sprintPtDone  = sprintItems.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
