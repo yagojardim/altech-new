@@ -372,11 +372,18 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
       </div>
 
       <Grid cols="1fr 1fr">
-        <RagCard name="Website Relaunch" squad="Growth · Sprint 14" rag="risk" pct={72} daysLabel="18d restantes" reason="Escopo +12% — replanejamento necessário" onClick={() => onNav('project')} />
+        {mainRag
+          ? <RagCard name={mainRag.name} squad={`${mainRag.squad}${sprintName ? ` · ${sprintName}` : ''}`} rag={mainRag.rag}
+              pct={mainRag.pct} daysLabel={mainRag.daysLabel} reason={mainRag.reason} onClick={() => onNav('project')} />
+          : <EmptyState message="Nenhum projeto no escopo selecionado." />}
 
-        <ProgressCard pct={67} label="Planejado × Concluído" velocity="Sprint 14 — 38pt concluídos" onClick={() => openChart('criados')} />
+        <ProgressCard pct={agg?.consolidatedPct ?? 0} label="Planejado × Concluído"
+          velocity={`${agg?.donePoints ?? 0}pt concluídos de ${agg?.plannedPoints ?? 0}pt`} onClick={() => openChart('criados')} />
 
-        <SprintDonutCard sprintName="Sprint 14" done={28} total={38} items={sprint14} onOpen={openDrawer} onViewSprint={() => onNav('project')} />
+        <SprintDonutCard sprintName={sprintSum?.name ?? sprintName ?? 'Sprint atual'}
+          done={sprintSum?.done ?? pmDone} total={sprintSum?.total ?? sprint14.length}
+          items={sprint14} onOpen={openDrawer} onViewSprint={() => onNav('project')} />
+
 
         <WorkQueue title="Bloqueadores & Riscos" items={blocked} onOpen={openDrawer}
           showDaysBlocked onViewAll={() => onNav('list')}
