@@ -1791,7 +1791,44 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                         <p className="text-[9px]" style={{ color: S.t3 }}>bloqueados</p>
                       </div>
                     )}
+                    {sprint.state !== 'completed' && (
+                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        {sprint.state === 'planned' ? (
+                          <button
+                            onClick={canManageSprint ? () => onStartSprint(sprint) : undefined}
+                            disabled={!canManageSprint}
+                            title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (sprint:manage)' : `Iniciar ${sprint.name}`}
+                            className="h-7 px-3 text-[11px] font-semibold rounded-lg transition-all"
+                            style={{
+                              background: canManageSprint ? DS.accent : S.surface2,
+                              color: canManageSprint ? '#fff' : S.t3,
+                              border: canManageSprint ? 'none' : `1px solid ${S.border}`,
+                              cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                              opacity: canManageSprint ? 1 : 0.6,
+                            }}
+                          >
+                            Iniciar Sprint
+                          </button>
+                        ) : (
+                          <button
+                            onClick={canManageSprint ? () => onCompleteSprint(sprint) : undefined}
+                            disabled={!canManageSprint}
+                            title={!canManageSprint ? 'Requer permissão: Gerenciar Sprint (sprint:manage)' : `Encerrar ${sprint.name}`}
+                            className="h-7 px-3 text-[11px] font-medium rounded-lg transition-colors"
+                            style={{
+                              border: `1px solid ${S.border}`,
+                              color: canManageSprint ? S.t2 : S.t3,
+                              cursor: canManageSprint ? 'pointer' : 'not-allowed',
+                              opacity: canManageSprint ? 1 : 0.5,
+                            }}
+                          >
+                            Encerrar
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
+
                 </div>
 
                 {sprint.state !== 'planned' && (
