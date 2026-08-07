@@ -312,8 +312,10 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
           emptyMsg="Nenhum bloqueador ativo. Boa sinal! 🟢" />
 
         <ColSpan>
-          <ProgressCard pct={67} label="Ritmo de Entrega — Portfólio" velocity="Velocity média: 38pt/sprint" onClick={() => onNav('reports')} />
+          <ProgressCard pct={agg?.consolidatedPct ?? 0} label="Ritmo de Entrega — Portfólio"
+            velocity={`Velocity média: ${agg?.velocityAvg ?? 0}pt/sprint`} onClick={() => onNav('reports')} />
         </ColSpan>
+
 
         <ColSpan>
           <ClientFeedCard tenantId={MOCK_TENANT.tenant_id} />
