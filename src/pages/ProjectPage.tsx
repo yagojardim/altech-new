@@ -319,7 +319,7 @@ function getCardTags(issue: Issue): CardTag[] {
 // ─── Iniciar Sprint modal ─────────────────────────────────────────────────────
 interface StartSprintModalProps {
   sprint: SprintDef
-  onConfirm: (id: string, goal: string) => void
+  onConfirm: (id: string, goal: string, name: string) => void
   onClose: () => void
 }
 
@@ -468,7 +468,7 @@ function StartSprintModal({ sprint, onConfirm, onClose }: StartSprintModalProps)
             Cancelar
           </button>
           <button
-            onClick={() => onConfirm(sprint.id, goal)}
+            onClick={() => onConfirm(sprint.id, goal, name)}
             className="h-8 px-4 text-[13px] font-semibold rounded-lg text-white transition-all"
             style={{ background: DS.accent }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.15)' }}
