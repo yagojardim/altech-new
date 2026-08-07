@@ -939,16 +939,19 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
-  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
+  const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS()))
+  const { activeUser } = useSession()
+  const mine = (w: WorkItem) => w.assignee?.name === activeUser.name
 
   const myItems = applyFilters(
-    byProjects(liveItems().filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'), selProj),
+    byProjects(liveItems().filter(mine), selProj),
     filters
   ).sort((a, b) => {
     const order: Record<string, number> = { blocked: 0, 'in-review': 1, 'in-progress': 2, testing: 3, todo: 4, backlog: 5 }
     return (order[a.status] ?? 9) - (order[b.status] ?? 9)
   })
-  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters).filter(w => w.assignee?.name === 'Lucas Ferreira')
+  const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters).filter(mine)
+
   const recent = [
     { label: 'Merge PR #280 (fix: ordenação)', date: 'há 4h',   color: T.success },
     { label: 'ALT-143 movida para Bloqueado',  date: 'há 1h',   color: T.crit },
