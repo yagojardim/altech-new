@@ -12,10 +12,10 @@ import {
   type BoardItemRow, type BoardData,
 } from '../data/db/board'
 import {
-import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
 } from '../data/db/sprints'
+import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
