@@ -1793,6 +1793,82 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
+  // ── Board (Kanban) — real data from Supabase ────────────────────────────
+  const [boardData, setBoardData]   = useState<BoardData | null>(null)
+  const [boardLoading, setBoardLoading] = useState(true)
+  const [boardError, setBoardError] = useState<string|null>(null)
+  const [dbIssues, setDbIssues]     = useState<Issue[]>([])
+
+  const applyBoardData = useCallback((data: BoardData) => {
+    const profileById = new Map(data.profiles.map(p => [p.id, p]))
+    const epicById    = new Map(data.epics.map(e => [e.id, e]))
+    setDbIssues(data.items.map<Issue>(it => mapDbItem(it, profileById, epicById)))
+  }, [])
+
+  const loadBoard = useCallback(async () => {
+    setBoardLoading(true); setBoardError(null)
+    try {
+      const data = await fetchBoardData()
+      setBoardData(data)
+      applyBoardData(data)
+    } catch (err) {
+      setBoardError(err instanceof Error ? err.message : 'Falha ao carregar o board')
+    } finally {
+      setBoardLoading(false)
+    }
+  }, [applyBoardData])
+
+  useEffect(() => { void loadBoard() }, [loadBoard])
+
+  const dbCols = useMemo<ColState[]>(() => (boardData?.columns ?? []).map(c => ({
+    id: c.id,
+    label: c.name,
+    statuses: c.statuses.length ? c.statuses : [c.category],
+    wip: c.wip_limit ?? undefined,
+    dot: columnColor(c),
+  })), [boardData])
+
+  const dbSprints = useMemo<SprintDef[]>(() => (boardData?.sprints ?? []).map(s => ({
+    id: s.id,
+    name: s.name,
+    goal: s.goal ?? undefined,
+    start: fmtDay(s.start_date),
+    end: fmtDay(s.end_date),
+    state: (s.state === 'active' || s.state === 'completed' ? s.state : 'planned') as SprintDef['state'],
+    velocity: s.velocity != null ? Number(s.velocity) : undefined,
+  })), [boardData])
+
+  function patchDbIssue(key: string, patch: Partial<Issue>) {
+    setDbIssues(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i))
+  }
+
+  async function moveCard(issue: Issue, colId: string) {
+    const column = boardData?.columns.find(c => c.id === colId)
+    if (!column || !issue.id) throw new Error('Coluna inválida')
+    await moveWorkItemToColumn(
+      { id: issue.id, status: issue.dbStatus ?? 'todo', board_column_id: issue.colId ?? null },
+      column,
+      activeUser.name,
+    )
+  }
+
+  async function quickCreateCard(title: string, colId: string, sprintId: string) {
+    const column = boardData?.columns.find(c => c.id === colId)
+    if (!boardData?.board || !column) throw new Error('Board indisponível')
+    const created = await createWorkItem({
+      projectId: boardData.board.project_id,
+      boardId: boardData.board.id,
+      column,
+      sprintId: sprintId || null,
+      title,
+    }, activeUser.name)
+    const profileById = new Map(boardData.profiles.map(p => [p.id, p]))
+    const epicById    = new Map(boardData.epics.map(e => [e.id, e]))
+    setDbIssues(prev => [mapDbItem(created, profileById, epicById), ...prev])
+    setBoardData(prev => prev ? { ...prev, items: [created, ...prev.items] } : prev)
+  }
+
+
   const { activeUser }    = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
 
