@@ -91,7 +91,13 @@ const SQUADS = [
   { id: 'squad_platform', name: 'Platform' },
   { id: 'squad_design',   name: 'Design' },
 ]
-const SPRINTS = ['Sprint 14', 'Sprint 15']
+/** Sprint filter options come from the sprints in scope. */
+const SPRINTS = () => {
+  const names = new Set<string>()
+  liveItems().forEach(w => { if (w.sprint) names.add(w.sprint) })
+  return [...names]
+}
+
 
 // ─── Panel grid wrapper ───────────────────────────────────────────────────────
 function Grid({ cols = '1fr 1fr', children }: { cols?: string; children: ReactNode }) {
