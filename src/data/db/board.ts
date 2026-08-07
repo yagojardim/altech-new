@@ -152,8 +152,8 @@ async function writeAudit(
   entityId: string,
   action: string,
   actorName: string,
-  before: Record<string, unknown>,
-  after: Record<string, unknown>,
+  before: Record<string, string | number | boolean | null>,
+  after: Record<string, string | number | boolean | null>,
 ) {
   await supabase.from('audit_logs').insert({
     tenant_id: DEFAULT_TENANT_ID,
