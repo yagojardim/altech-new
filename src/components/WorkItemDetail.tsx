@@ -744,8 +744,15 @@ function toWorkItemData(d: WorkItemDetailData): WorkItemData {
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
-export function WorkItemDetail({ data, itemId, onUpdate, onClose, mode = 'drawer' }: {
-  data:      WorkItemData
+/** Placeholder used while an itemId-driven panel loads its real row. */
+const EMPTY_WORK_ITEM: WorkItemData = {
+  key: '', type: 'task', title: '', status: 'backlog', priority: 'medium',
+  labels: [], assigneeInitials: '',
+}
+
+export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode = 'drawer' }: {
+  /** Optional when itemId is given — the row is then loaded from Supabase. */
+  data?:     WorkItemData
   /** When provided, the panel reads and persists the real Supabase row. */
   itemId?:   string
   onUpdate:  (updated: WorkItemData) => void
@@ -754,6 +761,7 @@ export function WorkItemDetail({ data, itemId, onUpdate, onClose, mode = 'drawer
 }) {
   const { activeUser } = useSession()
   const canEdit = can(activeUser.permissions, 'edit:workitem')
+  const data = dataProp ?? EMPTY_WORK_ITEM
 
   // ── Local state (all mutable fields) ────────────────────────────────────────
   const [local,       setLocal]      = useState<WorkItemData>(data)
