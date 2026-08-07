@@ -6,7 +6,7 @@
 // access goes through a small untyped shim while the rows stay strongly typed here.
 import { supabase } from '../../integrations/supabase/client'
 import { DEFAULT_TENANT_ID } from './timeline'
-import { safeCall } from '../../utils/logger'
+import { safeCall, logger } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID }
 
