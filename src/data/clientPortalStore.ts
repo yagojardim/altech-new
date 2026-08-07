@@ -115,6 +115,70 @@ function toAccess(row: api.ClientPortalUserRow): ClientAccessRecord {
 let hydrated = false
 let inflight: Promise<void> | null = null
 
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+function fmtShort(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${d.getDate()} ${MONTHS[d.getMonth()]}`
+}
+function fmtMonth(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  return `${MONTHS[d.getMonth()]} ${d.getFullYear()}`
+}
+
+/** Turns per-project client-safe scopes into the flat shape the portal renders. */
+function buildScope(scopes: api.ClientPortalScope[]): PortalScope {
+  const projects: ScopeProject[] = []
+  const sprints: ScopeSprint[] = []
+  const deliveries: ScopeDelivery[] = []
+  const roadmap: ScopeMilestone[] = []
+
+  for (const sc of scopes) {
+    if (!sc.project) continue
+    const name = sc.project.name
+    const done = sc.deliveries.filter(d => d.status === 'done').length
+    const progress = sc.deliveries.length ? Math.round((done / sc.deliveries.length) * 100) : 0
+    const active = sc.sprints.find(s => s.state === 'active') ?? sc.sprints[sc.sprints.length - 1]
+    const late = sc.deliveries.some(
+      d => d.status !== 'done' && d.due_date !== null && new Date(d.due_date) < new Date(),
+    )
+    projects.push({
+      id: sc.project.id,
+      name,
+      progress,
+      sprint: active?.name ?? 'Sem sprint ativa',
+      sprintPct: progress,
+      status: late ? 'at-risk' : 'on-track',
+    })
+    if (active) {
+      sprints.push({
+        name: `${active.name} — ${name}`,
+        pct: progress,
+        status: late ? 'at-risk' : 'on-track',
+        ends: fmtShort(active.end_date),
+      })
+    }
+    for (const d of sc.deliveries) {
+      deliveries.push({
+        id: d.id, title: d.title, status: d.status, project: name,
+        date: fmtShort(d.completed_at ?? d.due_date),
+      })
+    }
+    for (const r of sc.roadmap) {
+      roadmap.push({
+        id: r.id,
+        date: r.quarter ?? fmtMonth(sc.project.period_end),
+        title: r.name,
+        desc: `${name} · ${r.done}/${r.total} entregas concluídas`,
+        status: r.total > 0 && r.done === r.total ? 'done' : 'upcoming',
+      })
+    }
+  }
+  return { projects, sprints, deliveries, roadmap }
+}
+
+
 export async function refreshPortal(): Promise<void> {
   if (inflight) return inflight
   state = { ...state, loading: true }
