@@ -6,7 +6,22 @@ import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
-import { DashboardIcon, ProjectsIcon, DiscoveryIcon, BacklogIcon, RoadmapIcon, ReportsAltIcon, AdminIcon, EpicIcon } from './ds/AltechIcons'
+import {
+  DashboardIcon as AltechDashboard, ProjectsIcon as AltechProjects, DiscoveryIcon as AltechDiscovery,
+  BacklogIcon as AltechBacklog, RoadmapIcon as AltechRoadmap, ReportsAltIcon as AltechReports,
+  AdminIcon as AltechAdmin, EpicIcon as AltechEpic,
+} from './ds/AltechIcons'
+
+// Sidebar renders icons at 14px; the Altech library is drawn on a 24x24 grid.
+const NAV_ICON_SIZE = 14
+const DashboardIcon  = () => <AltechDashboard size={NAV_ICON_SIZE} />
+const ProjectsIcon   = () => <AltechProjects size={NAV_ICON_SIZE} />
+const DiscoveryIcon  = () => <AltechDiscovery size={NAV_ICON_SIZE} />
+const BacklogIcon    = () => <AltechBacklog size={NAV_ICON_SIZE} />
+const RoadmapIcon    = () => <AltechRoadmap size={NAV_ICON_SIZE} />
+const ReportsAltIcon = () => <AltechReports size={NAV_ICON_SIZE} />
+const AdminIcon      = () => <AltechAdmin size={NAV_ICON_SIZE} />
+const EpicIcon       = () => <AltechEpic size={NAV_ICON_SIZE} />
 
 interface SidebarProps {
   collapsed: boolean
