@@ -1451,6 +1451,8 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
       item_id: `portal-chat-${Date.now()}`,
       item_title: 'Chat geral do projeto',
       responsible_po: 'u_po',
+      created_at: new Date().toISOString(),
+      read_by_po: false,
     })
     setDraft('')
     setTick(t => t + 1)
