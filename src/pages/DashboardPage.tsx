@@ -66,7 +66,7 @@ function blockerToWID(b: Blocker, p: HealthProject | undefined): WorkItemData {
     assigneeInitials:b.owner.split(' ').slice(0,2).map(s=>s[0]).join('').toUpperCase(),
     assigneeName:    b.owner,
     blocked:         b.level === 'blocked',
-    blockedReason:   b.reason ?? `Bloqueado há ${b.days}d`,
+    blockedReason:   (b as { reason?: string }).reason ?? `Bloqueado há ${b.days}d`,
     description:     `Impedimento ativo no projeto ${p?.name ?? ''}. Responsável: ${b.owner}. Em aberto há ${b.days} dia(s).`,
     comments: [], history: [],
   }

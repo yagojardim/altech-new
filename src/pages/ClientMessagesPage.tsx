@@ -392,7 +392,7 @@ export default function ClientMessagesPage() {
   )
 
   const authorName     = activeUser?.name ?? 'Equipe Altech'
-  const authorInitials = activeUser?.initials ?? 'EA'
+  const authorInitials = (activeUser?.name ?? 'Equipe Altech').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase()
 
   // Auto-select first project if none selected
   useEffect(() => {
