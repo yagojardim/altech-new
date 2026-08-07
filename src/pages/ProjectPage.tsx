@@ -1690,6 +1690,11 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
+  canManageSprint: boolean
+  loading: boolean
+  error: string | null
+  onStartSprint: (sprint: SprintDef) => void
+  onCompleteSprint: (sprint: SprintDef) => void
 }) {
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
