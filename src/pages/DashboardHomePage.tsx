@@ -1166,6 +1166,21 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
 
 // ─── Panel dispatcher ────────────────────────────────────────────────────────
 function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNav: (v: string) => void; onInvite?: () => void }) {
+  // Subscribes every panel below to the shared Supabase aggregate store.
+  const { data, loading, error, reload } = useLiveDashboard()
+
+  if (error) {
+    return (
+      <div style={{ padding: 20, borderRadius: 10, background: `${T.crit}14`, border: `1px solid ${T.crit}44`, color: T.crit, fontSize: 13, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flex: 1 }}>{error}</span>
+        <button onClick={reload} style={{ fontSize: 12, color: T.crit, background: 'none', border: `1px solid ${T.crit}55`, borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}>
+          Tentar novamente
+        </button>
+      </div>
+    )
+  }
+  if (!data && loading) return <LoadingState rows={5} />
+
   switch (type) {
     case 'admin':           return <AdminPanel          onNav={onNav} onInvite={onInvite} />
     case 'pmo':             return <PmoPanel            onNav={onNav} />
@@ -1179,6 +1194,7 @@ function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNa
     case 'qa':              return <QaPanel             onNav={onNav} />
   }
 }
+
 
 // ─── Add Card Modal (reports + hidden native cards) ───────────────────────────
 function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNative, onClose, mode = 'mural' }: {
