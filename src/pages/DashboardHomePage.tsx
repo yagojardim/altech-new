@@ -273,19 +273,17 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
   const blocked = applyFilters(byProjects(getBlockedItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
-  const rags: { name: string; squad: string; rag: RagStatus; pct: number; days: string; reason?: string }[] = [
-    { name: 'Website Relaunch', squad: 'Growth',   rag: 'healthy', pct: 68, days: '42d restantes' },
-    { name: 'ERP Corporativo',  squad: 'Platform', rag: 'risk',    pct: 41, days: '18d restantes', reason: 'Aprovação de design atrasada 4d' },
-    { name: 'Infra Migration',  squad: 'Platform', rag: 'blocked', pct: 22, days: '5d restantes',  reason: 'Credenciais de prod ausentes' },
-    { name: 'Mobile App v2',    squad: 'Growth',   rag: 'healthy', pct: 85, days: '60d restantes' },
-  ]
+  const agg  = liveAggregates()
+  const rags = (agg?.rag ?? []).filter(r => selProj.size === 0 || selProj.has(r.id))
+  const c    = agg?.counts
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'pmo:projects', value: '4', label: 'Projetos Ativos', sub: '2 no prazo', disclaimer: 'projetos com sprint ativa ou em andamento', miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:4},{label:'S12',value:4},{label:'S13',value:4,current:true}]} showAvg={false} />, onClick: () => onNav('projects-list') },
-    { id: 'pmo:risk', value: '2', label: 'Em Risco / Atrasados', sub: '1 crítico', disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:1},{value:2},{value:3},{value:2},{value:1},{label:'S13',value:2}]} color="#f5a524" />, onClick: () => onNav('reports') },
-    { id: 'pmo:predictability', value: '71%', label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', miniViz: <MiniBarChart data={[{label:'S8',value:18},{label:'S9',value:22},{label:'S10',value:19},{label:'S11',value:25},{label:'S12',value:21},{label:'S13',value:22,current:true}]} />, onClick: () => openChart('velocity') },
-    { id: 'pmo:delivery', value: '67%', label: 'Planejado × Concluído', sub: 'Q2 2025', disclaimer: 'comparativo de entrega vs. compromisso da sprint', miniViz: <MiniBarChart data={[{label:'S8',value:62},{label:'S9',value:65},{label:'S10',value:71},{label:'S11',value:68},{label:'S12',value:70},{label:'S13',value:67,current:true}]} />, onClick: () => openChart('criados') },
+    { id: 'pmo:projects', value: String(c?.activeProjects ?? 0), label: 'Projetos Ativos', sub: `${rags.filter(r => r.rag === 'healthy').length} no prazo`, disclaimer: 'projetos ativos no tenant', onClick: () => onNav('projects-list') },
+    { id: 'pmo:risk', value: String(c?.atRisk ?? 0), label: 'Em Risco / Atrasados', sub: `${rags.filter(r => r.rag === 'blocked').length} crítico(s)`, disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: (c?.atRisk ?? 0) > 0, onClick: () => onNav('reports') },
+    { id: 'pmo:predictability', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', onClick: () => openChart('velocity') },
+    { id: 'pmo:delivery', value: `${agg?.consolidatedPct ?? 0}%`, label: 'Planejado × Concluído', sub: `${agg?.done ?? 0}/${agg?.planned ?? 0} itens`, disclaimer: 'itens concluídos sobre o total planejado', onClick: () => openChart('criados') },
   ]
+
 
   return (
     <>
