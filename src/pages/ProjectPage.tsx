@@ -803,6 +803,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
   function openComposer(colId: string) {
     setComposerCol(colId); setComposerText(''); setMenuColId(null)
   }
+  void openComposer
   function submitComposer(col: ColState) {
     const title = composerText.trim()
     if (!title) { setComposerCol(null); return }

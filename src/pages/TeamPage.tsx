@@ -324,7 +324,7 @@ function EditUserModal({
               </p>
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                 {(Object.entries(PERMISSION_MATRIX) as [Capability, typeof PERMISSION_MATRIX[Capability]][]).map(([cap, rule])=>{
-                  const vis = capabilityVisibility(draft.role, cap)
+                  const vis: unknown = capabilityVisibility(draft.role, cap)
                   const isOptIn = rule.optIn.includes(draft.role)
                   const isGranted = draft.optIns.includes(cap)
                   const isDefault = rule.default.includes(draft.role)
