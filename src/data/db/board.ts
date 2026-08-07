@@ -82,7 +82,7 @@ function missingTableMessage(table: string, message: string): string {
  * Loads everything the Kanban needs. When `projectId` is omitted the first
  * active board of the tenant is used.
  */
-export async function fetchBoardData(projectId?: string, boardId?: string): Promise<BoardData> {
+export async function fetchBoardData(projectId?: string, boardId?: string, boardName?: string): Promise<BoardData> {
   const tid = DEFAULT_TENANT_ID
 
   let boardsQuery = supabase
@@ -97,7 +97,10 @@ export async function fetchBoardData(projectId?: string, boardId?: string): Prom
   if (boardsRes.error) throw new Error(missingTableMessage('boards', boardsRes.error.message))
 
   const boards = boardsRes.data ?? []
-  const board = (boardId ? boards.find(b => b.id === boardId) : undefined) ?? boards[0] ?? null
+  const board =
+    (boardId ? boards.find(b => b.id === boardId) : undefined) ??
+    (boardName ? boards.find(b => b.name.toLowerCase() === boardName.toLowerCase()) : undefined) ??
+    boards[0] ?? null
 
   if (!board) {
     return { board: null, boards, columns: [], items: [], sprints: [], epics: [], profiles: [] }

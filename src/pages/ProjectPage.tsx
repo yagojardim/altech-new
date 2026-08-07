@@ -843,7 +843,7 @@ function BoardTab({
     if (next) setActiveSprint(next.id)
   }, [activeSprints]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sprintIssues = issues.filter(i => i.sprint === activeSprint)
+  const sprintIssues = activeSprint ? issues.filter(i => i.sprint === activeSprint) : issues
   const filtered = sprintIssues.filter(i => {
     if (filterAssignees.length && !filterAssignees.includes(i.assignee)) return false
     if (filterPriority.length && !filterPriority.includes(i.priority)) return false
@@ -1887,7 +1887,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const loadBoard = useCallback(async () => {
     setBoardLoading(true); setBoardError(null)
     try {
-      const data = await fetchBoardData()
+      const data = await fetchBoardData(undefined, undefined, boardDef?.name)
       setBoardData(data)
       applyBoardData(data)
     } catch (err) {
@@ -1898,6 +1898,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   }, [applyBoardData])
 
   useEffect(() => { void loadBoard() }, [loadBoard])
+
 
   const dbCols = useMemo<ColState[]>(() => (boardData?.columns ?? []).map(c => ({
     id: c.id,
