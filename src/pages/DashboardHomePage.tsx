@@ -520,7 +520,9 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
   void tick
 
   const signals = poId ? getAllForPo(poId, tenantId) : getSignalsForTenant(tenantId)
-  const unread  = poId ? getUnreadForPo(poId, tenantId) : signals.filter(s => !s.read_by_po)
+  // Home cards only surface pending client messages (read_by_po = false).
+  const unread  = (poId ? getUnreadForPo(poId, tenantId) : signals.filter(s => !s.read_by_po))
+    .filter(s => s.source !== 'management')
   const canReply = true  // any authorized manager can reply
 
   function handleMarkAllRead() {
@@ -530,7 +532,6 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
   }
 
   function handleRowClick(s: ClientSignal) {
-    markReadByPo(s.id)
     setTick(t => t + 1)
     if (openReply === s.id) {
       setOpenReply(null)
@@ -584,11 +585,11 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
           </div>
         ) : undefined}
       >
-        {signals.length === 0 ? (
-          <p style={{ fontSize:12, color:T.text3, textAlign:'center', padding:'12px 0' }}>Nenhuma mensagem do cliente.</p>
+        {unread.length === 0 ? (
+          <p style={{ fontSize:12, color:T.text3, textAlign:'center', padding:'12px 0' }}>Nenhuma mensagem do cliente pendente.</p>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-            {signals.slice(0, 5).map(s => (
+            {unread.slice(0, 5).map(s => (
               <div key={s.id}>
                 {/* Signal row */}
                 <div

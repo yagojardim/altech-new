@@ -362,6 +362,8 @@ export function writePortalAccess(input: {
     portalRole: input.permission === 'admin' ? 'portal-admin' : 'viewer',
     canApprove: input.canApprove,
     canPreview: input.canPreview,
+    // viewer = read-only: no comments; portal-admin can always comment.
+    canComment: input.permission === 'admin',
     actorName: input.actorName,
   }).then(() => refreshPortal()).catch(() => refreshPortal())
 }
