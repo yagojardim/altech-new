@@ -1187,7 +1187,8 @@ function BoardTab({
                   style={{ background:isCardOver?`${DS.accent}10`:'transparent', border:isCardOver?`1.5px dashed ${DS.accent}`:'1.5px dashed transparent', minHeight:80 }}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(col.id) }}
                   onDragLeave={()=>setDragOver(null)}
-                  onDrop={()=>{ void handleCardDrop(col) }}>
+                  onDrop={()=>{ void handleCardDrop(col) }}
+                  data-testid={`col-${col.id}`}>
 
                   {/* ── Inline mini-card composer ────────────────────── */}
                   {composerCol === col.id && (
