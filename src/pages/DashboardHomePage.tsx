@@ -69,10 +69,22 @@ function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange
 const PROJECTS = () => liveProjects()
 const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
 
+/** Selection defaults to "all projects" and re-syncs once the data lands. */
+function useProjSel(): [Set<string>, (s: Set<string>) => void] {
+  const [sel, setSel] = useState<Set<string>>(() => ALL_PROJ_IDS())
+  const count = liveProjects().length
+  useEffect(() => {
+    if (sel.size === 0 && count > 0) setSel(ALL_PROJ_IDS())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [count])
+  return [sel, setSel]
+}
+
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
   if (sel.size === 0 || sel.size >= liveProjects().length) return items
   return items.filter(w => sel.has(w.project_id ?? ''))
 }
+
 
 const SQUADS = [
   { id: 'squad_growth',   name: 'Growth' },
