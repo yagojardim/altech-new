@@ -1464,6 +1464,14 @@ function ClientChatPanel({ onToast }: { onToast: (msg: string) => void }) {
     else grouped.push({ day, bubbles: [b] })
   }
 
+  if (!project) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-xs" style={{ color: C.txt3 }}>Nenhum projeto compartilhado com você ainda.</p>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left: project list */}
