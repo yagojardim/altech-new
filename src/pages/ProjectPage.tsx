@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { T as DS } from '../components/ds/tokens'
 import { getBoardById } from '../data/boards'
 import { CreateIssueModal } from '../components/CreateIssueModal'
@@ -6,6 +6,12 @@ import { CompleteSprintModal } from '../components/CompleteSprintModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
+import {
+  fetchBoardData, moveWorkItemToColumn, createWorkItem, columnColor,
+  PRIORITY_FROM_DB,
+  type BoardItemRow, type BoardData,
+} from '../data/db/board'
+
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
 // RULE 1: "planejado não é sobrescrito" — planned sprint data is immutable until explicitly started
@@ -20,7 +26,14 @@ type Priority    = 'critical' | 'high' | 'medium' | 'low'
 interface IssueComment { author: string; text: string; when: string }
 
 interface Issue {
+  /** Supabase work_items.id — present for DB-backed cards (Board). */
+  id?:      string
+  /** Supabase board_columns.id the card currently sits in. */
+  colId?:   string
+  /** Raw DB status (snake_case), kept for persistence/audit. */
+  dbStatus?: string
   key:      string
+
   type:     IssueType
   title:    string
   status:   IssueStatus
@@ -699,39 +712,95 @@ type SwimlaneMode = 'none' | 'assignee' | 'epic'
 // • Remover/remapear nunca faz issue sumir — cai em "Não mapeados".
 // • Editar colunas (renomear/remover/reordenar) requer permissão Admin.
 
+let _issueSeq = 200
+
+/** dd/mm from an ISO date. */
+function fmtDay(iso: string | null): string {
+  if (!iso) return '—'
+  const [, m, d] = iso.split('-')
+  return `${d}/${m}`
+}
+
+/** Maps a Supabase work_item row into the Issue shape the board components render. */
+function mapDbItem(
+  it: BoardItemRow,
+  profileById: Map<string, { name: string; avatar_initials: string | null }>,
+  epicById: Map<string, { name: string; color: string | null }>,
+): Issue {
+  const assignee = it.assignee_id ? profileById.get(it.assignee_id) : undefined
+  const reporter = it.reporter_id ? profileById.get(it.reporter_id) : undefined
+  const epic     = it.epic_id ? epicById.get(it.epic_id) : undefined
+  const initials = assignee?.avatar_initials
+    ?? assignee?.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+    ?? ''
+  return {
+    id:       it.id,
+    colId:    it.board_column_id ?? undefined,
+    dbStatus: it.status,
+    key:      it.key,
+    type:     (['story','bug','task','subtask','epic','feature'].includes(it.type) ? it.type : 'task') as IssueType,
+    title:    it.title,
+    status:   uiStatus(it.status),
+    priority: PRIORITY_FROM_DB[(it.priority ?? '').toLowerCase()] ?? 'medium',
+    labels:   [],
+    assignee: initials,
+    dueDate:  it.due_date ? fmtDay(it.due_date) : '',
+    points:   it.story_points != null ? Number(it.story_points) : 0,
+    epic:     epic?.name,
+    sprint:   it.sprint_id ?? undefined,
+    blocked:  it.is_blocked,
+    blocked_reason: it.blocked_reason ?? undefined,
+    description: it.description ?? undefined,
+    reporter: reporter?.avatar_initials ?? undefined,
+  }
+}
+
 interface ColState {
   id:       string
   label:    string
-  statuses: IssueStatus[]
+  statuses: string[]
   wip?:     number
   dot:      string
 }
 
-const INITIAL_COLS: ColState[] = [
-  { id:'backlog', label:'Backlog',      statuses:['backlog'],     dot:DS.text3  },
-  { id:'todo',    label:'A Fazer',      statuses:['todo'],        dot:DS.text2, wip:5 },
-  { id:'doing',   label:'Em andamento', statuses:['in-progress'], dot:DS.accent, wip:4 },
-  { id:'review',  label:'Em revisão',   statuses:['in-review'],   dot:DS.warn,  wip:3 },
-  { id:'done',    label:'Concluído',    statuses:['done'],        dot:DS.success },
-]
+/** DB status (snake_case) → UI status used by the card components. */
+function uiStatus(dbStatus: string): IssueStatus {
+  switch (dbStatus) {
+    case 'in_progress': return 'in-progress'
+    case 'in_review':   return 'in-review'
+    case 'blocked':     return 'in-progress'
+    case 'done':        return 'done'
+    case 'todo':        return 'todo'
+    default:            return 'backlog'
+  }
+}
 
-let _issueSeq = 200
-
-function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onCompleteSprint, canManageSprint, activeSprints }: {
+function BoardTab({
+  issues, onCreateIssue, onCompleteSprint, canManageSprint, activeSprints,
+  dbCols, loading, error, onMoveCard, onQuickCreate, onLocalPatch,
+}: {
   issues: Issue[]
-  setIssues: (fn: (prev: Issue[]) => Issue[]) => void
   onCreateIssue: () => void
-  onCreateIssueInCol: (colStatus: string, sprintId: string) => void
   onCompleteSprint: (s: SprintDef) => void
   canManageSprint: boolean
   activeSprints: SprintDef[]
+  dbCols: ColState[]
+  loading: boolean
+  error: string | null
+  onMoveCard: (issue: Issue, colId: string) => Promise<void>
+  onQuickCreate: (title: string, colId: string, sprintId: string) => Promise<void>
+  onLocalPatch: (key: string, patch: Partial<Issue>) => void
 }) {
   const { activeUser: boardUser } = useSession()
   const canDrag = can(boardUser.permissions, 'board:manage')
 
-  // ── column config state ──────────────────────────────────────────────────
-  const [cols, setCols]             = useState<ColState[]>(INITIAL_COLS)
-  const [colOrder, setColOrder]     = useState<string[]>(INITIAL_COLS.map(c=>c.id))
+  // ── column config state (hydrated from board_columns) ────────────────────
+  const [cols, setCols]             = useState<ColState[]>(dbCols)
+  const [colOrder, setColOrder]     = useState<string[]>(dbCols.map(c=>c.id))
+  useEffect(() => {
+    setCols(dbCols)
+    setColOrder(dbCols.map(c => c.id))
+  }, [dbCols])
   // drag-to-reorder columns
   const [draggingCol, setDraggingCol]   = useState<string|null>(null)
   const [dragOverColHeader, setDragOverColHeader] = useState<string|null>(null)
@@ -741,6 +810,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
   // inline card composer per column
   const [composerCol,  setComposerCol]  = useState<string|null>(null)
   const [composerText, setComposerText] = useState('')
+  const [composerBusy, setComposerBusy] = useState(false)
   // inline column rename
   const [editingColId, setEditingColId] = useState<string|null>(null)
   const [editingColLabel, setEditingColLabel] = useState('')
@@ -753,14 +823,27 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
   const [wipValue,  setWipValue]        = useState('')
   // issue detail drawer
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
+  // transient feedback
+  const [boardToast, setBoardToast] = useState<string|null>(null)
+  function flashToast(msg: string) {
+    setBoardToast(msg)
+    setTimeout(() => setBoardToast(null), 4000)
+  }
   // filters
-  const [activeSprint, setActiveSprint] = useState('s14')
+  const [activeSprint, setActiveSprint] = useState('')
   const [swimlane, setSwimlane]     = useState<SwimlaneMode>('none')
   const [filterAssignees, setFilterA] = useState<string[]>([])
   const [filterPriority, setFilterP]  = useState<Priority[]>([])
   const [filterType, setFilterType]   = useState<IssueType[]>([])
 
-  const sprintIssues = issues.filter(i => i.sprint === activeSprint)
+  const selectableSprints = activeSprints.filter(s => s.state !== 'completed')
+  useEffect(() => {
+    if (activeSprint && selectableSprints.some(s => s.id === activeSprint)) return
+    const next = selectableSprints.find(s => s.state === 'active') ?? selectableSprints[0]
+    if (next) setActiveSprint(next.id)
+  }, [activeSprints]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sprintIssues = activeSprint ? issues.filter(i => i.sprint === activeSprint) : issues
   const filtered = sprintIssues.filter(i => {
     if (filterAssignees.length && !filterAssignees.includes(i.assignee)) return false
     if (filterPriority.length && !filterPriority.includes(i.priority)) return false
@@ -769,20 +852,35 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
   })
 
   const orderedCols = colOrder.map(id => cols.find(c=>c.id===id)!).filter(Boolean)
+  const colIds = new Set(orderedCols.map(c => c.id))
   const mappedStatuses = new Set(orderedCols.flatMap(c=>c.statuses))
-  const hasUnmapped = filtered.some(i => !mappedStatuses.has(i.status))
+  const hasUnmapped = filtered.some(i => (i.colId ? !colIds.has(i.colId) : !mappedStatuses.has(i.status)))
 
   function getColIssues(col: ColState) {
-    if (col.id === 'unmapped') return filtered.filter(i => !mappedStatuses.has(i.status))
-    return filtered.filter(i => col.statuses.includes(i.status))
+    if (col.id === 'unmapped') {
+      return filtered.filter(i => (i.colId ? !colIds.has(i.colId) : !mappedStatuses.has(i.status)))
+    }
+    return filtered.filter(i => (i.colId ? i.colId === col.id : col.statuses.includes(i.status)))
   }
 
-  // ── card drag ───────────────────────────────────────────────────────────
-  function handleCardDrop(col: ColState) {
-    if (!draggingCard) return
-    const newStatus = col.statuses[0] ?? ('todo' as IssueStatus)
-    setIssues(prev => prev.map(i => i.key === draggingCard ? { ...i, status: newStatus } : i))
+  // ── card drag (persisted in Supabase, reverted on failure) ───────────────
+  async function handleCardDrop(col: ColState) {
+    const key = draggingCard
     setDraggingCard(null); setDragOver(null)
+    if (!key || col.id === 'unmapped') return
+    const issue = issues.find(i => i.key === key)
+    if (!issue || issue.colId === col.id) return
+
+    const previous: Partial<Issue> = { colId: issue.colId, status: issue.status, dbStatus: issue.dbStatus }
+    const nextDbStatus = col.statuses.includes(issue.dbStatus ?? '') ? issue.dbStatus! : (col.statuses[0] ?? 'todo')
+    // optimistic
+    onLocalPatch(key, { colId: col.id, dbStatus: nextDbStatus, status: uiStatus(nextDbStatus) })
+    try {
+      await onMoveCard(issue, col.id)
+    } catch (err) {
+      onLocalPatch(key, previous)
+      flashToast(`Não foi possível mover ${key}: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
   }
 
   // ── column reorder drag ──────────────────────────────────────────────────
@@ -799,22 +897,24 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
     setDraggingCol(null); setDragOverColHeader(null)
   }
 
-  // ── inline quick-create ──────────────────────────────────────────────────
+  // ── inline quick-create (insert real work_item) ──────────────────────────
   function openComposer(colId: string) {
     setComposerCol(colId); setComposerText(''); setMenuColId(null)
   }
-  void openComposer
-  function submitComposer(col: ColState) {
+  async function submitComposer(col: ColState) {
     const title = composerText.trim()
     if (!title) { setComposerCol(null); return }
-    const newStatus = col.statuses[0] ?? ('todo' as IssueStatus)
-    const newIssue: Issue = {
-      key: `PM-${++_issueSeq}`, type:'story', title, status: newStatus,
-      priority:'medium', labels:[], assignee:'AL', dueDate:'', points:0, sprint:'s14',
+    setComposerBusy(true)
+    try {
+      await onQuickCreate(title, col.id, activeSprint)
+      setComposerText('')
+    } catch (err) {
+      flashToast(`Falha ao criar issue: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    } finally {
+      setComposerBusy(false)
     }
-    setIssues(prev => [newIssue, ...prev])
-    setComposerText('')
     // keep composer open for chaining — user hits Esc to close
+
   }
 
   // ── column rename ────────────────────────────────────────────────────────
@@ -875,7 +975,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
         <select value={activeSprint} onChange={e=>setActiveSprint(e.target.value)}
           className="h-7 px-2 text-[11px] rounded-lg border outline-none appearance-none pr-5 font-[inherit]"
           style={{ background:S.surface2, border:`1px solid ${S.border}`, color:DS.accent }}>
-          {SPRINTS.filter(s=>s.state!=='completed').map(s=>(
+          {selectableSprints.map(s=>(
             <option key={s.id} value={s.id} style={{ background:S.surface2 }}>{s.name} {s.state==='active'?'▶':''}</option>
           ))}
         </select>
@@ -941,6 +1041,33 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
         </div>
       </div>
 
+      {/* ── Loading / error / empty ────────────────────────────────────────── */}
+      {loading ? (
+        <div className="flex-1 overflow-hidden">
+          <div className="flex gap-3 p-4">
+            {[0,1,2,3,4].map(i=>(
+              <div key={i} className="flex flex-col gap-2 flex-shrink-0" style={{ width:212 }}>
+                <div style={{ height:14, width:'55%', borderRadius:6, background:S.surface2 }}/>
+                {[0,1,2].map(j=>(
+                  <div key={j} style={{ height:64, borderRadius:10, background:S.surface, border:`1px solid ${S.border}`, opacity:1-j*0.22 }}/>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : error ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div style={{ maxWidth:460, textAlign:'center' }}>
+            <p style={{ fontSize:13, fontWeight:700, color:DS.crit, marginBottom:6 }}>Não foi possível carregar o board</p>
+            <p style={{ fontSize:12, color:S.t3 }}>{error}</p>
+          </div>
+        </div>
+      ) : orderedCols.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <p style={{ fontSize:12, color:S.t3 }}>Nenhuma coluna configurada para este board.</p>
+        </div>
+      ) : (
+      <>
       {/* ── Board area ─────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-auto">
         <div className="flex gap-3 p-4 h-full" style={{ minWidth: visibleCols.length*224+80 }}>
@@ -1008,7 +1135,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
                     <div className="flex items-center gap-0.5 flex-shrink-0 ml-1">
                       {/* Quick "+" — opens CreateIssueModal pre-filled with column status */}
                       <button
-                        onClick={e=>{ e.stopPropagation(); onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint) }}
+                        onClick={e=>{ e.stopPropagation(); openComposer(col.id) }}
                         title="Criar issue nesta coluna"
                         className="w-5 h-5 flex items-center justify-center rounded transition-colors text-[15px] leading-none"
                         style={{ color:S.t3 }}
@@ -1060,7 +1187,8 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
                   style={{ background:isCardOver?`${DS.accent}10`:'transparent', border:isCardOver?`1.5px dashed ${DS.accent}`:'1.5px dashed transparent', minHeight:80 }}
                   onDragOver={e=>{ e.preventDefault(); setDragOver(col.id) }}
                   onDragLeave={()=>setDragOver(null)}
-                  onDrop={()=>handleCardDrop(col)}>
+                  onDrop={()=>{ void handleCardDrop(col) }}
+                  data-testid={`col-${col.id}`}>
 
                   {/* ── Inline mini-card composer ────────────────────── */}
                   {composerCol === col.id && (
@@ -1077,7 +1205,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
                         value={composerText}
                         onChange={e=>setComposerText(e.target.value)}
                         onKeyDown={e=>{
-                          if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); submitComposer(col) }
+                          if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); void submitComposer(col) }
                           if(e.key==='Escape'){ setComposerCol(null); setComposerText('') }
                         }}
                         placeholder="O que precisa ser feito?"
@@ -1093,9 +1221,9 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
                             style={{ fontSize:11,color:S.t3,background:'none',border:'none',cursor:'pointer',padding:'3px 8px' }}>
                             Esc
                           </button>
-                          <button onClick={()=>submitComposer(col)} disabled={!composerText.trim()}
-                            style={{ fontSize:11,fontWeight:600,color:'#fff',background:composerText.trim()?DS.accent:S.border,border:'none',borderRadius:6,cursor:composerText.trim()?'pointer':'not-allowed',padding:'3px 10px' }}>
-                            Adicionar
+                          <button onClick={()=>{ void submitComposer(col) }} disabled={!composerText.trim()||composerBusy}
+                            style={{ fontSize:11,fontWeight:600,color:'#fff',background:composerText.trim()?DS.accent:S.border,border:'none',borderRadius:6,cursor:composerText.trim()?'pointer':'not-allowed',padding:'3px 10px',opacity:composerBusy?0.6:1 }}>
+                            {composerBusy?'Salvando…':'Adicionar'}
                           </button>
                         </div>
                       </div>
@@ -1135,7 +1263,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
 
                   {/* Bottom add button — opens CreateIssueModal pre-filled with column status */}
                   {col.id !== 'unmapped' && (
-                    <button onClick={()=>onCreateIssueInCol(col.statuses[0] ?? 'todo', activeSprint)}
+                    <button onClick={()=>openComposer(col.id)}
                       className="w-full py-1.5 rounded-lg text-[11px] transition-all text-center mt-auto"
                       style={{ color:S.t3, border:`1px dashed ${S.border}` }}
                       onMouseEnter={e=>{ (e.currentTarget as HTMLButtonElement).style.background=DS.accentDim;(e.currentTarget as HTMLButtonElement).style.borderColor=DS.accent;(e.currentTarget as HTMLButtonElement).style.color=DS.accent }}
@@ -1167,6 +1295,17 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
         </div>
       </div>
 
+      </>
+      )}
+
+      {boardToast && (
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', zIndex:300,
+          background:S.surface, border:`1px solid ${DS.crit}55`, color:S.t1, fontSize:12,
+          padding:'9px 14px', borderRadius:10, boxShadow:DS.shadowModal, maxWidth:420 }}>
+          {boardToast}
+        </div>
+      )}
+
       {/* ── Remove column confirmation ────────────────────────────────────── */}
       {removeColId && (() => {
         const col = cols.find(c=>c.id===removeColId)
@@ -1196,7 +1335,7 @@ function BoardTab({ issues, setIssues, onCreateIssue, onCreateIssueInCol, onComp
           issue={openIssue}
           onClose={() => setOpenIssue(null)}
           onUpdate={updated => {
-            setIssues(prev => prev.map(i => i.key === updated.key ? updated : i))
+            onLocalPatch(updated.key, updated)
             setOpenIssue(updated)
           }}
         />
@@ -1734,6 +1873,83 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
+  // ── Board (Kanban) — real data from Supabase ────────────────────────────
+  const [boardData, setBoardData]   = useState<BoardData | null>(null)
+  const [boardLoading, setBoardLoading] = useState(true)
+  const [boardError, setBoardError] = useState<string|null>(null)
+  const [dbIssues, setDbIssues]     = useState<Issue[]>([])
+
+  const applyBoardData = useCallback((data: BoardData) => {
+    const profileById = new Map(data.profiles.map(p => [p.id, p]))
+    const epicById    = new Map(data.epics.map(e => [e.id, e]))
+    setDbIssues(data.items.map<Issue>(it => mapDbItem(it, profileById, epicById)))
+  }, [])
+
+  const loadBoard = useCallback(async () => {
+    setBoardLoading(true); setBoardError(null)
+    try {
+      const data = await fetchBoardData(undefined, undefined, boardDef?.name)
+      setBoardData(data)
+      applyBoardData(data)
+    } catch (err) {
+      setBoardError(err instanceof Error ? err.message : 'Falha ao carregar o board')
+    } finally {
+      setBoardLoading(false)
+    }
+  }, [applyBoardData])
+
+  useEffect(() => { void loadBoard() }, [loadBoard])
+
+
+  const dbCols = useMemo<ColState[]>(() => (boardData?.columns ?? []).map(c => ({
+    id: c.id,
+    label: c.name,
+    statuses: c.statuses.length ? c.statuses : [c.category],
+    wip: c.wip_limit ?? undefined,
+    dot: columnColor(c),
+  })), [boardData])
+
+  const dbSprints = useMemo<SprintDef[]>(() => (boardData?.sprints ?? []).map(s => ({
+    id: s.id,
+    name: s.name,
+    goal: s.goal ?? undefined,
+    start: fmtDay(s.start_date),
+    end: fmtDay(s.end_date),
+    state: (s.state === 'active' || s.state === 'completed' ? s.state : 'planned') as SprintDef['state'],
+    velocity: s.velocity != null ? Number(s.velocity) : undefined,
+  })), [boardData])
+
+  function patchDbIssue(key: string, patch: Partial<Issue>) {
+    setDbIssues(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i))
+  }
+
+  async function moveCard(issue: Issue, colId: string) {
+    const column = boardData?.columns.find(c => c.id === colId)
+    if (!column || !issue.id) throw new Error('Coluna inválida')
+    await moveWorkItemToColumn(
+      { id: issue.id, status: issue.dbStatus ?? 'todo', board_column_id: issue.colId ?? null },
+      column,
+      activeUser.name,
+    )
+  }
+
+  async function quickCreateCard(title: string, colId: string, sprintId: string) {
+    const column = boardData?.columns.find(c => c.id === colId)
+    if (!boardData?.board || !column) throw new Error('Board indisponível')
+    const created = await createWorkItem({
+      projectId: boardData.board.project_id,
+      boardId: boardData.board.id,
+      column,
+      sprintId: sprintId || null,
+      title,
+    }, activeUser.name)
+    const profileById = new Map(boardData.profiles.map(p => [p.id, p]))
+    const epicById    = new Map(boardData.epics.map(e => [e.id, e]))
+    setDbIssues(prev => [mapDbItem(created, profileById, epicById), ...prev])
+    setBoardData(prev => prev ? { ...prev, items: [created, ...prev.items] } : prev)
+  }
+
+
   const { activeUser }    = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
 
@@ -1788,7 +2004,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   }
 
   const tabBadges: Partial<Record<Tab, number>> = {
-    Board:   issues.filter(i => i.sprint === activeSid).length,
+    Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
     Backlog: issues.filter(i => !i.sprint || i.sprint === sprints.find(s => s.state === 'planned')?.id).length,
     Sprints: sprints.length,
   }
@@ -1880,13 +2096,17 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
       {/* Tab content */}
       {tab === 'Board' && (
         <BoardTab
-          issues={issues}
-          setIssues={fn => setIssues(fn)}
+          issues={dbIssues}
           onCreateIssue={()=>setQuickCreate({})}
-          onCreateIssueInCol={(colStatus, sprintId)=>setQuickCreate({ colStatus, sprintId })}
           onCompleteSprint={s=>setCompletingSprint(s)}
           canManageSprint={canManageSprint}
-          activeSprints={sprints}
+          activeSprints={dbSprints}
+          dbCols={dbCols}
+          loading={boardLoading}
+          error={boardError}
+          onMoveCard={moveCard}
+          onQuickCreate={quickCreateCard}
+          onLocalPatch={patchDbIssue}
         />
       )}
       {tab === 'Backlog' && (
