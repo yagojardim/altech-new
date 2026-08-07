@@ -35,6 +35,7 @@ import BoardsListPage from './pages/BoardsListPage'
 import ModulesPortfolioPage from './pages/ModulesPortfolioPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
+import { SupabaseProbe } from './components/SupabaseProbe'
 
 const ALL_VIEWS: View[] = [
   'home','foundations','projects-list','gantt','calendar','dashboard','project',

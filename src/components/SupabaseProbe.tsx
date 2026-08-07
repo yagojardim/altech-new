@@ -52,7 +52,7 @@ export function SupabaseProbe() {
       )}
 
       {state.kind === 'error' && (
-        <p className="text-[13px]" style={{ color: T.danger ?? '#ef4444' }}>
+        <p className="text-[13px]" style={{ color: T.crit }}>
           Erro: {state.message}
         </p>
       )}
