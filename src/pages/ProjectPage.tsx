@@ -714,6 +714,47 @@ type SwimlaneMode = 'none' | 'assignee' | 'epic'
 
 let _issueSeq = 200
 
+/** dd/mm from an ISO date. */
+function fmtDay(iso: string | null): string {
+  if (!iso) return '—'
+  const [, m, d] = iso.split('-')
+  return `${d}/${m}`
+}
+
+/** Maps a Supabase work_item row into the Issue shape the board components render. */
+function mapDbItem(
+  it: BoardItemRow,
+  profileById: Map<string, { name: string; avatar_initials: string | null }>,
+  epicById: Map<string, { name: string; color: string | null }>,
+): Issue {
+  const assignee = it.assignee_id ? profileById.get(it.assignee_id) : undefined
+  const reporter = it.reporter_id ? profileById.get(it.reporter_id) : undefined
+  const epic     = it.epic_id ? epicById.get(it.epic_id) : undefined
+  const initials = assignee?.avatar_initials
+    ?? assignee?.name?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
+    ?? ''
+  return {
+    id:       it.id,
+    colId:    it.board_column_id ?? undefined,
+    dbStatus: it.status,
+    key:      it.key,
+    type:     (['story','bug','task','subtask','epic','feature'].includes(it.type) ? it.type : 'task') as IssueType,
+    title:    it.title,
+    status:   uiStatus(it.status),
+    priority: PRIORITY_FROM_DB[(it.priority ?? '').toLowerCase()] ?? 'medium',
+    labels:   [],
+    assignee: initials,
+    dueDate:  it.due_date ? fmtDay(it.due_date) : '',
+    points:   it.story_points != null ? Number(it.story_points) : 0,
+    epic:     epic?.name,
+    sprint:   it.sprint_id ?? undefined,
+    blocked:  it.is_blocked,
+    blocked_reason: it.blocked_reason ?? undefined,
+    description: it.description ?? undefined,
+    reporter: reporter?.avatar_initials ?? undefined,
+  }
+}
+
 interface ColState {
   id:       string
   label:    string
@@ -2015,13 +2056,17 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
       {/* Tab content */}
       {tab === 'Board' && (
         <BoardTab
-          issues={issues}
-          setIssues={fn => setIssues(fn)}
+          issues={dbIssues}
           onCreateIssue={()=>setQuickCreate({})}
-          onCreateIssueInCol={(colStatus, sprintId)=>setQuickCreate({ colStatus, sprintId })}
           onCompleteSprint={s=>setCompletingSprint(s)}
           canManageSprint={canManageSprint}
-          activeSprints={sprints}
+          activeSprints={dbSprints}
+          dbCols={dbCols}
+          loading={boardLoading}
+          error={boardError}
+          onMoveCard={moveCard}
+          onQuickCreate={quickCreateCard}
+          onLocalPatch={patchDbIssue}
         />
       )}
       {tab === 'Backlog' && (
