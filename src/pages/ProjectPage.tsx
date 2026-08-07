@@ -2035,49 +2035,39 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const activeSprint      = sprints.find(s => s.state === 'active')
   const activeSid         = activeSprint?.id ?? 's14'
 
-  function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
+  // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
+  //    sprint_scope_events/audit_logs) and re-read so Board and Timeline follow.
+  async function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
     if (!completingSprint) return
-    const sprintId      = completingSprint.id
-    const nextPlanned   = sprints.find(s => s.state === 'planned')
-    const destination   = moveRemaining === 'next-sprint' && nextPlanned ? 'next-sprint' : 'backlog'
-    const destSprintId  = destination === 'next-sprint' ? nextPlanned!.id : undefined
-    const destLabel     = destination === 'next-sprint' ? nextPlanned!.name : 'backlog'
-
-    const sprintIssues  = issues.filter(i => i.sprint === sprintId)
-    const doneItems     = sprintIssues.filter(i => i.status === 'done')
-    const remaining     = sprintIssues.filter(i => i.status !== 'done')
-    const velocity      = doneItems.reduce((s, i) => s + i.points, 0)
-
-    // Move non-done issues
-    setIssues(prev => prev.map(i => {
-      if (i.sprint !== sprintId || i.status === 'done') return i
-      return destination === 'next-sprint'
-        ? { ...i, sprint: destSprintId }
-        : { ...i, sprint: undefined, status: 'backlog' as const }
-    }))
-
-    // Mark sprint completed
-    setSprints(prev => prev.map(s => s.id === sprintId
-      ? { ...s, state: 'completed' as const, velocity, completedAt: new Date().toLocaleDateString('pt-BR') }
-      : s
-    ))
-
-    // Audit log
-    _SPRINT_AUDIT.push({
-      ts:     new Date().toISOString(),
-      who:    activeUser.name,
-      action: `Encerrou ${completingSprint.name}: ${doneItems.length} concluídos, ${remaining.length} movidos → ${destLabel}`,
-    })
-
-    // Toast feedback
-    const fallbackNote = moveRemaining === 'next-sprint' && !nextPlanned
-      ? ' (sem próxima sprint planejada, movido para backlog)'
-      : ''
-    const n = remaining.length
-    setToast(`Sprint encerrada — ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
-    setTimeout(() => setToast(null), 4500)
+    const sprint = completingSprint
     setCompletingSprint(null)
+    try {
+      const result = await dbCompleteSprint(sprint.id, moveRemaining, activeUser.name)
+      await loadBoard()
+      const destLabel = result.destinationSprint ? result.destinationSprint.name : 'backlog'
+      const fallbackNote = moveRemaining === 'next-sprint' && !result.destinationSprint
+        ? ' (sem próxima sprint planejada, movido para backlog)'
+        : ''
+      const n = result.movedCount
+      setToast(`${sprint.name} encerrada — velocity ${result.velocity}pts · ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
+    } catch (err) {
+      setToast(`Falha ao encerrar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 4500)
   }
+
+  async function handleStartSprintDb(sprintId: string, goal: string, name: string) {
+    setStartingSprint(null)
+    try {
+      await dbStartSprint(sprintId, { goal, name }, activeUser.name)
+      await loadBoard()
+      setToast(`${name} iniciada`)
+    } catch (err) {
+      setToast(`Falha ao iniciar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 4000)
+  }
+
 
   const tabBadges: Partial<Record<Tab, number>> = {
     Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
