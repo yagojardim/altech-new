@@ -20,7 +20,14 @@ type Priority    = 'critical' | 'high' | 'medium' | 'low'
 interface IssueComment { author: string; text: string; when: string }
 
 interface Issue {
+  /** Supabase work_items.id — present for DB-backed cards (Board). */
+  id?:      string
+  /** Supabase board_columns.id the card currently sits in. */
+  colId?:   string
+  /** Raw DB status (snake_case), kept for persistence/audit. */
+  dbStatus?: string
   key:      string
+
   type:     IssueType
   title:    string
   status:   IssueStatus
