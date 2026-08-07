@@ -8,8 +8,8 @@ import { can } from '../data/permissions'
 import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 import {
   fetchBoardData, moveWorkItemToColumn, createWorkItem, columnColor,
-  PRIORITY_FROM_DB, epicColor as dbEpicColor,
-  type BoardColumnDef, type BoardItemRow, type BoardData,
+  PRIORITY_FROM_DB,
+  type BoardItemRow, type BoardData,
 } from '../data/db/board'
 
 
@@ -2002,7 +2002,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   }
 
   const tabBadges: Partial<Record<Tab, number>> = {
-    Board:   issues.filter(i => i.sprint === activeSid).length,
+    Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
     Backlog: issues.filter(i => !i.sprint || i.sprint === sprints.find(s => s.state === 'planned')?.id).length,
     Sprints: sprints.length,
   }
