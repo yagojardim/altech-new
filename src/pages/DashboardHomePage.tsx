@@ -690,8 +690,8 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
-  const alertItems = applyFilters(byProjects(getBacklogWithAlerts('proj_001'), selProj), filters)
-  const readyItems = applyFilters(byProjects(getReadyItems('proj_001'), selProj), filters)
+  const alertItems = applyFilters(byProjects(getBacklogWithAlerts(), selProj), filters)
+  const readyItems = applyFilters(byProjects(getReadyItems(), selProj), filters)
   const { openChart, chartModal } = useChartModal()
 
   const unreadCount = getUnreadCountForTenant(MOCK_TENANT.tenant_id)
