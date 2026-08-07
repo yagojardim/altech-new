@@ -858,7 +858,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const inReview = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
+    byProjects(liveItems().filter(w => w.status === 'in-review' || w.type === 'bug'), selProj),
     filters
   )
 
@@ -875,7 +875,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
   ]
 
   const { openChart: openTLChart, chartModal: tlChartModal } = useChartModal()
-  const critBugs = WORK_ITEMS.filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
+  const critBugs = liveItems().filter(w => w.type === 'bug' && (w.priority === 'critical' || w.priority === 'high')).length
 
   const nativeCards: MuralNativeCard[] = [
     { id: 'tl:health', value: '74%', label: 'Saúde Técnica', sub: 'cobertura de testes', disclaimer: 'score composto de cobertura, débito e estabilidade', color: T.warn, miniViz: <MiniBarChart data={[{label:'S8',value:70},{label:'S9',value:72},{label:'S10',value:69},{label:'S11',value:73},{label:'S12',value:71},{label:'S13',value:74,current:true}]} />, onClick: () => openTLChart('health') },
@@ -942,7 +942,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
   const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
 
   const myItems = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'), selProj),
+    byProjects(liveItems().filter(w => w.assignee?.name === 'Lucas Ferreira' || w.assignee?.name === 'Ana Lima'), selProj),
     filters
   ).sort((a, b) => {
     const order: Record<string, number> = { blocked: 0, 'in-review': 1, 'in-progress': 2, testing: 3, todo: 4, backlog: 5 }
@@ -999,7 +999,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const designItems = applyFilters(
-    byProjects(WORK_ITEMS.filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
+    byProjects(liveItems().filter(w => w.squad_id === 'squad_design' || (w.tags ?? []).some(t => ['design', 'handoff', 'frontend'].includes(t))), selProj),
     filters
   )
 
@@ -1073,7 +1073,7 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useState<Set<string>>(new Set(ALL_PROJ_IDS))
   const testing = applyFilters(byProjects(getTestingItems(), selProj), filters)
-  const bugs    = applyFilters(byProjects(WORK_ITEMS.filter(w => w.type === 'bug'), selProj), filters)
+  const bugs    = applyFilters(byProjects(liveItems().filter(w => w.type === 'bug'), selProj), filters)
   const cobertura = [
     { criterio: 'Critérios de aceite validados', pct: 68 },
     { criterio: 'Casos de teste documentados',   pct: 45 },
