@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useClientPortal } from '../data/clientPortalStore'
+import type {
+  PortalScope, ScopeProject, ScopeSprint, ScopeDelivery, ScopeMilestone,
+} from '../data/clientPortalStore'
 import {
   addClientSignal, getSignalsForItem, markReadByPo,
   getClientUnreadReplies, markReplyReadByClient, markAllClientRepliesRead,
