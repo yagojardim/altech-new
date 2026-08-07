@@ -36,7 +36,7 @@ const STATUS_COLORS: Record<TimesheetStatus, { bg: string; txt: string; dot: str
   saved:     { bg: `${T.border}22`,    txt: T.text3,    dot: T.border2   },
   submitted: { bg: `${T.warn}18`,      txt: T.warn,     dot: T.warn      },
   approved:  { bg: `${T.success}18`,   txt: T.success,  dot: T.success   },
-  rejected:  { bg: `${T.danger}18`,    txt: T.danger,   dot: T.danger    },
+  rejected:  { bg: `${T.crit}18`,    txt: T.crit,   dot: T.crit    },
 }
 
 const inputSt: React.CSSProperties = {
@@ -302,7 +302,7 @@ export default function TimesheetPage() {
             </div>
             <button onClick={handleAddOk} style={{ padding: '7px 22px', borderRadius: 8, background: T.accent, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>OK</button>
           </div>
-          {formErr && <div style={{ marginTop: 8, fontSize: 11, color: T.danger }}>{formErr}</div>}
+          {formErr && <div style={{ marginTop: 8, fontSize: 11, color: T.crit }}>{formErr}</div>}
         </div>
       )}
 
@@ -355,14 +355,14 @@ export default function TimesheetPage() {
                       <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: T.text1, whiteSpace: 'nowrap' }}>{entry.hours}h</td>
                       <td style={{ padding: '10px 14px', fontSize: 12, color: T.text2, maxWidth: 200 }}>
                         <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.description || '—'}</span>
-                        {entry.reject_reason && <span style={{ display: 'block', fontSize: 10, color: T.danger, marginTop: 2 }}>✕ {entry.reject_reason}</span>}
+                        {entry.reject_reason && <span style={{ display: 'block', fontSize: 10, color: T.crit, marginTop: 2 }}>✕ {entry.reject_reason}</span>}
                       </td>
                       <td style={{ padding: '10px 14px' }}><StatusBadge status={entry.status} /></td>
                       <td style={{ padding: '10px 14px', whiteSpace: 'nowrap' }}>
                         {editable && (
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button onClick={() => handleEditOpen(entry)} title="Editar" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 11, cursor: 'pointer' }}>✏</button>
-                            <button onClick={() => handleDelete(entry)} title="Excluir" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.danger, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                            <button onClick={() => handleDelete(entry)} title="Excluir" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.crit, fontSize: 11, cursor: 'pointer' }}>✕</button>
                           </div>
                         )}
                       </td>
