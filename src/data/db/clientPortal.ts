@@ -1,0 +1,413 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+// Client Portal data access layer — real client_portal_users / client_signals /
+// client_approvals / shared_project_items from the connected Supabase project.
+// Every read is scoped by tenant_id (+ project_id); every write records audit_logs.
+// The portal tables are not part of the generated Database types yet, so table
+// access goes through a small untyped shim while the rows stay strongly typed here.
+import { supabase } from '../../integrations/supabase/client'
+import { DEFAULT_TENANT_ID } from './timeline'
+
+export { DEFAULT_TENANT_ID }
+
+type PortalTable =
+  | 'client_portal_users'
+  | 'client_signals'
+  | 'client_approvals'
+  | 'shared_project_items'
+
+function tbl(name: PortalTable): any {
+  return (supabase as unknown as { from: (t: string) => any }).from(name)
+}
+
+// ─── Row types ────────────────────────────────────────────────────────────────
+export type PortalRole = 'viewer' | 'portal-admin'
+export type SignalType = 'comment' | 'approval'
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'changes_requested'
+
+export interface ClientPortalUserRow {
+  id: string
+  tenant_id: string
+  project_id: string
+  name: string
+  email: string
+  portal_role: PortalRole
+  can_approve: boolean
+  can_preview: boolean
+  can_comment: boolean
+  password_must_change: boolean
+  status: string
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface ClientSignalRow {
+  id: string
+  tenant_id: string
+  project_id: string
+  type: SignalType
+  item_id: string | null
+  item_title: string | null
+  author: string | null
+  responsible_po: string | null
+  body: string | null
+  po_reply: string | null
+  read_by_po: boolean
+  reply_read_by_client: boolean
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface ClientApprovalRow {
+  id: string
+  tenant_id: string
+  project_id: string
+  work_item_id: string
+  client_user_id: string | null
+  status: ApprovalStatus
+  decided_at: string | null
+  metadata: Record<string, unknown> | null
+  created_at: string
+}
+
+export interface SharedProjectItemRow {
+  id: string
+  tenant_id: string
+  project_id: string
+  shared_entity_type: string
+  shared_entity_id: string
+  visibility: 'internal' | 'client' | 'public'
+}
+
+// ─── Client-safe portal scope ────────────────────────────────────────────────
+export interface PortalProject {
+  id: string
+  name: string
+  status: string
+  period_start: string | null
+  period_end: string | null
+}
+/** Client-safe delivery: no assignee, no estimates, no internal description. */
+export interface PortalDelivery {
+  id: string
+  title: string
+  status: 'done' | 'review' | 'progress'
+  due_date: string | null
+  completed_at: string | null
+}
+export interface PortalSprint {
+  id: string
+  name: string
+  state: string
+  start_date: string | null
+  end_date: string | null
+}
+export interface PortalRoadmapItem {
+  id: string
+  name: string
+  quarter: string | null
+  color: string | null
+  total: number
+  done: number
+}
+export interface ClientPortalScope {
+  project: PortalProject | null
+  sprints: PortalSprint[]
+  deliveries: PortalDelivery[]
+  roadmap: PortalRoadmapItem[]
+}
+
+const DONE_STATUSES = ['done', 'closed', 'released', 'concluido', 'concluído']
+const REVIEW_STATUSES = ['review', 'in_review', 'validation', 'qa', 'testing']
+
+function clientStatus(status: string | null): PortalDelivery['status'] {
+  const s = (status ?? '').toLowerCase()
+  if (DONE_STATUSES.some(d => s.includes(d))) return 'done'
+  if (REVIEW_STATUSES.some(d => s.includes(d))) return 'review'
+  return 'progress'
+}
+
+function tenantError(table: string, message: string): Error {
+  if (/does not exist|schema cache|Could not find the table/i.test(message)) {
+    return new Error(
+      `A tabela "${table}" não existe no Supabase conectado. Rode supabase/sql/client_portal.sql antes de usar o Portal do Cliente.`,
+    )
+  }
+  return new Error(message)
+}
+
+/** Projects of the tenant (used to resolve project names ↔ ids). */
+export async function listPortalProjects(): Promise<PortalProject[]> {
+  const { data, error } = await supabase.from('projects')
+    .select('id, name, status, period_start, period_end')
+    .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null).order('name')
+  if (error) throw tenantError('projects', error.message)
+  return (data ?? []) as PortalProject[]
+}
+
+/**
+ * Client-safe scope of a project: sprints, shareable deliveries and roadmap.
+ * Only items explicitly shared (shared_project_items) or with client visibility
+ * are returned — raw internal work items, PRs and infra never leave the tenant.
+ */
+export async function getClientPortal(projectId: string): Promise<ClientPortalScope> {
+  const tid = DEFAULT_TENANT_ID
+  const [projectRes, sprintsRes, sharedRes, epicsRes, itemsRes] = await Promise.all([
+    supabase.from('projects').select('id, name, status, period_start, period_end')
+      .eq('tenant_id', tid).eq('id', projectId).maybeSingle(),
+    supabase.from('sprints').select('id, name, state, start_date, end_date')
+      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null).order('start_date'),
+    tbl('shared_project_items').select('id, shared_entity_type, shared_entity_id, visibility')
+      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null),
+    supabase.from('epics').select('id, name, quarter, color')
+      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null).order('key'),
+    supabase.from('work_items')
+      .select('id, title, status, due_date, completed_at, visibility, epic_id')
+      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null),
+  ])
+
+  if (projectRes.error) throw tenantError('projects', projectRes.error.message)
+  if (sprintsRes.error) throw tenantError('sprints', sprintsRes.error.message)
+  if (sharedRes.error) throw tenantError('shared_project_items', sharedRes.error.message)
+  if (epicsRes.error) throw tenantError('epics', epicsRes.error.message)
+  if (itemsRes.error) throw tenantError('work_items', itemsRes.error.message)
+
+  const shared = (sharedRes.data ?? []) as SharedProjectItemRow[]
+  const sharedItemIds = new Set(
+    shared.filter(s => s.shared_entity_type === 'work_item' && s.visibility !== 'internal')
+      .map(s => s.shared_entity_id),
+  )
+  const items = (itemsRes.data ?? []) as {
+    id: string; title: string; status: string | null; due_date: string | null
+    completed_at: string | null; visibility: string | null; epic_id: string | null
+  }[]
+
+  const clientVisible = items.filter(
+    i => sharedItemIds.has(i.id) || (i.visibility ?? '').toLowerCase() === 'client',
+  )
+
+  const roadmap: PortalRoadmapItem[] = (epicsRes.data ?? []).map(e => {
+    const epicItems = items.filter(i => i.epic_id === e.id)
+    return {
+      id: e.id, name: e.name, quarter: e.quarter, color: e.color,
+      total: epicItems.length,
+      done: epicItems.filter(i => clientStatus(i.status) === 'done').length,
+    }
+  })
+
+  return {
+    project: (projectRes.data ?? null) as PortalProject | null,
+    sprints: (sprintsRes.data ?? []) as PortalSprint[],
+    deliveries: clientVisible.map(i => ({
+      id: i.id,
+      title: i.title,
+      status: clientStatus(i.status),
+      due_date: i.due_date,
+      completed_at: i.completed_at,
+    })),
+    roadmap,
+  }
+}
+
+// ─── Audit ────────────────────────────────────────────────────────────────────
+type AuditPayload = Record<string, string | number | boolean | null>
+
+async function writeAudit(
+  entityType: string, entityId: string, action: string,
+  actorName: string, before: AuditPayload | null, after: AuditPayload | null,
+): Promise<void> {
+  await supabase.from('audit_logs').insert({
+    tenant_id: DEFAULT_TENANT_ID,
+    entity_type: entityType,
+    entity_id: entityId,
+    action,
+    actor_name: actorName,
+    before,
+    after,
+  })
+}
+
+// ─── Signals ──────────────────────────────────────────────────────────────────
+export async function listClientSignals(projectId?: string): Promise<ClientSignalRow[]> {
+  let q = tbl('client_signals').select('*')
+    .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null)
+  if (projectId) q = q.eq('project_id', projectId)
+  const { data, error } = await q.order('created_at', { ascending: true })
+  if (error) throw tenantError('client_signals', error.message)
+  return (data ?? []) as ClientSignalRow[]
+}
+
+export async function listClientSignalsForPo(poId: string): Promise<ClientSignalRow[]> {
+  const { data, error } = await tbl('client_signals').select('*')
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('responsible_po', poId)
+    .is('archived_at', null).order('created_at', { ascending: false })
+  if (error) throw tenantError('client_signals', error.message)
+  return (data ?? []) as ClientSignalRow[]
+}
+
+export interface AddCommentInput {
+  projectId: string
+  body: string
+  author: string
+  itemId?: string | null
+  itemTitle?: string | null
+  responsiblePo?: string | null
+  /** management-originated messages are pre-read by the PO */
+  source?: 'client' | 'management'
+}
+
+export async function addClientComment(input: AddCommentInput): Promise<ClientSignalRow> {
+  const isMgmt = input.source === 'management'
+  const { data, error } = await tbl('client_signals').insert({
+    tenant_id: DEFAULT_TENANT_ID,
+    project_id: input.projectId,
+    type: 'comment',
+    item_id: input.itemId ?? null,
+    item_title: input.itemTitle ?? null,
+    author: input.author,
+    responsible_po: input.responsiblePo ?? null,
+    body: input.body,
+    read_by_po: isMgmt,
+    reply_read_by_client: !isMgmt,
+    metadata: { source: input.source ?? 'client' },
+  }).select('*').single()
+  if (error) throw tenantError('client_signals', error.message)
+  const row = data as ClientSignalRow
+  await writeAudit('client_signal', row.id, isMgmt ? 'portal.message_sent' : 'portal.comment_created',
+    input.author, null, { project_id: input.projectId, body: input.body })
+  return row
+}
+
+export interface AddApprovalInput {
+  projectId: string
+  workItemId?: string | null
+  itemTitle: string
+  author: string
+  clientUserId?: string | null
+  responsiblePo?: string | null
+}
+
+/** Records a formal approval (client_approvals) plus its signal (type=approval). */
+export async function addClientApproval(input: AddApprovalInput): Promise<ClientSignalRow> {
+  if (input.workItemId) {
+    const { data: appr, error: apprErr } = await tbl('client_approvals').insert({
+      tenant_id: DEFAULT_TENANT_ID,
+      project_id: input.projectId,
+      work_item_id: input.workItemId,
+      client_user_id: input.clientUserId ?? null,
+      status: 'approved',
+      decided_at: new Date().toISOString(),
+      metadata: { item_title: input.itemTitle, author: input.author },
+    }).select('id').single()
+    if (apprErr) throw tenantError('client_approvals', apprErr.message)
+    await writeAudit('client_approval', (appr as { id: string }).id, 'portal.approved',
+      input.author, null, { project_id: input.projectId, work_item_id: input.workItemId })
+  }
+
+  const { data, error } = await tbl('client_signals').insert({
+    tenant_id: DEFAULT_TENANT_ID,
+    project_id: input.projectId,
+    type: 'approval',
+    item_id: input.workItemId ?? null,
+    item_title: input.itemTitle,
+    author: input.author,
+    responsible_po: input.responsiblePo ?? null,
+    read_by_po: false,
+    reply_read_by_client: true,
+    metadata: { source: 'client' },
+  }).select('*').single()
+  if (error) throw tenantError('client_signals', error.message)
+  return data as ClientSignalRow
+}
+
+/** Public reply from management — marks the signal read and notifies the client. */
+export async function addPoReply(signalId: string, reply: string, poName: string): Promise<void> {
+  const { data, error } = await tbl('client_signals')
+    .update({
+      po_reply: reply,
+      read_by_po: true,
+      reply_read_by_client: false,
+      metadata: { po_reply_by: poName },
+    })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', signalId)
+    .select('id, project_id').single()
+  if (error) throw tenantError('client_signals', error.message)
+  const row = data as { id: string; project_id: string }
+  await writeAudit('client_signal', row.id, 'portal.po_replied', poName, null,
+    { project_id: row.project_id, reply })
+}
+
+export async function markSignalReadByPo(signalId: string): Promise<void> {
+  await tbl('client_signals').update({ read_by_po: true })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', signalId)
+}
+
+export async function markProjectReadByPo(projectId: string): Promise<void> {
+  await tbl('client_signals').update({ read_by_po: true })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('project_id', projectId).eq('read_by_po', false)
+}
+
+export async function markReplyReadByClient(signalId: string): Promise<void> {
+  await tbl('client_signals').update({ reply_read_by_client: true })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', signalId)
+}
+
+export async function markAllRepliesReadByClient(author: string): Promise<void> {
+  await tbl('client_signals').update({ reply_read_by_client: true })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('author', author).eq('reply_read_by_client', false)
+}
+
+// ─── Portal users / permissions ───────────────────────────────────────────────
+export async function listClientPortalUsers(projectId?: string): Promise<ClientPortalUserRow[]> {
+  let q = tbl('client_portal_users').select('*')
+    .eq('tenant_id', DEFAULT_TENANT_ID).is('archived_at', null)
+  if (projectId) q = q.eq('project_id', projectId)
+  const { data, error } = await q.order('created_at', { ascending: false })
+  if (error) throw tenantError('client_portal_users', error.message)
+  return (data ?? []) as ClientPortalUserRow[]
+}
+
+export interface CreatePortalUserInput {
+  projectIds: string[]
+  name: string
+  email: string
+  portalRole: PortalRole
+  canApprove: boolean
+  canPreview: boolean
+  canComment?: boolean
+  tempPassword?: string
+  actorName?: string
+}
+
+/** Creates one client_portal_users row per shared project. */
+export async function createClientPortalUsers(
+  input: CreatePortalUserInput,
+): Promise<ClientPortalUserRow[]> {
+  const rows = input.projectIds.map(pid => ({
+    tenant_id: DEFAULT_TENANT_ID,
+    project_id: pid,
+    name: input.name,
+    email: input.email,
+    portal_role: input.portalRole,
+    can_approve: input.canApprove,
+    can_preview: input.canPreview,
+    can_comment: input.canComment ?? true,
+    password_must_change: true,
+    status: 'invited',
+    metadata: input.tempPassword ? { temp_password_hint: 'sent-by-email' } : {},
+  }))
+  if (rows.length === 0) return []
+  const { data, error } = await tbl('client_portal_users').insert(rows).select('*')
+  if (error) throw tenantError('client_portal_users', error.message)
+  const created = (data ?? []) as ClientPortalUserRow[]
+  for (const u of created) {
+    await writeAudit('client_portal_user', u.id, 'portal.access_created',
+      input.actorName ?? 'Sistema', null,
+      { email: u.email, project_id: u.project_id, portal_role: u.portal_role })
+  }
+  return created
+}
+
+export async function setPortalPasswordChanged(userId: string): Promise<void> {
+  await tbl('client_portal_users').update({ password_must_change: false, status: 'active' })
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', userId)
+}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { T } from '../components/ds/tokens'
+import { useClientPortal } from '../data/clientPortalStore'
 import { useSession } from '../data/SessionContext'
 import { MOCK_TENANT } from '../data/session'
 import {
@@ -380,6 +381,7 @@ function EmptyThread() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function ClientMessagesPage() {
+  useClientPortal()
   const { activeUser } = useSession()
   const [selected, setSelected] = useState<string | null>(null)
   const [search, setSearch]     = useState('')
