@@ -15,9 +15,11 @@ import {
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
-  WORK_ITEMS, getBlockedItems, getSprintItems, getReadyItems,
+  useLiveDashboard, liveProjects, liveItems, liveCurrentSprintName,
+  getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
-} from '../data/workItems'
+} from '../data/db/homeLive'
+
 import {
   getAllForPo, getUnreadForPo, markReadByPo, markAllReadByPo,
   addPoReply, getSignalsForTenant, getUnreadCountForTenant, type ClientSignal,
