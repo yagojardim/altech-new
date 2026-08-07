@@ -1686,7 +1686,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 }
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
