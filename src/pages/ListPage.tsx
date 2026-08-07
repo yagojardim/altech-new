@@ -1,10 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { WorkItemDetail } from '../components/WorkItemDetail'
+import { useSession } from '../data/SessionContext'
+import { can } from '../data/permissions'
 import {
-  ISSUES, EPICS, SPRINTS, STATUS_CFG, PRIORITY_CFG, TYPE_ICON, AV_COLOR,
-  type Issue, type IssueStatus, type Priority,
-} from '../data/issues'
-import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
+  listWorkItems, epicColor,
+  type ListItemRow, type ListEpicRow, type ListSprintRow, type ListProfileRow,
+  type ListProjectRow, type ListLabelRow, type ListFilters,
+} from '../data/db/list'
+import { updateWorkItemField } from '../data/db/workItem'
 
 type SortKey = 'key' | 'title' | 'status' | 'priority' | 'assignee' | 'points' | 'epic' | 'sprint' | 'dueDate'
 type SortDir = 'asc' | 'desc'
@@ -19,19 +23,97 @@ const COL_LABELS: Record<ColId, string> = {
   assignee:'Responsável', points:'Pts', epic:'Épico', sprint:'Sprint', labels:'Labels', dueDate:'Venc.',
 }
 
-const ASSIGNEES = ['AL','NM','JN','CS','RM','LF']
+const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  backlog:     { label:'Backlog',      color:T.text3,   bg:T.neutralDim   },
+  todo:        { label:'A Fazer',      color:T.text2,   bg:`${T.text3}18` },
+  in_progress: { label:'Em andamento', color:T.accent,  bg:T.accentDim    },
+  in_review:   { label:'Em revisão',   color:T.warn,    bg:T.warnDim      },
+  blocked:     { label:'Bloqueado',    color:T.crit,    bg:T.critDim      },
+  done:        { label:'Concluído',    color:T.success, bg:T.successDim   },
+}
 
-function Avatar({ name }: { name: string }) {
+const PRIORITY_CFG: Record<string, { label: string; color: string; icon: string }> = {
+  critical:{ label:'Crítica', color:T.crit,   icon:'↑↑' },
+  high:    { label:'Alta',    color:T.warn,   icon:'↑'  },
+  medium:  { label:'Média',   color:T.accent, icon:'→'  },
+  low:     { label:'Baixa',   color:T.text3,  icon:'↓'  },
+}
+
+const TYPE_ICON: Record<string, { icon: string; color: string }> = {
+  story:{icon:'◇',color:T.accent}, bug:{icon:'⬟',color:T.crit}, task:{icon:'☑',color:T.text2},
+  subtask:{icon:'◻',color:T.text3}, epic:{icon:'⚡',color:T.warn}, feature:{icon:'▣',color:T.purple},
+}
+
+interface Row {
+  id: string
+  key: string
+  type: string
+  title: string
+  status: string
+  priority: string
+  assigneeId: string | null
+  assignee: string
+  points: number
+  epicId: string | null
+  sprintId: string | null
+  labels: string[]
+  dueDate: string
+  blocked: boolean
+}
+
+function Avatar({ initials, color }: { initials: string; color: string }) {
   return (
     <span style={{
       display:'inline-flex', alignItems:'center', justifyContent:'center',
       width:22, height:22, borderRadius:'50%', fontSize:10, fontWeight:700,
-      background: AV_COLOR[name] ?? T.text3, color:'#fff',
-    }}>{name}</span>
+      background: color, color:'#fff',
+    }}>{initials}</span>
   )
 }
 
+function fmtDate(d: string | null): string {
+  if (!d) return '—'
+  const [, m, day] = d.split('-')
+  return `${day}/${m}`
+}
+
+function buildRows(
+  items: ListItemRow[],
+  labels: ListLabelRow[],
+  profiles: ListProfileRow[],
+): Row[] {
+  const byItem = new Map<string, string[]>()
+  labels.forEach(l => {
+    const list = byItem.get(l.work_item_id) ?? []
+    list.push(l.name)
+    byItem.set(l.work_item_id, list)
+  })
+  const profileById = new Map(profiles.map(p => [p.id, p]))
+  return items.map(i => {
+    const p = i.assignee_id ? profileById.get(i.assignee_id) : undefined
+    return {
+      id: i.id,
+      key: i.key,
+      type: i.type,
+      title: i.title,
+      status: i.status,
+      priority: i.priority,
+      assigneeId: i.assignee_id,
+      assignee: p?.avatar_initials ?? (p?.name.slice(0, 2).toUpperCase() ?? '—'),
+      points: Number(i.story_points ?? 0),
+      epicId: i.epic_id,
+      sprintId: i.sprint_id,
+      labels: byItem.get(i.id) ?? [],
+      dueDate: fmtDate(i.due_date),
+      blocked: !!i.is_blocked,
+    }
+  })
+}
+
 export default function ListPage() {
+  const { activeUser } = useSession()
+  const canEdit = can(activeUser.permissions, 'edit:workitem')
+
   const [cols, setCols] = useState<ColId[]>(DEFAULT_COLS)
   const [colsOpen, setColsOpen] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('key')
@@ -39,9 +121,27 @@ export default function ListPage() {
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [search, setSearch] = useState('')
   const [editCell, setEditCell] = useState<{key:string;col:ColId}|null>(null)
-  const [overrides, setOverrides] = useState<Record<string,Partial<Issue>>>({})
-  const [selectedKey, setSelectedKey] = useState<string|null>(null)
+  const [selectedId, setSelectedId] = useState<string|null>(null)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const colsRef = useRef<HTMLDivElement>(null)
+
+  // Query filters applied server-side
+  const [fProject, setFProject] = useState('')
+  const [fStatus, setFStatus] = useState('')
+  const [fPriority, setFPriority] = useState('')
+  const [fType, setFType] = useState('')
+  const [fAssignee, setFAssignee] = useState('')
+  const [fSprint, setFSprint] = useState('')
+  const [fEpic, setFEpic] = useState('')
+
+  const [items, setItems] = useState<ListItemRow[]>([])
+  const [labels, setLabels] = useState<ListLabelRow[]>([])
+  const [epics, setEpics] = useState<ListEpicRow[]>([])
+  const [sprints, setSprints] = useState<ListSprintRow[]>([])
+  const [profiles, setProfiles] = useState<ListProfileRow[]>([])
+  const [projects, setProjects] = useState<ListProjectRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string|null>(null)
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -51,17 +151,62 @@ export default function ListPage() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  const issues = ISSUES.map(i => ({ ...i, ...(overrides[i.key] ?? {}) }))
+  const filters: ListFilters = useMemo(() => ({
+    projectId: fProject || undefined,
+    status: fStatus || undefined,
+    priority: fPriority || undefined,
+    type: fType || undefined,
+    assigneeId: fAssignee || undefined,
+    sprintId: fSprint || undefined,
+    epicId: fEpic || undefined,
+    search: search.trim() || undefined,
+  }), [fProject, fStatus, fPriority, fType, fAssignee, fSprint, fEpic, search])
 
-  const filtered = issues.filter(i =>
-    i.title.toLowerCase().includes(search.toLowerCase())
-  )
+  const load = useCallback(async (f: ListFilters) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await listWorkItems(f)
+      setItems(data.items)
+      setLabels(data.labels)
+      setEpics(data.epics)
+      setSprints(data.sprints)
+      setProfiles(data.profiles)
+      setProjects(data.projects)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao carregar as issues.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const sorted = [...filtered].sort((a, b) => {
-    const av = String((a as Record<string,unknown>)[sortKey] ?? '')
-    const bv = String((b as Record<string,unknown>)[sortKey] ?? '')
-    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av)
-  })
+  useEffect(() => {
+    const t = setTimeout(() => { void load(filters) }, 200)
+    return () => clearTimeout(t)
+  }, [filters, load])
+
+  const rows = useMemo(() => buildRows(items, labels, profiles), [items, labels, profiles])
+
+  const sorted = useMemo(() => {
+    const epicName = (id: string | null) => epics.find(e => e.id === id)?.name ?? ''
+    const sprintName = (id: string | null) => sprints.find(s => s.id === id)?.name ?? ''
+    const val = (r: Row): string => {
+      switch (sortKey) {
+        case 'key': return r.key
+        case 'title': return r.title
+        case 'status': return r.status
+        case 'priority': return r.priority
+        case 'assignee': return r.assignee
+        case 'points': return String(r.points).padStart(6, '0')
+        case 'epic': return epicName(r.epicId)
+        case 'sprint': return sprintName(r.sprintId)
+        case 'dueDate': return r.dueDate
+      }
+    }
+    return [...rows].sort((a, b) => sortDir === 'asc'
+      ? val(a).localeCompare(val(b))
+      : val(b).localeCompare(val(a)))
+  }, [rows, sortKey, sortDir, epics, sprints])
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -72,98 +217,56 @@ export default function ListPage() {
     setCols(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
   }
 
-  function setOverride(key: string, field: string, val: unknown) {
-    setOverrides(prev => ({ ...prev, [key]: { ...prev[key], [field]: val } }))
-  }
+  const actorProfileId = profiles.find(p => p.name === activeUser.name)?.id ?? null
 
-  function issueToWID(issue: Issue): WorkItemData {
-    const epic   = EPICS.find(e => e.id === issue.epic)
-    const sprint = SPRINTS.find(s => s.id === issue.sprint)
-    return {
-      key:              issue.key,
-      type:             issue.type,
-      title:            issue.title,
-      status:           issue.status,
-      priority:         issue.priority,
-      labels:           issue.labels,
-      assigneeInitials: issue.assignee,
-      assigneeName:     issue.assignee,
-      points:           issue.points,
-      dueDate:          issue.dueDate,
-      blocked:          issue.blocked,
-      delayed:          issue.delayed,
-      epicKey:          epic?.id,
-      epicLabel:        epic?.label,
-      epicColor:        epic?.color,
-      sprintId:         sprint?.id,
-      sprintName:       sprint?.name,
-      availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
-      availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
-      availableMembers: ASSIGNEES.map(a => ({ id: a, name: a, initials: a })),
-      availableLabels:  ['Design','Eng','Hero','Mobile','SEO','Auth','Backend','API','UX'],
-    }
-  }
-
-  function handleDetailUpdate(updated: WorkItemData) {
-    setOverrides(prev => ({
-      ...prev,
-      [updated.key]: {
-        ...prev[updated.key],
-        title:    updated.title,
-        status:   updated.status   as IssueStatus,
-        priority: updated.priority as Priority,
-        labels:   updated.labels,
-        assignee: updated.assigneeInitials,
-        points:   updated.points ?? 0,
-        epic:     updated.epicKey,
-        sprint:   updated.sprintId,
-      },
-    }))
-  }
-
-  const selectedIssue = selectedKey
-    ? issues.find(i => i.key === selectedKey) ?? null
-    : null
-
-  function groupIssues(): { label: string; items: Issue[] }[] {
-    if (groupBy === 'none') return [{ label: '', items: sorted }]
-    if (groupBy === 'sprint') {
-      const groups: Record<string, Issue[]> = {}
-      sorted.forEach(i => {
-        const k = i.sprint ?? '__none__'
-        if (!groups[k]) groups[k] = []
-        groups[k].push(i)
+  /** Optimistic inline edit persisted to Supabase (audited). */
+  async function persistField(
+    row: Row,
+    field: 'title' | 'status' | 'priority' | 'assignee_id',
+    value: string | null,
+    previous: string | null,
+  ) {
+    setItems(prev => prev.map(i => i.id === row.id
+      ? { ...i, [field === 'assignee_id' ? 'assignee_id' : field]: value } as ListItemRow
+      : i))
+    try {
+      await updateWorkItemField(row.id, field, value, previous, {
+        actorName: activeUser.name, actorId: actorProfileId,
       })
-      return Object.entries(groups).map(([k, items]) => ({
-        label: k === '__none__' ? 'Sem sprint' : (SPRINTS.find(s => s.id === k)?.name ?? k),
-        items,
-      }))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao salvar a alteração.')
+      void load(filters)
     }
-    // epic
-    const groups: Record<string, Issue[]> = {}
-    sorted.forEach(i => {
-      const k = i.epic ?? '__none__'
+  }
+
+  function groupRows(): { label: string; items: Row[] }[] {
+    if (groupBy === 'none') return [{ label: '', items: sorted }]
+    const groups: Record<string, Row[]> = {}
+    sorted.forEach(r => {
+      const k = (groupBy === 'sprint' ? r.sprintId : r.epicId) ?? '__none__'
       if (!groups[k]) groups[k] = []
-      groups[k].push(i)
+      groups[k].push(r)
     })
-    return Object.entries(groups).map(([k, items]) => ({
-      label: k === '__none__' ? 'Sem épico' : (EPICS.find(e => e.id === k)?.label ?? k),
-      items,
+    return Object.entries(groups).map(([k, list]) => ({
+      label: k === '__none__'
+        ? (groupBy === 'sprint' ? 'Sem sprint' : 'Sem épico')
+        : (groupBy === 'sprint'
+          ? (sprints.find(s => s.id === k)?.name ?? k)
+          : (epics.find(e => e.id === k)?.name ?? k)),
+      items: list,
     }))
   }
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
-
-  const groups = groupIssues()
+  const groups = groupRows()
 
   const colW: Record<ColId, number | string> = {
     key: 90, type: 44, title: 260, status: 130, priority: 110,
     assignee: 90, points: 56, epic: 130, sprint: 110, labels: 120, dueDate: 80,
   }
 
-  function renderCell(issue: Issue, col: ColId) {
-    const isEditing = editCell?.key === issue.key && editCell?.col === col
-    const startEdit = () => setEditCell({ key: issue.key, col })
+  function renderCell(row: Row, col: ColId) {
+    const isEditing = editCell?.key === row.key && editCell?.col === col
+    const startEdit = () => { if (canEdit) setEditCell({ key: row.key, col }) }
     const stopEdit = () => setEditCell(null)
 
     const cellStyle: React.CSSProperties = {
@@ -179,8 +282,8 @@ export default function ListPage() {
     if (col === 'key') return (
       <div style={{ ...cellStyle, cursor: 'default' }}>
         <button
-          onClick={() => setSelectedKey(issue.key)}
-          aria-label={`Abrir detalhe de ${issue.key}`}
+          onClick={() => setSelectedId(row.id)}
+          aria-label={`Abrir detalhe de ${row.key}`}
           style={{
             background: 'none', border: 'none', padding: 0, cursor: 'pointer',
             color: T.accent, fontWeight: 600, fontSize: 12,
@@ -192,12 +295,12 @@ export default function ListPage() {
           onFocus={e => { (e.currentTarget as HTMLButtonElement).style.outline = `2px solid ${T.accent}` }}
           onBlur={e => { (e.currentTarget as HTMLButtonElement).style.outline = 'none' }}
         >
-          {issue.key}
+          {row.key}
         </button>
       </div>
     )
     if (col === 'type') {
-      const t = TYPE_ICON[issue.type]
+      const t = TYPE_ICON[row.type] ?? { icon: '☑', color: T.text2 }
       return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:t.color,fontSize:14}}>{t.icon}</span></div>
     }
     if (col === 'title') {
@@ -205,33 +308,32 @@ export default function ListPage() {
         <div style={cellStyle}>
           <input
             autoFocus
-            defaultValue={issue.title}
-            onBlur={e => { setOverride(issue.key,'title',e.target.value); stopEdit() }}
+            defaultValue={row.title}
+            onBlur={e => { const v = e.target.value; stopEdit(); if (v !== row.title) void persistField(row, 'title', v, row.title) }}
             onKeyDown={e => { if(e.key==='Enter'||e.key==='Escape') (e.target as HTMLInputElement).blur() }}
             style={{ background:'transparent', border:'none', outline:'none', color:T.text1, width:'100%', fontSize:13 }}
           />
         </div>
       )
       return (
-        <div style={cellStyle} onClick={startEdit} title={issue.title}>
-          {issue.blocked && <span style={{color:T.crit,marginRight:4,fontSize:10}}>⛔</span>}
-          {issue.delayed && <span style={{color:T.warn,marginRight:4,fontSize:10}}>⚠</span>}
-          <span style={{color:T.text1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis'}}>{issue.title}</span>
+        <div style={cellStyle} onClick={startEdit} title={row.title}>
+          {row.blocked && <span style={{color:T.crit,marginRight:4,fontSize:10}}>⛔</span>}
+          <span style={{color:T.text1,fontSize:13,overflow:'hidden',textOverflow:'ellipsis'}}>{row.title}</span>
         </div>
       )
     }
     if (col === 'status') {
-      const cfg = STATUS_CFG[issue.status]
+      const cfg = STATUS_CFG[row.status] ?? { label: row.status, color: T.text2, bg: T.neutralDim }
       if (isEditing) return (
         <div style={cellStyle}>
           <select
             autoFocus
-            value={issue.status}
-            onChange={e => { setOverride(issue.key,'status',e.target.value); stopEdit() }}
+            value={row.status}
+            onChange={e => { const v = e.target.value; stopEdit(); void persistField(row, 'status', v, row.status) }}
             onBlur={stopEdit}
             style={{ background:T.bgSurface2, border:`1px solid ${T.border}`, color:T.text1, borderRadius:4, fontSize:12, padding:'2px 4px' }}
           >
-            {(Object.keys(STATUS_CFG) as IssueStatus[]).map(s => (
+            {Object.keys(STATUS_CFG).map(s => (
               <option key={s} value={s}>{STATUS_CFG[s].label}</option>
             ))}
           </select>
@@ -244,17 +346,17 @@ export default function ListPage() {
       )
     }
     if (col === 'priority') {
-      const cfg = PRIORITY_CFG[issue.priority]
+      const cfg = PRIORITY_CFG[row.priority] ?? PRIORITY_CFG.medium
       if (isEditing) return (
         <div style={cellStyle}>
           <select
             autoFocus
-            value={issue.priority}
-            onChange={e => { setOverride(issue.key,'priority',e.target.value); stopEdit() }}
+            value={row.priority}
+            onChange={e => { const v = e.target.value; stopEdit(); void persistField(row, 'priority', v, row.priority) }}
             onBlur={stopEdit}
             style={{ background:T.bgSurface2, border:`1px solid ${T.border}`, color:T.text1, borderRadius:4, fontSize:12, padding:'2px 4px' }}
           >
-            {(Object.keys(PRIORITY_CFG) as Priority[]).map(p => (
+            {Object.keys(PRIORITY_CFG).map(p => (
               <option key={p} value={p}>{PRIORITY_CFG[p].label}</option>
             ))}
           </select>
@@ -268,43 +370,45 @@ export default function ListPage() {
       )
     }
     if (col === 'assignee') {
+      const profile = profiles.find(p => p.id === row.assigneeId)
       if (isEditing) return (
         <div style={cellStyle}>
           <select
             autoFocus
-            value={issue.assignee}
-            onChange={e => { setOverride(issue.key,'assignee',e.target.value); stopEdit() }}
+            value={row.assigneeId ?? ''}
+            onChange={e => { const v = e.target.value || null; stopEdit(); void persistField(row, 'assignee_id', v, row.assigneeId) }}
             onBlur={stopEdit}
             style={{ background:T.bgSurface2, border:`1px solid ${T.border}`, color:T.text1, borderRadius:4, fontSize:12, padding:'2px 4px' }}
           >
-            {ASSIGNEES.map(a => <option key={a} value={a}>{a}</option>)}
+            <option value="">Não atribuído</option>
+            {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
       )
       return (
         <div style={cellStyle} onClick={startEdit}>
-          <Avatar name={issue.assignee} />
-          <span style={{color:T.text2,fontSize:12,marginLeft:6}}>{issue.assignee}</span>
+          <Avatar initials={row.assignee} color={profile?.avatar_color ?? T.text3} />
+          <span style={{color:T.text2,fontSize:12,marginLeft:6}}>{row.assignee}</span>
         </div>
       )
     }
-    if (col === 'points') return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:T.text2,fontSize:12}}>{issue.points}</span></div>
+    if (col === 'points') return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:T.text2,fontSize:12}}>{row.points}</span></div>
     if (col === 'epic') {
-      const epic = EPICS.find(e => e.id === issue.epic)
-      return <div style={cellStyle}><span style={{color: epic?.color ?? T.text3, fontSize:11}}>{epic?.label ?? '—'}</span></div>
+      const epic = epics.find(e => e.id === row.epicId)
+      return <div style={cellStyle}><span style={{color: epic ? epicColor(epic.color) : T.text3, fontSize:11}}>{epic?.name ?? '—'}</span></div>
     }
     if (col === 'sprint') {
-      const sp = SPRINTS.find(s => s.id === issue.sprint)
+      const sp = sprints.find(s => s.id === row.sprintId)
       return <div style={cellStyle}><span style={{color:T.text2,fontSize:11}}>{sp?.name ?? '—'}</span></div>
     }
     if (col === 'labels') return (
       <div style={{...cellStyle,gap:4}}>
-        {issue.labels.slice(0,2).map(l => (
+        {row.labels.slice(0,2).map(l => (
           <span key={l} style={{background:T.neutralDim,color:T.text2,borderRadius:3,padding:'1px 5px',fontSize:10}}>{l}</span>
         ))}
       </div>
     )
-    if (col === 'dueDate') return <div style={cellStyle}><span style={{color:T.text3,fontSize:12}}>{issue.dueDate}</span></div>
+    if (col === 'dueDate') return <div style={cellStyle}><span style={{color:T.text3,fontSize:12}}>{row.dueDate}</span></div>
     return <div style={cellStyle} />
   }
 
@@ -313,11 +417,16 @@ export default function ListPage() {
     assignee:'assignee', points:'points', dueDate:'dueDate',
   }
 
+  const selectStyle: React.CSSProperties = {
+    background:T.bgSurface2, border:`1px solid ${T.border}`, borderRadius:6,
+    color:T.text2, padding:'5px 8px', fontSize:12, outline:'none', cursor:'pointer',
+  }
+
   return (
     <>
     <div style={{ background:T.bgPage, minHeight:'100vh', display:'flex', flexDirection:'column' }}>
       {/* Toolbar */}
-      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 20px', borderBottom:`1px solid ${T.border}`, background:T.bgSurface }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 20px', borderBottom:`1px solid ${T.border}`, background:T.bgSurface, flexWrap:'wrap' }}>
         <span style={{ color:T.text1, fontWeight:700, fontSize:15, marginRight:8 }}>Backlog</span>
         <input
           placeholder="Filtrar por título…"
@@ -325,6 +434,34 @@ export default function ListPage() {
           onChange={e => setSearch(e.target.value)}
           style={{ background:T.bgSurface2, border:`1px solid ${T.border}`, borderRadius:6, color:T.text1, padding:'5px 10px', fontSize:13, width:200, outline:'none' }}
         />
+        <select value={fProject} onChange={e => setFProject(e.target.value)} style={selectStyle} aria-label="Projeto">
+          <option value="">Todos os projetos</option>
+          {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={fStatus} onChange={e => setFStatus(e.target.value)} style={selectStyle} aria-label="Status">
+          <option value="">Status</option>
+          {Object.keys(STATUS_CFG).map(s => <option key={s} value={s}>{STATUS_CFG[s].label}</option>)}
+        </select>
+        <select value={fPriority} onChange={e => setFPriority(e.target.value)} style={selectStyle} aria-label="Prioridade">
+          <option value="">Prioridade</option>
+          {Object.keys(PRIORITY_CFG).map(p => <option key={p} value={p}>{PRIORITY_CFG[p].label}</option>)}
+        </select>
+        <select value={fType} onChange={e => setFType(e.target.value)} style={selectStyle} aria-label="Tipo">
+          <option value="">Tipo</option>
+          {Object.keys(TYPE_ICON).map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <select value={fAssignee} onChange={e => setFAssignee(e.target.value)} style={selectStyle} aria-label="Responsável">
+          <option value="">Responsável</option>
+          {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <select value={fSprint} onChange={e => setFSprint(e.target.value)} style={selectStyle} aria-label="Sprint">
+          <option value="">Sprint</option>
+          {sprints.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+        <select value={fEpic} onChange={e => setFEpic(e.target.value)} style={selectStyle} aria-label="Épico">
+          <option value="">Épico</option>
+          {epics.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
         <span style={{color:T.text3,fontSize:13,marginLeft:4}}>Agrupar:</span>
         {(['none','sprint','epic'] as GroupBy[]).map(g => (
           <button key={g} onClick={() => setGroupBy(g)} style={{
@@ -364,8 +501,23 @@ export default function ListPage() {
         </div>
       </div>
 
+      {error && (
+        <div style={{ padding:'10px 20px', fontSize:12, color:T.crit, borderBottom:`1px solid ${T.border}` }}>{error}</div>
+      )}
+
       {/* Table */}
       <div style={{ overflowX:'auto', flex:1 }}>
+        {loading ? (
+          <div style={{ padding:20, display:'flex', flexDirection:'column', gap:8 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} style={{ height:34, borderRadius:6, background:T.bgSurface2, opacity:0.6 }} />
+            ))}
+          </div>
+        ) : rows.length === 0 && !error ? (
+          <div style={{ padding:40, textAlign:'center', color:T.text3, fontSize:13 }}>
+            Nenhuma issue encontrada
+          </div>
+        ) : (
         <table style={{ borderCollapse:'collapse', width:'max-content', minWidth:'100%' }}>
           <thead>
             <tr style={{ background:T.bgSurface, borderBottom:`1px solid ${T.border}` }}>
@@ -408,9 +560,9 @@ export default function ListPage() {
                     </td>
                   </tr>
                 )}
-                {!collapsed[group.label] && group.items.map((issue, idx) => (
+                {!collapsed[group.label] && group.items.map((row, idx) => (
                   <tr
-                    key={issue.key}
+                    key={row.id}
                     style={{
                       borderBottom:`1px solid ${T.border}`,
                       background: idx % 2 === 0 ? T.bgPage : T.bgSurface,
@@ -421,7 +573,7 @@ export default function ListPage() {
                   >
                     {cols.map(col => (
                       <td key={col} style={{ padding:0, height:38 }}>
-                        {renderCell(issue, col)}
+                        {renderCell(row, col)}
                       </td>
                     ))}
                   </tr>
@@ -430,14 +582,15 @@ export default function ListPage() {
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
 
-    {selectedIssue && (
+    {selectedId && (
       <WorkItemDetail
-        data={issueToWID(selectedIssue)}
-        onUpdate={handleDetailUpdate}
-        onClose={() => setSelectedKey(null)}
+        itemId={selectedId}
+        onUpdate={() => { void load(filters) }}
+        onClose={() => { setSelectedId(null); void load(filters) }}
         mode="drawer"
       />
     )}
