@@ -1,11 +1,15 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Avatar } from '../components/ds/Avatar'
-import { NewProjectModal } from '../components/NewProjectModal'
-import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
+import { NewProjectModal, type NewProjectInput } from '../components/NewProjectModal'
+import { WorkItemDetail } from '../components/WorkItemDetail'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
+import {
+  listProjects, createProject, projectColor, projectProgress,
+  type ProjectRow, type ProjectTaskRow, type ProjectProfileRow, type ProjectBoardRow,
+} from '../data/db/projects'
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
+// ─── View model ───────────────────────────────────────────────────────────────
 type TaskStatus = 'em progresso' | 'concluído' | 'pendente' | 'planejamento'
 
 interface SubTask {
@@ -26,58 +30,41 @@ interface Project {
   pct:         number
   status:      TaskStatus
   responsible: string
+  boardId:     string | null
   tasks:       SubTask[]
 }
 
-const PROJECTS_DATA: Project[] = [
-  {
-    id: 'p1',
-    name: 'Construção do Galpão Industrial',
-    client: 'Construtora Horizonte Ltda',
-    color: '#4d82ff',
-    period: '06/01 – 31/10/25',
-    pct: 18,
-    status: 'em progresso',
-    responsible: 'Carlos Mendes',
-    tasks: [
-      { id: 'p1-t1', name: 'Fundação e Estrutura',    period: '06/01 – 31/03/25', pct: 90, status: 'em progresso', responsible: 'Carlos Mendes' },
-      { id: 'p1-t2', name: 'Instalações Elétricas',   period: '04/02 – 30/06/25', pct: 0,  status: 'pendente',     responsible: 'Roberto Lima' },
-      { id: 'p1-t3', name: 'Cobertura e Vedação',     period: '01/05 – 31/08/25', pct: 0,  status: 'pendente',     responsible: 'Construtora Ho.' },
-      { id: 'p1-t4', name: 'Instalações Hidráulicas', period: '01/07 – 30/09/25', pct: 0,  status: 'pendente',     responsible: 'Paulo Nascimento' },
-      { id: 'p1-t5', name: 'Acabamentos e Entrega',   period: '01/09 – 31/10/25', pct: 0,  status: 'pendente',     responsible: 'Carlos Mendes' },
-    ],
-  },
-  {
-    id: 'p2',
-    name: 'Sistema ERP Corporativo',
-    client: 'TechSoft Soluções',
-    color: '#7C3AED',
-    period: '01/02 – 30/11/25',
-    pct: 48,
-    status: 'em progresso',
-    responsible: 'Ana Beatriz',
-    tasks: [
-      { id: 'p2-t1', name: 'Levantamento de Requisitos', period: '01/02 – 31/03/25', pct: 100, status: 'concluído',    responsible: 'Ana Beatriz' },
-      { id: 'p2-t2', name: 'Desenvolvimento do Sistema', period: '17/03 – 30/07/25', pct: 45,  status: 'em progresso', responsible: 'Equipe Dev' },
-      { id: 'p2-t3', name: 'Testes e Homologação',       period: '01/09 – 30/11/25', pct: 0,   status: 'pendente',     responsible: 'QA TechSoft' },
-    ],
-  },
-  {
-    id: 'p3',
-    name: 'Reforma da Sede Corporativa',
-    client: 'Arquitetura & Design SL',
-    color: '#06C18A',
-    period: '01/06 – 31/12/25',
-    pct: 5,
-    status: 'planejamento',
-    responsible: 'Marcos Oliveira',
-    tasks: [
-      { id: 'p3-t1', name: 'Projeto Arquitetônico',    period: '01/06 – 31/12/25', pct: 7, status: 'em progresso', responsible: 'Marcos Oliveira' },
-      { id: 'p3-t2', name: 'Obras Civis',              period: '01/08 – 31/10/25', pct: 0, status: 'pendente',     responsible: 'Construtora Hil.' },
-      { id: 'p3-t3', name: 'Mobiliário e Acabamentos', period: '01/11 – 31/12/25', pct: 0, status: 'pendente',     responsible: 'Fornecedor Móv.' },
-    ],
-  },
-]
+const ITEM_STATUS_MAP: Record<string, TaskStatus> = {
+  backlog: 'pendente',
+  todo: 'pendente',
+  in_progress: 'em progresso',
+  in_review: 'em progresso',
+  blocked: 'pendente',
+  done: 'concluído',
+}
+
+const PROJECT_STATUS_MAP: Record<string, TaskStatus> = {
+  planned: 'planejamento',
+  planning: 'planejamento',
+  active: 'em progresso',
+  in_progress: 'em progresso',
+  on_hold: 'pendente',
+  paused: 'pendente',
+  completed: 'concluído',
+  done: 'concluído',
+}
+
+function fmtDate(d: string | null): string {
+  if (!d) return '—'
+  const [y, m, day] = d.split('-')
+  return `${day}/${m}`
+}
+
+function fmtPeriod(start: string | null, end: string | null): string {
+  if (!start && !end) return 'Sem período'
+  const endLabel = end ? `${fmtDate(end)}/${end.slice(2, 4)}` : '—'
+  return `${fmtDate(start)} – ${endLabel}`
+}
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
 const statusCfg: Record<TaskStatus, { color: string; bg: string; border: string; label: string }> = {
@@ -115,27 +102,6 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
   )
 }
 
-// ─── Task → WorkItemData mapper ────────────────────────────────────────────────
-function taskToWID(task: SubTask, project: Project): WorkItemData {
-  return {
-    key:              task.id.toUpperCase().replace('-', '-'),
-    type:             'task',
-    title:            task.name,
-    status:           task.status,
-    priority:         'medium',
-    labels:           [],
-    assigneeInitials: task.responsible.split(' ').slice(0,2).map(s => s[0]).join('').toUpperCase(),
-    assigneeName:     task.responsible,
-    epicLabel:        project.name,
-    epicColor:        project.color,
-    description:      `Tarefa do projeto "${project.name}" (${project.client}).`,
-    dueDate:          task.period.split(' – ')[1] ?? '',
-    points:           0,
-    comments:         [],
-    history:          [],
-  }
-}
-
 // ─── Project row ──────────────────────────────────────────────────────────────
 interface ProjectRowProps {
   project:     Project
@@ -143,7 +109,7 @@ interface ProjectRowProps {
   onOpenTask:  (task: SubTask, project: Project) => void
 }
 
-function ProjectRow({ project, onOpenProj, onOpenTask }: ProjectRowProps) {
+function ProjectListRow({ project, onOpenProj, onOpenTask }: ProjectRowProps) {
   const [expanded, setExpanded] = useState(true)
 
   return (
@@ -160,7 +126,6 @@ function ProjectRow({ project, onOpenProj, onOpenTask }: ProjectRowProps) {
         onMouseLeave={e => { (e.currentTarget as HTMLTableRowElement).style.background = 'transparent' }}
       >
         <td className="pl-4 py-3 pr-2" style={{ width: 24 }}>
-          {/* Expand caret — stopPropagation so it doesn't open the project */}
           <button
             onClick={e => { e.stopPropagation(); setExpanded(v => !v) }}
             onKeyDown={e => e.stopPropagation()}
@@ -202,6 +167,14 @@ function ProjectRow({ project, onOpenProj, onOpenTask }: ProjectRowProps) {
       </tr>
 
       {/* Sub-tasks */}
+      {expanded && project.tasks.length === 0 && (
+        <tr style={{ borderBottom: '1px solid #162032' }}>
+          <td />
+          <td colSpan={5} className="py-2 pl-12 text-[11px]" style={{ color: '#3a4d65' }}>
+            Nenhuma tarefa neste projeto
+          </td>
+        </tr>
+      )}
       {expanded && project.tasks.map((task) => (
         <tr
           key={task.id}
@@ -240,6 +213,39 @@ function ProjectRow({ project, onOpenProj, onOpenTask }: ProjectRowProps) {
   )
 }
 
+// ─── Mapping ──────────────────────────────────────────────────────────────────
+function buildProjects(
+  rows: ProjectRow[],
+  tasks: ProjectTaskRow[],
+  profiles: ProjectProfileRow[],
+  boards: ProjectBoardRow[],
+): Project[] {
+  const profileById = new Map(profiles.map(p => [p.id, p]))
+  return rows.map((p, i) => {
+    const own = tasks.filter(t => t.project_id === p.id)
+    const board = boards.find(b => b.project_id === p.id) ?? null
+    return {
+      id: p.id,
+      name: p.name,
+      client: p.client_name ?? '—',
+      color: projectColor(p, i),
+      period: fmtPeriod(p.period_start, p.period_end),
+      pct: projectProgress(own),
+      status: PROJECT_STATUS_MAP[p.status] ?? 'pendente',
+      responsible: (p.lead_id && profileById.get(p.lead_id)?.name) || 'Sem responsável',
+      boardId: board?.id ?? null,
+      tasks: own.map(t => ({
+        id: t.id,
+        name: `${t.key} · ${t.title}`,
+        period: fmtPeriod(t.start_date, t.due_date),
+        pct: t.status === 'done' ? 100 : (t.progress ?? 0),
+        status: ITEM_STATUS_MAP[t.status] ?? 'pendente',
+        responsible: (t.assignee_id && profileById.get(t.assignee_id)?.name) || 'Não atribuído',
+      })),
+    }
+  })
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 interface Props {
   onNav?: (v: string) => void
@@ -249,9 +255,37 @@ export default function ProjectsListPage({ onNav }: Props) {
   const { activeUser } = useSession()
   const canEdit = can(activeUser.permissions, 'edit:workitem')
 
-  const [newProjOpen, setNewProjOpen]   = useState(false)
-  const [projects, setProjects]         = useState<Project[]>(PROJECTS_DATA)
-  const [detailTask, setDetailTask]     = useState<{ task: SubTask; project: Project } | null>(null)
+  const [newProjOpen, setNewProjOpen] = useState(false)
+  const [rows, setRows] = useState<ProjectRow[]>([])
+  const [tasks, setTasks] = useState<ProjectTaskRow[]>([])
+  const [profiles, setProfiles] = useState<ProjectProfileRow[]>([])
+  const [boards, setBoards] = useState<ProjectBoardRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [detailItemId, setDetailItemId] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await listProjects()
+      setRows(data.projects)
+      setTasks(data.tasks)
+      setProfiles(data.profiles)
+      setBoards(data.boards)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Falha ao carregar os projetos.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { void load() }, [load])
+
+  const projects = useMemo(
+    () => buildProjects(rows, tasks, profiles, boards),
+    [rows, tasks, profiles, boards],
+  )
 
   const totalTasks = projects.reduce((s, p) => s + p.tasks.length, 0)
   const inProgress = projects.filter(p => p.status === 'em progresso').length
@@ -261,22 +295,21 @@ export default function ProjectsListPage({ onNav }: Props) {
     onNav?.('project')
   }
 
-  function handleOpenTask(task: SubTask, project: Project) {
-    setDetailTask({ task, project })
+  function handleOpenTask(task: SubTask) {
+    setDetailItemId(task.id)
   }
 
-  function handleUpdateTask(updated: WorkItemData) {
-    setProjects(prev => prev.map(p => ({
-      ...p,
-      tasks: p.tasks.map(t =>
-        t.id === updated.key.toLowerCase().replace('-', '-')
-          ? { ...t, status: updated.status as TaskStatus, responsible: updated.assigneeName ?? t.responsible }
-          : t
-      ),
-    })))
+  async function handleCreateProject(input: NewProjectInput) {
+    await createProject({
+      name: input.name,
+      key: input.key,
+      description: input.description || null,
+      boardType: input.boardType,
+      leadId: input.leadId,
+      actorName: activeUser.name,
+    })
+    await load()
   }
-
-  const detailWID = detailTask ? taskToWID(detailTask.task, detailTask.project) : null
 
   return (
     <>
@@ -286,7 +319,9 @@ export default function ProjectsListPage({ onNav }: Props) {
           <div>
             <h1 className="text-base font-bold" style={{ color: '#e8ecf4' }}>Projetos & Tarefas</h1>
             <p className="text-xs mt-0.5" style={{ color: '#546278' }}>
-              {projects.length} projetos &nbsp;·&nbsp; {inProgress} em progresso &nbsp;·&nbsp; {totalTasks} tarefas &nbsp;·&nbsp; {done} concluída{done !== 1 ? 's' : ''}
+              {loading
+                ? 'Carregando…'
+                : <>{projects.length} projetos &nbsp;·&nbsp; {inProgress} em progresso &nbsp;·&nbsp; {totalTasks} tarefas &nbsp;·&nbsp; {done} concluída{done !== 1 ? 's' : ''}</>}
             </p>
           </div>
           <button
@@ -301,48 +336,78 @@ export default function ProjectsListPage({ onNav }: Props) {
           </button>
         </div>
 
+        {error && (
+          <div className="px-6 py-3 text-xs" style={{ color: '#ff6b6b', borderBottom: '1px solid #1c2c45' }}>
+            {error}
+          </div>
+        )}
+
         {/* Table */}
         <div className="flex-1 overflow-auto">
-          <table className="w-full border-collapse" style={{ minWidth: 760 }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #1c2c45', background: 'rgba(255,255,255,0.02)' }}>
-                <th style={{ width: 24 }} />
-                {['Nome', 'Período', 'Progresso', 'Status', 'Responsável'].map(h => (
-                  <th
-                    key={h}
-                    className="py-2.5 pr-6 text-left text-[10px] font-semibold uppercase tracking-wider"
-                    style={{ color: '#546278' }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map(p => (
-                <ProjectRow
-                  key={p.id}
-                  project={p}
-                  onOpenProj={handleOpenProject}
-                  onOpenTask={handleOpenTask}
-                />
+          {loading ? (
+            <div className="p-6 space-y-2">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-10 rounded animate-pulse" style={{ background: '#151f30' }} />
               ))}
-            </tbody>
-          </table>
+            </div>
+          ) : projects.length === 0 && !error ? (
+            <div className="p-10 text-center text-sm" style={{ color: '#546278' }}>
+              Nenhum projeto encontrado
+            </div>
+          ) : (
+            <table className="w-full border-collapse" style={{ minWidth: 760 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #1c2c45', background: 'rgba(255,255,255,0.02)' }}>
+                  <th style={{ width: 24 }} />
+                  {['Nome', 'Período', 'Progresso', 'Status', 'Responsável'].map(h => (
+                    <th
+                      key={h}
+                      className="py-2.5 pr-6 text-left text-[10px] font-semibold uppercase tracking-wider"
+                      style={{ color: '#546278' }}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {projects.map(p => (
+                  <ProjectListRow
+                    key={p.id}
+                    project={p}
+                    onOpenProj={handleOpenProject}
+                    onOpenTask={handleOpenTask}
+                  />
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
-      {/* Task detail drawer */}
-      {detailWID && (
+      {/* Task detail drawer — real work item from the database */}
+      {detailItemId && (
         <WorkItemDetail
-          data={detailWID}
+          itemId={detailItemId}
           mode="drawer"
-          onUpdate={canEdit ? handleUpdateTask : () => {}}
-          onClose={() => setDetailTask(null)}
+          onUpdate={canEdit ? () => { void load() } : () => {}}
+          onClose={() => { setDetailItemId(null); void load() }}
         />
       )}
 
-      {newProjOpen && <NewProjectModal onClose={() => setNewProjOpen(false)} onSuccess={() => setNewProjOpen(false)} />}
+      {newProjOpen && (
+        <NewProjectModal
+          onClose={() => setNewProjOpen(false)}
+          onSuccess={() => { setNewProjOpen(false); onNav?.('project') }}
+          onCreate={handleCreateProject}
+          leads={profiles.map(p => ({
+            id: p.id,
+            name: p.name,
+            initials: p.avatar_initials ?? p.name.slice(0, 2).toUpperCase(),
+          }))}
+          existingKeys={rows.map(r => r.key)}
+        />
+      )}
     </>
   )
 }
