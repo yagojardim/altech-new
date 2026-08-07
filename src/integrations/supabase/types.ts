@@ -68,6 +68,70 @@ export type Database = {
           },
         ]
       }
+      approver_squads: {
+        Row: {
+          approver_id: string
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          metadata: Json
+          row_version: number
+          squad_id: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          approver_id: string
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          row_version?: number
+          squad_id: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          approver_id?: string
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metadata?: Json
+          row_version?: number
+          squad_id?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approver_squads_approver_fk"
+            columns: ["tenant_id", "approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "approver_squads_squad_fk"
+            columns: ["tenant_id", "squad_id"]
+            isOneToOne: false
+            referencedRelation: "squads"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "approver_squads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           archived_at: string | null
@@ -2120,6 +2184,175 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      timesheet_approvals: {
+        Row: {
+          approver_id: string | null
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          decision: string
+          id: string
+          metadata: Json
+          reason: string | null
+          row_version: number
+          tenant_id: string
+          timesheet_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          approver_id?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          decision: string
+          id?: string
+          metadata?: Json
+          reason?: string | null
+          row_version?: number
+          tenant_id: string
+          timesheet_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          approver_id?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          decision?: string
+          id?: string
+          metadata?: Json
+          reason?: string | null
+          row_version?: number
+          tenant_id?: string
+          timesheet_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timesheet_approvals_approver_fk"
+            columns: ["tenant_id", "approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "timesheet_approvals_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheet_approvals_timesheet_fk"
+            columns: ["tenant_id", "timesheet_id"]
+            isOneToOne: false
+            referencedRelation: "timesheets"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
+      timesheets: {
+        Row: {
+          approver_id: string | null
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          description: string | null
+          hours: number
+          id: string
+          metadata: Json
+          month: string | null
+          project_id: string
+          row_version: number
+          status: string
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+          work_item_id: string | null
+        }
+        Insert: {
+          approver_id?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          description?: string | null
+          hours?: number
+          id?: string
+          metadata?: Json
+          month?: string | null
+          project_id: string
+          row_version?: number
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+          work_item_id?: string | null
+        }
+        Update: {
+          approver_id?: string | null
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          description?: string | null
+          hours?: number
+          id?: string
+          metadata?: Json
+          month?: string | null
+          project_id?: string
+          row_version?: number
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+          work_item_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "timesheets_approver_fk"
+            columns: ["tenant_id", "approver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "timesheets_item_fk"
+            columns: ["tenant_id", "work_item_id"]
+            isOneToOne: false
+            referencedRelation: "work_items"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "timesheets_project_fk"
+            columns: ["tenant_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "timesheets_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "timesheets_user_fk"
+            columns: ["tenant_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
       }
       user_dashboards: {
         Row: {

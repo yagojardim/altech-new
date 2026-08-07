@@ -1,12 +1,12 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { T } from '../components/ds/tokens'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
-  getMyEntries, addEntry, updateEntry, deleteEntry, submitPeriodEntries,
-  getApproversForTenant, ALL_ITEMS,
-  type TimesheetEntry, type TimesheetStatus,
-} from '../data/timesheets'
+  resolveProfileIdByName, searchDemands, listMyEntries, createEntry, updateEntry,
+  deleteEntry, submitForApproval, listApprovers,
+  type TimesheetEntry, type TimesheetStatus, type DemandOption, type ApproverOption,
+} from '../data/db/timesheets'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function fmtDate(d: string) {
@@ -26,17 +26,17 @@ function today() {
 }
 
 const STATUS_LABELS: Record<TimesheetStatus, string> = {
-  saved:     'Salvo',
-  submitted: 'Aguardando',
+  draft:     'Salvo',
+  submitted: 'Enviado',
   approved:  'Aprovado',
   rejected:  'Rejeitado',
 }
 
 const STATUS_COLORS: Record<TimesheetStatus, { bg: string; txt: string; dot: string }> = {
-  saved:     { bg: `${T.border}22`,    txt: T.text3,    dot: T.border2   },
-  submitted: { bg: `${T.warn}18`,      txt: T.warn,     dot: T.warn      },
-  approved:  { bg: `${T.success}18`,   txt: T.success,  dot: T.success   },
-  rejected:  { bg: `${T.crit}18`,    txt: T.crit,   dot: T.crit    },
+  draft:     { bg: `${T.border}22`,  txt: T.text3,   dot: T.border2 },
+  submitted: { bg: `${T.warn}18`,    txt: T.warn,    dot: T.warn    },
+  approved:  { bg: `${T.success}18`, txt: T.success, dot: T.success },
+  rejected:  { bg: `${T.crit}18`,    txt: T.crit,    dot: T.crit    },
 }
 
 const inputSt: React.CSSProperties = {
@@ -47,21 +47,21 @@ const inputSt: React.CSSProperties = {
 
 // ─── StatusBadge ──────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: TimesheetStatus }) {
-  const { bg, txt, dot } = STATUS_COLORS[status]
+  const { bg, txt, dot } = STATUS_COLORS[status] ?? STATUS_COLORS.draft
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 99, background: bg, fontSize: 11, color: txt, fontWeight: 600 }}>
       <span style={{ width: 6, height: 6, borderRadius: 99, background: dot, flexShrink: 0 }} />
-      {STATUS_LABELS[status]}
+      {STATUS_LABELS[status] ?? status}
     </span>
   )
 }
 
-// ─── ItemCombobox ─────────────────────────────────────────────────────────────
-type ItemOption = { item_id: string; item_label: string; project_id: string; project_name: string }
-
-function ItemCombobox({ value, onChange }: { value: ItemOption | null; onChange: (v: ItemOption) => void }) {
+// ─── DemandCombobox — single search field over real work items ────────────────
+function DemandCombobox({ value, onChange }: { value: DemandOption | null; onChange: (v: DemandOption) => void }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [options, setOptions] = useState<DemandOption[]>([])
+  const [loading, setLoading] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -72,38 +72,52 @@ function ItemCombobox({ value, onChange }: { value: ItemOption | null; onChange:
     return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  const filtered = query.trim()
-    ? ALL_ITEMS.filter(i => i.search.includes(query.toLowerCase())).slice(0, 12)
-    : ALL_ITEMS.slice(0, 12)
+  useEffect(() => {
+    if (!open) return
+    let alive = true
+    setLoading(true)
+    const t = setTimeout(() => {
+      void searchDemands(query).then(res => {
+        if (!alive) return
+        setOptions(res)
+        setLoading(false)
+      })
+    }, 180)
+    return () => { alive = false; clearTimeout(t) }
+  }, [query, open])
 
   return (
     <div ref={ref} style={{ position: 'relative', flex: 1 }}>
       <input
-        value={open ? query : (value?.item_label ?? '')}
+        value={open ? query : (value?.label ?? '')}
         onFocus={() => { setQuery(''); setOpen(true) }}
         onChange={e => { setQuery(e.target.value); setOpen(true) }}
-        placeholder="Buscar demanda ou projeto…"
+        placeholder="Buscar demanda por nome, chave, épico ou feature…"
         style={{ ...inputSt, width: '100%', boxSizing: 'border-box' }}
       />
       {open && (
         <div style={{
           position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 300,
           background: T.bgSurface, border: `1px solid ${T.border}`,
-          borderRadius: 8, marginTop: 2, maxHeight: 240, overflowY: 'auto',
+          borderRadius: 8, marginTop: 2, maxHeight: 260, overflowY: 'auto',
           boxShadow: T.shadowModal,
         }}>
-          {filtered.length === 0
-            ? <div style={{ padding: '12px 14px', color: T.text3, fontSize: 12 }}>Nenhum item encontrado.</div>
-            : filtered.map(item => (
-              <button key={item.item_id}
-                onMouseDown={e => { e.preventDefault(); onChange(item); setOpen(false); setQuery('') }}
-                style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', padding: '8px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', textAlign: 'left' }}
-                onMouseEnter={e => (e.currentTarget.style.background = `${T.accent}12`)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
-                <span style={{ fontSize: 12, color: T.text1, fontWeight: 500 }}>{item.item_label}</span>
-                <span style={{ fontSize: 10, color: T.text3 }}>{item.project_name}</span>
-              </button>
-            ))
+          {loading
+            ? <div style={{ padding: '12px 14px', color: T.text3, fontSize: 12 }}>Buscando…</div>
+            : options.length === 0
+              ? <div style={{ padding: '12px 14px', color: T.text3, fontSize: 12 }}>Nenhuma demanda encontrada.</div>
+              : options.map(item => (
+                <button key={item.work_item_id}
+                  onMouseDown={e => { e.preventDefault(); onChange(item); setOpen(false); setQuery('') }}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', padding: '8px 14px', background: 'none', border: 'none', borderBottom: `1px solid ${T.border}`, cursor: 'pointer', textAlign: 'left' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = `${T.accent}12`)}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'none')}>
+                  <span style={{ fontSize: 12, color: T.text1, fontWeight: 500 }}>{item.label}</span>
+                  <span style={{ fontSize: 10, color: T.text3 }}>
+                    {item.project_name}{item.epic_name ? ` · ${item.epic_name}` : ''}{item.feature_name ? ` · ${item.feature_name}` : ''}
+                  </span>
+                </button>
+              ))
           }
         </div>
       )}
@@ -112,7 +126,7 @@ function ItemCombobox({ value, onChange }: { value: ItemOption | null; onChange:
 }
 
 // ─── EditModal ────────────────────────────────────────────────────────────────
-interface EditState { entry: TimesheetEntry; date: string; item: ItemOption | null; hours: string; description: string }
+interface EditState { entry: TimesheetEntry; date: string; item: DemandOption | null; hours: string; description: string }
 
 function EditModal({ state, onSave, onCancel }: { state: EditState; onSave: (s: EditState) => void; onCancel: () => void }) {
   const [s, setS] = useState(state)
@@ -135,7 +149,7 @@ function EditModal({ state, onSave, onCancel }: { state: EditState; onSave: (s: 
           </div>
           <div>
             <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Demanda</div>
-            <ItemCombobox value={s.item} onChange={item => setS(p => ({ ...p, item }))} />
+            <DemandCombobox value={s.item} onChange={item => setS(p => ({ ...p, item }))} />
           </div>
           <div>
             <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Descrição</div>
@@ -155,18 +169,23 @@ function EditModal({ state, onSave, onCancel }: { state: EditState; onSave: (s: 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function TimesheetPage() {
   const { activeUser } = useSession()
-  const { permissions, user_id: userId, name: userName, avatar_initials: userInitials, tenant_id: tenantId, squad_id: squadId } = activeUser
+  const { permissions, name: userName } = activeUser
+  const allowed = can(permissions, 'log:hours')
 
-  const [tick, setTick] = useState(0)
-  const refresh = () => setTick(t => t + 1)
+  const [profileId, setProfileId] = useState<string | null>(null)
+  const [entries, setEntries] = useState<TimesheetEntry[]>([])
+  const [approvers, setApprovers] = useState<ApproverOption[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   // Form state
   const [showForm, setShowForm] = useState(false)
   const [formDate, setFormDate] = useState(today())
-  const [formItem, setFormItem] = useState<ItemOption | null>(null)
+  const [formItem, setFormItem] = useState<DemandOption | null>(null)
   const [formHours, setFormHours] = useState('1')
   const [formDesc, setFormDesc] = useState('')
   const [formErr, setFormErr] = useState('')
+  const [saving, setSaving] = useState(false)
 
   // Filter state
   const [filterStatus, setFilterStatus] = useState<TimesheetStatus | 'all'>('all')
@@ -182,24 +201,47 @@ export default function TimesheetPage() {
   const [editing, setEditing] = useState<EditState | null>(null)
   const [toast, setToast] = useState('')
 
-  if (!can(permissions, 'log:hours')) {
+  const load = useCallback(async (pid: string) => {
+    setLoading(true)
+    const rows = await listMyEntries(pid)
+    setEntries(rows)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    if (!allowed) { setLoading(false); return }
+    let alive = true
+    void (async () => {
+      setLoading(true)
+      const [pid, appr] = await Promise.all([resolveProfileIdByName(userName), listApprovers()])
+      if (!alive) return
+      setApprovers(appr)
+      setProfileId(pid)
+      if (!pid) {
+        setError(`Não encontramos o perfil "${userName}" no banco. Verifique o cadastro em Pessoas.`)
+        setEntries([])
+        setLoading(false)
+        return
+      }
+      setError('')
+      await load(pid)
+    })()
+    return () => { alive = false }
+  }, [allowed, userName, load])
+
+  if (!allowed) {
     return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: T.text3, fontSize: 14 }}>Sem permissão para lançar horas.</div>
   }
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks — permission gate above doesn't call hooks conditionally; this is safe
-  const allEntries = getMyEntries(userId, tenantId)
-  void tick
+  const months = Array.from(new Set(entries.map(e => e.date.slice(0, 7)))).sort().reverse()
 
-  const months = Array.from(new Set(allEntries.map(e => e.date.slice(0, 7)))).sort().reverse()
-
-  const filtered = allEntries.filter(e => {
+  const filtered = entries.filter(e => {
     if (filterStatus !== 'all' && e.status !== filterStatus) return false
     if (filterMonth !== 'all' && !e.date.startsWith(filterMonth)) return false
     return true
   })
 
-  const savedInPeriod = allEntries.filter(e => e.status === 'saved' && e.date.startsWith(approvalPeriod))
-  const approvers = getApproversForTenant(tenantId)
+  const sendableInPeriod = entries.filter(e => (e.status === 'draft' || e.status === 'rejected') && e.date.startsWith(approvalPeriod))
   const totalHours = filtered.reduce((s, e) => s + e.hours, 0)
 
   function showToast(msg: string) {
@@ -207,66 +249,93 @@ export default function TimesheetPage() {
     setTimeout(() => setToast(''), 3000)
   }
 
-  function handleAddOk() {
+  async function handleAddOk() {
+    if (!profileId) return
     if (!formItem) { setFormErr('Selecione uma demanda.'); return }
     const h = parseFloat(formHours)
     if (!h || h <= 0) { setFormErr('Informe um número de horas válido.'); return }
-    setFormErr('')
-    addEntry({
-      tenant_id: tenantId, user_id: userId, user_name: userName, user_initials: userInitials,
-      date: formDate, project_id: formItem.project_id, project_name: formItem.project_name,
-      item_id: formItem.item_id, item_label: formItem.item_label,
-      hours: h, description: formDesc, status: 'saved',
-      squad_id: squadId !== '*' ? squadId : undefined,
+    setFormErr(''); setSaving(true)
+    const row = await createEntry({
+      profileId,
+      projectId: formItem.project_id,
+      workItemId: formItem.work_item_id,
+      date: formDate,
+      hours: h,
+      description: formDesc,
+      actorName: userName,
     })
+    setSaving(false)
+    if (!row) { setFormErr('Não foi possível salvar o lançamento. Tente novamente.'); return }
     setFormItem(null); setFormHours('1'); setFormDesc(''); setFormDate(today())
-    setShowForm(false); refresh(); showToast('Lançamento salvo.')
+    setShowForm(false)
+    await load(profileId)
+    showToast('Lançamento salvo no histórico.')
   }
 
-  function handleDelete(e: TimesheetEntry) {
-    deleteEntry(e.id); refresh(); showToast('Lançamento excluído.')
+  async function handleDelete(e: TimesheetEntry) {
+    if (!profileId) return
+    const ok = await deleteEntry(e.id, userName)
+    await load(profileId)
+    showToast(ok ? 'Lançamento excluído.' : 'Lançamento aprovado não pode ser excluído.')
   }
 
   function handleEditOpen(e: TimesheetEntry) {
-    const item = ALL_ITEMS.find(i => i.item_id === e.item_id) ?? { item_id: e.item_id, item_label: e.item_label, project_id: e.project_id, project_name: e.project_name, search: '' }
-    setEditing({ entry: e, date: e.date, item, hours: String(e.hours), description: e.description })
+    setEditing({
+      entry: e,
+      date: e.date,
+      item: e.work_item_id
+        ? { work_item_id: e.work_item_id, key: e.item_key ?? '', title: e.item_title ?? '', project_id: e.project_id, project_name: e.project_name, epic_name: null, feature_name: null, label: `${e.item_key ?? ''} · ${e.item_title ?? ''}` }
+        : null,
+      hours: String(e.hours),
+      description: e.description ?? '',
+    })
   }
 
-  function handleEditSave(s: EditState) {
-    if (!s.item) return
-    updateEntry(s.entry.id, { date: s.date, item_id: s.item.item_id, item_label: s.item.item_label, project_id: s.item.project_id, project_name: s.item.project_name, hours: parseFloat(s.hours), description: s.description })
-    setEditing(null); refresh(); showToast('Lançamento atualizado.')
+  async function handleEditSave(s: EditState) {
+    if (!profileId) return
+    const ok = await updateEntry(s.entry.id, {
+      date: s.date,
+      hours: parseFloat(s.hours),
+      description: s.description,
+      projectId: s.item?.project_id,
+      workItemId: s.item?.work_item_id ?? null,
+    }, userName)
+    setEditing(null)
+    await load(profileId)
+    showToast(ok ? 'Lançamento atualizado.' : 'Lançamento aprovado não pode ser editado.')
   }
 
-  function handleSendApproval() {
-    if (savedInPeriod.length === 0) { showToast('Nenhum lançamento salvo neste período.'); return }
+  async function sendPeriod(approver: ApproverOption) {
+    if (!profileId) return
+    const n = await submitForApproval(sendableInPeriod.map(e => e.id), approver.id, userName)
+    await load(profileId)
+    setApprovalMsg(`${n} lançamento(s) enviado(s) para ${approver.name}.`)
+    setApprovalStep('done')
+  }
+
+  async function handleSendApproval() {
+    if (sendableInPeriod.length === 0) { showToast('Nenhum lançamento salvo neste período.'); return }
     if (approvers.length === 0) { showToast('Nenhum aprovador disponível.'); return }
-    if (approvers.length === 1) {
-      const a = approvers[0]
-      const n = submitPeriodEntries(userId, tenantId, approvalPeriod, a.user_id, a.name)
-      refresh(); setApprovalMsg(`${n} lançamento(s) enviado(s) para ${a.name}.`); setApprovalStep('done')
-    } else {
-      setApprovalStep('choose')
-    }
+    if (approvers.length === 1) await sendPeriod(approvers[0])
+    else setApprovalStep('choose')
   }
 
-  function handleFinalizar() {
-    if (!approvalApproverId) return
-    const a = approvers.find(x => x.user_id === approvalApproverId)!
-    const n = submitPeriodEntries(userId, tenantId, approvalPeriod, a.user_id, a.name)
-    refresh(); setApprovalMsg(`${n} lançamento(s) enviado(s) para ${a.name}.`); setApprovalStep('done'); setApprovalApproverId('')
+  async function handleFinalizar() {
+    const a = approvers.find(x => x.id === approvalApproverId)
+    if (!a) return
+    await sendPeriod(a)
+    setApprovalApproverId('')
   }
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 960, margin: '0 auto', position: 'relative' }}>
-      {/* Toast */}
       {toast && (
         <div style={{ position: 'fixed', bottom: 28, right: 28, zIndex: 9999, background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, padding: '10px 18px', color: T.text1, fontSize: 13, boxShadow: T.shadowModal }}>
           {toast}
         </div>
       )}
 
-      {editing && <EditModal state={editing} onSave={handleEditSave} onCancel={() => setEditing(null)} />}
+      {editing && <EditModal state={editing} onSave={s => { void handleEditSave(s) }} onCancel={() => setEditing(null)} />}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
@@ -279,6 +348,12 @@ export default function TimesheetPage() {
         </button>
       </div>
 
+      {error && (
+        <div style={{ background: `${T.crit}12`, border: `1px solid ${T.crit}44`, borderRadius: 10, padding: '12px 16px', color: T.crit, fontSize: 12, marginBottom: 16 }}>
+          {error}
+        </div>
+      )}
+
       {/* Add form */}
       {showForm && (
         <div style={{ background: T.bgSurface, border: `1px solid ${T.accent}55`, borderRadius: 12, padding: 20, marginBottom: 24 }}>
@@ -288,9 +363,9 @@ export default function TimesheetPage() {
               <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Data</div>
               <input type="date" value={formDate} onChange={e => setFormDate(e.target.value)} style={{ ...inputSt, width: 140 }} />
             </div>
-            <div style={{ flex: 1, minWidth: 240 }}>
+            <div style={{ flex: 1, minWidth: 260 }}>
               <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Demanda</div>
-              <ItemCombobox value={formItem} onChange={setFormItem} />
+              <DemandCombobox value={formItem} onChange={setFormItem} />
             </div>
             <div>
               <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Horas</div>
@@ -300,17 +375,19 @@ export default function TimesheetPage() {
               <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Descrição (opcional)</div>
               <input value={formDesc} onChange={e => setFormDesc(e.target.value)} placeholder="O que foi feito…" style={{ ...inputSt, width: '100%', boxSizing: 'border-box' }} />
             </div>
-            <button onClick={handleAddOk} style={{ padding: '7px 22px', borderRadius: 8, background: T.accent, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>OK</button>
+            <button onClick={() => { void handleAddOk() }} disabled={saving || !profileId}
+              style={{ padding: '7px 22px', borderRadius: 8, background: saving || !profileId ? T.border2 : T.accent, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: saving || !profileId ? 'not-allowed' : 'pointer' }}>
+              {saving ? '…' : 'OK'}
+            </button>
           </div>
           {formErr && <div style={{ marginTop: 8, fontSize: 11, color: T.crit }}>{formErr}</div>}
         </div>
       )}
 
-      {/* History */}
+      {/* History — single tab with status / month filters */}
       <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
-        {/* Filters */}
         <div style={{ padding: '12px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {(['all', 'saved', 'submitted', 'approved', 'rejected'] as const).map(s => (
+          {(['all', 'draft', 'submitted', 'approved', 'rejected'] as const).map(s => (
             <button key={s} onClick={() => setFilterStatus(s)} style={{
               padding: '4px 11px', borderRadius: 99, fontSize: 11, fontWeight: 600, cursor: 'pointer',
               background: filterStatus === s ? T.accent : T.bgPage,
@@ -328,9 +405,11 @@ export default function TimesheetPage() {
           </select>
         </div>
 
-        {filtered.length === 0
-          ? <div style={{ padding: '40px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>Nenhum lançamento para os filtros selecionados.</div>
-          : (
+        {loading
+          ? <div style={{ padding: '40px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>Carregando lançamentos…</div>
+          : filtered.length === 0
+            ? <div style={{ padding: '40px 20px', textAlign: 'center', color: T.text3, fontSize: 13 }}>Nenhum lançamento para os filtros selecionados.</div>
+            : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: `1px solid ${T.border}` }}>
@@ -341,15 +420,15 @@ export default function TimesheetPage() {
               </thead>
               <tbody>
                 {filtered.map(entry => {
-                  const editable = entry.status === 'saved' || entry.status === 'rejected'
+                  const editable = entry.status !== 'approved'
                   return (
                     <tr key={entry.id} style={{ borderBottom: `1px solid ${T.border}`, transition: 'background 0.1s' }}
                       onMouseEnter={e => (e.currentTarget.style.background = `${T.accent}08`)}
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
                       <td style={{ padding: '10px 14px', fontSize: 12, color: T.text2, whiteSpace: 'nowrap' }}>{fmtDate(entry.date)}</td>
                       <td style={{ padding: '10px 14px', fontSize: 12, color: T.text1 }}>
-                        <span style={{ fontFamily: 'monospace', fontSize: 11, color: T.accent, marginRight: 4 }}>{entry.item_id}</span>
-                        {entry.item_label.split('·').slice(1).join('·').trim() || entry.item_label}
+                        {entry.item_key && <span style={{ fontFamily: 'monospace', fontSize: 11, color: T.accent, marginRight: 4 }}>{entry.item_key}</span>}
+                        {entry.item_title ?? '—'}
                       </td>
                       <td style={{ padding: '10px 14px', fontSize: 11, color: T.text3, whiteSpace: 'nowrap' }}>{entry.project_name}</td>
                       <td style={{ padding: '10px 14px', fontSize: 13, fontWeight: 600, color: T.text1, whiteSpace: 'nowrap' }}>{entry.hours}h</td>
@@ -362,7 +441,7 @@ export default function TimesheetPage() {
                         {editable && (
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button onClick={() => handleEditOpen(entry)} title="Editar" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 11, cursor: 'pointer' }}>✏</button>
-                            <button onClick={() => handleDelete(entry)} title="Excluir" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.crit, fontSize: 11, cursor: 'pointer' }}>✕</button>
+                            <button onClick={() => { void handleDelete(entry) }} title="Excluir" style={{ padding: '4px 8px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.crit, fontSize: 11, cursor: 'pointer' }}>✕</button>
                           </div>
                         )}
                       </td>
@@ -396,24 +475,24 @@ export default function TimesheetPage() {
               <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Período</div>
               <input type="month" value={approvalPeriod} onChange={e => { setApprovalPeriod(e.target.value); setApprovalStep('idle') }} style={{ ...inputSt }} />
             </div>
-            <span style={{ fontSize: 11, color: savedInPeriod.length > 0 ? T.text3 : T.border2, paddingBottom: 9 }}>
-              {savedInPeriod.length > 0 ? `${savedInPeriod.length} salvo(s) neste período` : 'Nenhum lançamento salvo neste período'}
+            <span style={{ fontSize: 11, color: sendableInPeriod.length > 0 ? T.text3 : T.border2, paddingBottom: 9 }}>
+              {sendableInPeriod.length > 0 ? `${sendableInPeriod.length} salvo(s) neste período` : 'Nenhum lançamento salvo neste período'}
             </span>
             {approvalStep === 'choose' && (
               <div>
                 <div style={{ fontSize: 11, color: T.text3, marginBottom: 4 }}>Aprovador</div>
                 <select value={approvalApproverId} onChange={e => setApprovalApproverId(e.target.value)} style={{ ...inputSt, minWidth: 180 }}>
                   <option value="">Selecione…</option>
-                  {approvers.map(a => <option key={a.user_id} value={a.user_id}>{a.name}</option>)}
+                  {approvers.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               </div>
             )}
             {approvalStep === 'choose' ? (
-              <button onClick={handleFinalizar} disabled={!approvalApproverId} style={{ padding: '7px 18px', borderRadius: 8, background: approvalApproverId ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: approvalApproverId ? 'pointer' : 'not-allowed' }}>
+              <button onClick={() => { void handleFinalizar() }} disabled={!approvalApproverId} style={{ padding: '7px 18px', borderRadius: 8, background: approvalApproverId ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: approvalApproverId ? 'pointer' : 'not-allowed' }}>
                 Finalizar
               </button>
             ) : (
-              <button onClick={handleSendApproval} disabled={savedInPeriod.length === 0} style={{ padding: '7px 18px', borderRadius: 8, background: savedInPeriod.length > 0 ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: savedInPeriod.length > 0 ? 'pointer' : 'not-allowed' }}>
+              <button onClick={() => { void handleSendApproval() }} disabled={sendableInPeriod.length === 0} style={{ padding: '7px 18px', borderRadius: 8, background: sendableInPeriod.length > 0 ? T.accent : T.border2, border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: sendableInPeriod.length > 0 ? 'pointer' : 'not-allowed' }}>
                 Enviar para aprovação →
               </button>
             )}
