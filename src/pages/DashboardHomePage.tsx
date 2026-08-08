@@ -37,7 +37,7 @@ import {
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
-import { countOperationalModules } from '../data/tenantModules'
+import { countActiveModules } from '../data/db/modules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
@@ -161,7 +161,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const _scope = getActiveScope()
   const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
   const _activeBoards = _boards.filter(b => b.status === 'active').length
-  const _modCounts = countOperationalModules(activeUser.tenant_id)
+  const [_modCounts, _setModCounts] = useState<{ active: number; total: number }>({ active: 0, total: 0 })
+  useEffect(() => { void countActiveModules().then(_setModCounts) }, [])
   const _pendingInvites = countPendingInvites(activeUser.tenant_id)
   const _nearestInvite  = nearestExpiry(activeUser.tenant_id)
   const _inviteSub = _nearestInvite

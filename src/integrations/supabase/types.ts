@@ -1223,6 +1223,164 @@ export type Database = {
           },
         ]
       }
+      module_activation_requests: {
+        Row: {
+          archived_at: string | null
+          business_reason: string | null
+          created_at: string
+          created_by: string | null
+          expected_use: string | null
+          id: string
+          metadata: Json
+          module_id: string
+          notes: string | null
+          priority: string
+          request_status: string
+          requested_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          row_version: number
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          business_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          expected_use?: string | null
+          id?: string
+          metadata?: Json
+          module_id: string
+          notes?: string | null
+          priority?: string
+          request_status?: string
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          row_version?: number
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          business_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          expected_use?: string | null
+          id?: string
+          metadata?: Json
+          module_id?: string
+          notes?: string | null
+          priority?: string
+          request_status?: string
+          requested_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          row_version?: number
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_activation_requests_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_activation_requests_requested_by_fk"
+            columns: ["tenant_id", "requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "module_activation_requests_reviewed_by_fk"
+            columns: ["tenant_id", "reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "module_activation_requests_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      modules: {
+        Row: {
+          archived_at: string | null
+          category: string | null
+          created_at: string
+          created_by: string | null
+          default_status: string
+          description: string | null
+          display_order: number
+          icon: string | null
+          id: string
+          is_future: boolean
+          is_premium: boolean
+          is_preview: boolean
+          key: string
+          metadata: Json
+          module_type: string | null
+          name: string
+          row_version: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_status?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_future?: boolean
+          is_premium?: boolean
+          is_preview?: boolean
+          key: string
+          metadata?: Json
+          module_type?: string | null
+          name: string
+          row_version?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          category?: string | null
+          created_at?: string
+          created_by?: string | null
+          default_status?: string
+          description?: string | null
+          display_order?: number
+          icon?: string | null
+          id?: string
+          is_future?: boolean
+          is_premium?: boolean
+          is_preview?: boolean
+          key?: string
+          metadata?: Json
+          module_type?: string | null
+          name?: string
+          row_version?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       password_reset_events: {
         Row: {
           actor_id: string | null
@@ -2130,6 +2288,104 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "squads_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_modules: {
+        Row: {
+          activation_status: string | null
+          approved_at: string | null
+          approved_by: string | null
+          archived_at: string | null
+          contract_status: string | null
+          created_at: string
+          created_by: string | null
+          enabled_at: string | null
+          id: string
+          metadata: Json
+          module_id: string
+          requested_at: string | null
+          requested_by: string | null
+          row_version: number
+          status: string
+          suspended_at: string | null
+          suspended_reason: string | null
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          activation_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
+          contract_status?: string | null
+          created_at?: string
+          created_by?: string | null
+          enabled_at?: string | null
+          id?: string
+          metadata?: Json
+          module_id: string
+          requested_at?: string | null
+          requested_by?: string | null
+          row_version?: number
+          status?: string
+          suspended_at?: string | null
+          suspended_reason?: string | null
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          activation_status?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          archived_at?: string | null
+          contract_status?: string | null
+          created_at?: string
+          created_by?: string | null
+          enabled_at?: string | null
+          id?: string
+          metadata?: Json
+          module_id?: string
+          requested_at?: string | null
+          requested_by?: string | null
+          row_version?: number
+          status?: string
+          suspended_at?: string | null
+          suspended_reason?: string | null
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_modules_approved_by_fk"
+            columns: ["tenant_id", "approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "tenant_modules_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_modules_requested_by_fk"
+            columns: ["tenant_id", "requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+          {
+            foreignKeyName: "tenant_modules_tenant_id_fkey"
             columns: ["tenant_id"]
             isOneToOne: false
             referencedRelation: "tenants"
