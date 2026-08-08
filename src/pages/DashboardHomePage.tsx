@@ -1701,6 +1701,9 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
   const [rev, setRev]               = useState(0)
 
+  useDashboardAssignments(user.name)
+
+
   useEffect(() => {
     const s = getActiveScope()
     setScope(s)
