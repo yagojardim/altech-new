@@ -33,6 +33,7 @@ import TimesheetPage from './pages/TimesheetPage'
 import HoursApprovalPage from './pages/HoursApprovalPage'
 import BoardsListPage from './pages/BoardsListPage'
 import ModulesPortfolioPage from './pages/ModulesPortfolioPage'
+import TenantSettingsPage from './pages/TenantSettingsPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -44,7 +45,7 @@ const ALL_VIEWS: View[] = [
   'reports','automations','config','team','my-tasks',
   'issue','client','task-drawer',
   'login','role-dashboard','client-access','client-login','client-messages',
-  'timesheet','hours-approval','boards-list','modules',
+  'timesheet','hours-approval','boards-list','modules','tenant-settings',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -61,6 +62,7 @@ export const VIEW_LABELS: Record<View, string> = {
   timesheet:'Lançar horas', 'hours-approval':'Aprovar horas',
   'boards-list':'Boards',
   modules:'Módulos',
+  'tenant-settings':'Config. do Tenant',
 }
 
 export default function App() {
@@ -176,6 +178,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='reports'       && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ReportsPage/></div>}
         {view==='automations'   && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><AutomationsPage/></div>}
         {view==='config'        && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ConfigPage/></div>}
+        {view==='tenant-settings' && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TenantSettingsPage/></div>}
         {view==='team'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} initialTab={teamInitialTab} /></div>}
         {view==='my-tasks'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><MyTasksPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='dashboard'     && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}

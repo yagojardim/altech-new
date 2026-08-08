@@ -82,6 +82,7 @@ const ALL_GROUPS: NavGroup[] = [
     label: 'Configuração',
     items: [
       { id: 'config',        label: 'Configurações',        icon: AdminIcon, cap: 'users:manage' },
+      { id: 'tenant-settings', label: 'Config. do Tenant',  icon: AdminIcon, cap: 'users:manage' },
       { id: 'modules',       label: 'Módulos',              icon: ModulesIcon, cap: 'module:request' },
       { id: 'automations',   label: 'Automações',           icon: AutomIcon,  cap: 'users:manage' },
       { id: 'client-access',    label: 'Criar acesso cliente',    icon: AccessIcon, cap: 'access:client-portal' },
