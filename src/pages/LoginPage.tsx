@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { signIn, INSPECTION_MODE_ENABLED } from '../lib/auth'
+import { loadProfileByAuthUserId, writeLoginAudit, touchAccess } from '../data/db/authProfile'
 
 type LoginState = 'idle' | 'loading' | 'error' | 'success'
 
-interface Props { onSuccess: (role: string) => void }
+/** `role` só é enviado no atalho Inspection (dev). Login real chama sem role. */
+interface Props { onSuccess: (role?: string) => void }
+
 
 const ROLES = ['PMO', 'PM', 'P.O', 'SM', 'TechLead', 'Dev', 'UX/UI', 'QA']
 const ROLE_COLORS: Record<string, string> = {
