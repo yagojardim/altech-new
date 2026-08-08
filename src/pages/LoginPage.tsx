@@ -410,13 +410,26 @@ export default function LoginPage({ onSuccess }: Props) {
           )}
         </div>
 
-        {/* Prototype helper strip */}
-        <div style={{
-          position: 'absolute', bottom: 16, left: 0, right: 0,
-          textAlign: 'center', fontSize: 11, color: T.text3,
-        }}>
-          Protótipo: clique em Entrar para simular login
-        </div>
+        {/* Atalho de desenvolvimento — Inspection Mode atrás da flag */}
+        {INSPECTION_MODE_ENABLED && !isSuccess && (
+          <div style={{
+            position: 'absolute', bottom: 16, left: 0, right: 0,
+            textAlign: 'center', fontSize: 11, color: T.text3,
+          }}>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setLoginState('success')}
+              style={{
+                background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 8,
+                padding: '6px 12px', fontSize: 11, color: T.text2, cursor: 'pointer',
+              }}
+            >
+              Entrar em modo Inspection (dev)
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   )
