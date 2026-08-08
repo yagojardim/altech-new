@@ -339,7 +339,7 @@ export default function LoginPage({ onSuccess }: Props) {
                     border: `1px solid ${T.crit}30`,
                     borderRadius: 8, padding: 10, fontSize: 12, color: T.crit,
                   }}>
-                    ⚠ E-mail ou senha inválidos. Verifique e tente novamente.
+                    ⚠ {errorMsg}
                   </div>
                 )}
 
