@@ -37,7 +37,7 @@ candidate as (
       select 1
       from public.user_roles ur
       join public.roles r on r.id = ur.role_id
-      where ur.user_id = p.id
+      where ur.profile_id = p.id
         and ur.tenant_id = p.tenant_id
         and (r.key ilike 'admin%' or r.label ilike 'admin%')
     )
