@@ -79,15 +79,37 @@ export default function LoginPage({ onSuccess }: Props) {
   const [showPass, setShowPass] = useState(false)
   const [remember, setRemember] = useState(false)
   const [selectedRole, setSelectedRole] = useState('Dev')
+  const [errorMsg, setErrorMsg] = useState('E-mail ou senha inválidos. Verifique e tente novamente.')
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email || !password) return
+    const mail = email.trim().toLowerCase()
     setLoginState('loading')
-    setTimeout(() => {
-      setLoginState(email.includes('@') ? 'success' : 'error')
-    }, 1200)
+
+    const res = await signIn(mail, password)   // senha nunca é logada
+    if (!res.ok || !res.user) {
+      await writeLoginAudit('login_failed', { email: mail, reason: res.error })
+      setErrorMsg('E-mail ou senha inválidos. Verifique e tente novamente.')
+      setLoginState('error')
+      return
+    }
+
+    const profile = await loadProfileByAuthUserId(res.user.id, res.user.email)
+    if (!profile) {
+      await writeLoginAudit('login_failed', { email: mail, reason: 'profile_not_found' })
+      setErrorMsg('Usuário sem perfil ativo neste tenant. Fale com o Admin.')
+      setLoginState('error')
+      return
+    }
+
+    await writeLoginAudit('login_success', {
+      email: mail, tenantId: profile.tenant_id, profileId: profile.user_id,
+    })
+    await touchAccess(profile.user_id, profile.tenant_id, null)
+    onSuccess()
   }
+
 
   const isError = loginState === 'error'
   const isLoading = loginState === 'loading'
