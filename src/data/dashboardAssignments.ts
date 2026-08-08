@@ -1,10 +1,14 @@
 /**
- * Altech — Dashboard Card Assignments store (Inspection Mode).
- * Tracks which report cards are assigned to which dashboards, per tenant.
- * Mutated in-place (module-level state, session-persistent).
+ * Altech — Dashboard Card Assignments store.
+ * In-memory cache (screens read it synchronously) hydrated from the real
+ * `dashboard_assignments` Supabase table; every write is persisted back.
  */
+import { useEffect, useSyncExternalStore } from 'react'
 import { MOCK_TENANT } from './session'
 import type { DashboardType } from './session'
+import * as api from './db/dashboardAssignments'
+import { resolveProfileId } from './db/notifications'
+
 
 export type AssignmentTarget = 'executivo' | 'dashview' | DashboardType
 
