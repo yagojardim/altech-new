@@ -9,6 +9,7 @@ import {
   type Capability, PERMISSION_MATRIX, ROLE_TIER, derivePermissions,
   capabilityVisibility,
 } from '../data/permissions'
+import { getTenantOwnerEmails } from '../data/db/members'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
@@ -173,12 +174,13 @@ interface EditDraft {
 // ─── Edit User Modal ──────────────────────────────────────────────────────────
 
 function EditUserModal({
-  user, activeUserName, onClose, onSave,
+  user, activeUserName, onClose, onSave, isOwner = false,
 }: {
   user:           UserWithStatus
   activeUserName: string
   onClose:        ()=>void
   onSave:         (patch: EditDraft)=>void
+  isOwner?:       boolean
 }) {
   void activeUserName
   const [step, setStep] = useState<'basics'|'permissions'|'dashboards'>('basics')
@@ -224,7 +226,7 @@ function EditUserModal({
     patch({ optIns: draft.optIns.includes(cap) ? draft.optIns.filter(c=>c!==cap) : [...draft.optIns, cap] })
   }
 
-  const isAdmin = user.user_id === 'u_admin'
+  const isAdmin = user.user_id === 'u_admin' || isOwner
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.72)', zIndex:400, display:'flex', alignItems:'center', justifyContent:'center' }}
@@ -273,7 +275,7 @@ function EditUserModal({
                     </button>
                   ))}
                 </div>
-                {isAdmin && <p style={{ fontSize:11, color:T.text3, marginTop:6 }}>O papel Admin não pode ser alterado.</p>}
+                {isAdmin && <p style={{ fontSize:11, color:T.text3, marginTop:6 }}>{isOwner ? 'Admin Master do tenant — não pode ser removido/rebaixado.' : 'O papel Admin não pode ser alterado.'}</p>}
               </Field>
 
               <Field label="Squad">
@@ -415,6 +417,17 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
   const [confirmAction, setConfirmAction] = useState<'deactivate'|'block'|null>(null)
   const [editingUser, setEditingUser] = useState<UserWithStatus|null>(null)
   const [toast, setToast] = useState<string|null>(null)
+  const [ownerEmails, setOwnerEmails] = useState<Set<string>>(()=>new Set())
+
+  useEffect(()=>{
+    let alive = true
+    getTenantOwnerEmails().then(set=>{ if (alive) setOwnerEmails(set) })
+    return ()=>{ alive = false }
+  }, [])
+
+  function isTenantOwner(u: UserWithStatus) {
+    return ownerEmails.has((u.email ?? '').toLowerCase()) || (ownerEmails.size === 0 && u.user_id === 'u_admin')
+  }
 
   function showToast(msg: string) { setToast(msg); setTimeout(()=>setToast(null), 3000) }
 
@@ -527,7 +540,8 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
             {visible.map((u,i)=>{
               const st = userStatus(u)
               const isLast = i===visible.length-1
-              const isAdmin = u.user_id==='u_admin'
+              const owner = isTenantOwner(u)
+              const isAdmin = u.user_id==='u_admin' || owner
               const isConfirming = confirmId===u.user_id
               return (
                 <tr key={u.user_id}
@@ -538,7 +552,15 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
                     <div className="flex items-center gap-3">
                       <Av user={u} size={32}/>
                       <div>
-                        <div style={{ fontSize:13, fontWeight:600, color:T.text1 }}>{u.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span style={{ fontSize:13, fontWeight:600, color:T.text1 }}>{u.name}</span>
+                          {owner && (
+                            <span title="Admin Master do tenant — não pode ser removido/rebaixado"
+                              style={{ fontSize:10, fontWeight:700, color:T.accent, background:T.accentDim, border:`1px solid ${T.accentBorder}`, borderRadius:5, padding:'1px 6px', whiteSpace:'nowrap' }}>
+                              Admin Master · Owner
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize:11, color:T.text3 }}>{u.email}</div>
                       </div>
                     </div>
@@ -587,7 +609,10 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
                         {!isAdmin && canManage && st!=='active' && (
                           <ActionBtn label="Reativar" color={T.success} onClick={()=>reactivate(u.user_id)}/>
                         )}
-                        {(!canManage||isAdmin)&&<span style={{ fontSize:11, color:T.text3 }}>—</span>}
+                        {(!canManage||isAdmin)&&(
+                          <span title={owner ? 'Admin Master do tenant — não pode ser removido/rebaixado' : undefined}
+                            style={{ fontSize:11, color:T.text3 }}>—</span>
+                        )}
                       </div>
                     )}
                   </td>
@@ -608,6 +633,7 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
           activeUserName={activeUser.name}
           onClose={()=>setEditingUser(null)}
           onSave={draft=>handleSave(editingUser.user_id, draft)}
+          isOwner={isTenantOwner(editingUser)}
         />
       )}
 
