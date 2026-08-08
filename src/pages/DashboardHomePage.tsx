@@ -37,7 +37,7 @@ import {
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
-import { countOperationalModules } from '../data/tenantModules'
+import { countActiveModules } from '../data/db/modules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
