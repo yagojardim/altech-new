@@ -836,6 +836,72 @@ export type Database = {
           },
         ]
       }
+      dashboard_assignments: {
+        Row: {
+          archived_at: string | null
+          card_id: string
+          card_title: string
+          created_at: string
+          created_by: string | null
+          dashboard_key: string
+          id: string
+          metadata: Json
+          position: number
+          row_version: number
+          tenant_id: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          card_id: string
+          card_title: string
+          created_at?: string
+          created_by?: string | null
+          dashboard_key: string
+          id?: string
+          metadata?: Json
+          position?: number
+          row_version?: number
+          tenant_id: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          card_id?: string
+          card_title?: string
+          created_at?: string
+          created_by?: string | null
+          dashboard_key?: string
+          id?: string
+          metadata?: Json
+          position?: number
+          row_version?: number
+          tenant_id?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_assignments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dashboard_assignments_user_id_fk"
+            columns: ["tenant_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
       dashboards: {
         Row: {
           category: string | null
@@ -1380,6 +1446,78 @@ export type Database = {
           updated_by?: string | null
         }
         Relationships: []
+      }
+      notifications: {
+        Row: {
+          archived_at: string | null
+          body: string | null
+          created_at: string
+          created_by: string | null
+          entity_id: string | null
+          entity_type: string | null
+          id: string
+          metadata: Json
+          read: boolean
+          row_version: number
+          tenant_id: string
+          title: string
+          type: string
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          read?: boolean
+          row_version?: number
+          tenant_id: string
+          title: string
+          type?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          body?: string | null
+          created_at?: string
+          created_by?: string | null
+          entity_id?: string | null
+          entity_type?: string | null
+          id?: string
+          metadata?: Json
+          read?: boolean
+          row_version?: number
+          tenant_id?: string
+          title?: string
+          type?: string
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fk"
+            columns: ["tenant_id", "user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
       }
       password_reset_events: {
         Row: {
