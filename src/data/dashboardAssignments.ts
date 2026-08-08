@@ -203,15 +203,25 @@ export function dismissHomeCard(userId: string, dashId: string, cardId: string) 
   const k = _prefKey(userId, dashId)
   if (!_dismissed[k]) _dismissed[k] = new Set()
   _dismissed[k].add(cardId)
+  if (_profileId) void api.remove(_profileId, dashId, cardId, 'mural')
+  emit()
 }
 
-export function pinHomeCard(userId: string, dashId: string, cardId: string) {
+export function pinHomeCard(userId: string, dashId: string, cardId: string, cardTitle?: string) {
   const k = _prefKey(userId, dashId)
   if (!_pinned[k]) _pinned[k] = []
   if (!_pinned[k].includes(cardId)) _pinned[k] = [..._pinned[k], cardId]
   // Remove from dismissed in case it was there
   _dismissed[k]?.delete(cardId)
+  if (_profileId) {
+    void api.assign({
+      profileId: _profileId, dashboard: dashId,
+      cardId, cardTitle: cardTitle ?? cardId, slot: 'mural',
+    })
+  }
+  emit()
 }
+
 
 export interface HomeCardSlot {
   cardId:       string
