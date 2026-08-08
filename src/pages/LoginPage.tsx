@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { signIn, INSPECTION_MODE_ENABLED } from '../lib/auth'
+import { loadProfileByAuthUserId, writeLoginAudit, touchAccess } from '../data/db/authProfile'
 
 type LoginState = 'idle' | 'loading' | 'error' | 'success'
 
-interface Props { onSuccess: (role: string) => void }
+/** `role` só é enviado no atalho Inspection (dev). Login real chama sem role. */
+interface Props { onSuccess: (role?: string) => void }
+
 
 const ROLES = ['PMO', 'PM', 'P.O', 'SM', 'TechLead', 'Dev', 'UX/UI', 'QA']
 const ROLE_COLORS: Record<string, string> = {
@@ -75,15 +79,37 @@ export default function LoginPage({ onSuccess }: Props) {
   const [showPass, setShowPass] = useState(false)
   const [remember, setRemember] = useState(false)
   const [selectedRole, setSelectedRole] = useState('Dev')
+  const [errorMsg, setErrorMsg] = useState('E-mail ou senha inválidos. Verifique e tente novamente.')
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!email || !password) return
+    const mail = email.trim().toLowerCase()
     setLoginState('loading')
-    setTimeout(() => {
-      setLoginState(email.includes('@') ? 'success' : 'error')
-    }, 1200)
+
+    const res = await signIn(mail, password)   // senha nunca é logada
+    if (!res.ok || !res.user) {
+      await writeLoginAudit('login_failed', { email: mail, reason: res.error })
+      setErrorMsg('E-mail ou senha inválidos. Verifique e tente novamente.')
+      setLoginState('error')
+      return
+    }
+
+    const profile = await loadProfileByAuthUserId(res.user.id, res.user.email)
+    if (!profile) {
+      await writeLoginAudit('login_failed', { email: mail, reason: 'profile_not_found' })
+      setErrorMsg('Usuário sem perfil ativo neste tenant. Fale com o Admin.')
+      setLoginState('error')
+      return
+    }
+
+    await writeLoginAudit('login_success', {
+      email: mail, tenantId: profile.tenant_id, profileId: profile.user_id,
+    })
+    await touchAccess(profile.user_id, profile.tenant_id, null)
+    onSuccess()
   }
+
 
   const isError = loginState === 'error'
   const isLoading = loginState === 'loading'
@@ -313,7 +339,7 @@ export default function LoginPage({ onSuccess }: Props) {
                     border: `1px solid ${T.crit}30`,
                     borderRadius: 8, padding: 10, fontSize: 12, color: T.crit,
                   }}>
-                    ⚠ E-mail ou senha inválidos. Verifique e tente novamente.
+                    ⚠ {errorMsg}
                   </div>
                 )}
 
@@ -384,13 +410,26 @@ export default function LoginPage({ onSuccess }: Props) {
           )}
         </div>
 
-        {/* Prototype helper strip */}
-        <div style={{
-          position: 'absolute', bottom: 16, left: 0, right: 0,
-          textAlign: 'center', fontSize: 11, color: T.text3,
-        }}>
-          Protótipo: clique em Entrar para simular login
-        </div>
+        {/* Atalho de desenvolvimento — Inspection Mode atrás da flag */}
+        {INSPECTION_MODE_ENABLED && !isSuccess && (
+          <div style={{
+            position: 'absolute', bottom: 16, left: 0, right: 0,
+            textAlign: 'center', fontSize: 11, color: T.text3,
+          }}>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => setLoginState('success')}
+              style={{
+                background: 'transparent', border: `1px solid ${T.border}`, borderRadius: 8,
+                padding: '6px 12px', fontSize: 11, color: T.text2, cursor: 'pointer',
+              }}
+            >
+              Entrar em modo Inspection (dev)
+            </button>
+          </div>
+        )}
+
       </div>
     </div>
   )
