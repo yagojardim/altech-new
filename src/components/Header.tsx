@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
-import { MOCK_USERS, MOCK_TENANT } from '../data/session'
+import { MOCK_USERS } from '../data/session'
 import { useSession } from '../data/SessionContext'
-import { getAllSignals, markReadByPo, type ClientSignal } from '../data/clientSignals'
-import { useClientPortal } from '../data/clientPortalStore'
+import * as notificationsApi from '../data/db/notifications'
+import type { NotificationRow } from '../data/db/notifications'
+
 
 type View =
   | 'boards-list' | 'modules' | 'timesheet' | 'hours-approval' | 'client-messages'
