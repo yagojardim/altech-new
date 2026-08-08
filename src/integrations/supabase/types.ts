@@ -1670,8 +1670,10 @@ export type Database = {
           created_by: string | null
           department: string | null
           email: string
+          first_access_at: string | null
           id: string
           job_title: string | null
+          last_access_at: string | null
           last_login_at: string | null
           locale: string
           manager_id: string | null
@@ -1679,9 +1681,11 @@ export type Database = {
           name: string
           password_must_change: boolean
           phone: string | null
+          primary_role: string | null
           row_version: number
           status: string
           tenant_id: string
+          tenant_owner: boolean
           timezone: string
           updated_at: string
           updated_by: string | null
@@ -1696,8 +1700,10 @@ export type Database = {
           created_by?: string | null
           department?: string | null
           email: string
+          first_access_at?: string | null
           id?: string
           job_title?: string | null
+          last_access_at?: string | null
           last_login_at?: string | null
           locale?: string
           manager_id?: string | null
@@ -1705,9 +1711,11 @@ export type Database = {
           name: string
           password_must_change?: boolean
           phone?: string | null
+          primary_role?: string | null
           row_version?: number
           status?: string
           tenant_id: string
+          tenant_owner?: boolean
           timezone?: string
           updated_at?: string
           updated_by?: string | null
@@ -1722,8 +1730,10 @@ export type Database = {
           created_by?: string | null
           department?: string | null
           email?: string
+          first_access_at?: string | null
           id?: string
           job_title?: string | null
+          last_access_at?: string | null
           last_login_at?: string | null
           locale?: string
           manager_id?: string | null
@@ -1731,9 +1741,11 @@ export type Database = {
           name?: string
           password_must_change?: boolean
           phone?: string | null
+          primary_role?: string | null
           row_version?: number
           status?: string
           tenant_id?: string
+          tenant_owner?: boolean
           timezone?: string
           updated_at?: string
           updated_by?: string | null
