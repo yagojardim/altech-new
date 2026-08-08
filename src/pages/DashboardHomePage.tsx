@@ -28,7 +28,7 @@ import {
 import {
   dismissHomeCard, pinHomeCard, getVisibleHomeCards, getGridCards,
   pinGridCard, dismissGridCard,
-  dismissNativeCard, restoreNativeCard, getDismissedNative,
+  dismissNativeCard, restoreNativeCard, getDismissedNative, useDashboardAssignments,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
 import {
