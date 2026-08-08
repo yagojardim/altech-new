@@ -2013,6 +2013,21 @@ export type Database = {
           },
         ]
       }
+      reserved_slugs: {
+        Row: {
+          created_at: string
+          slug: string
+        }
+        Insert: {
+          created_at?: string
+          slug: string
+        }
+        Update: {
+          created_at?: string
+          slug?: string
+        }
+        Relationships: []
+      }
       role_permissions: {
         Row: {
           created_at: string
@@ -2531,18 +2546,19 @@ export type Database = {
           },
         ]
       }
-      tenants: {
+      tenant_settings: {
         Row: {
           archived_at: string | null
           created_at: string
           created_by: string | null
+          display_name: string | null
           id: string
           locale: string
+          logo_url: string | null
           metadata: Json
-          name: string
+          primary_color: string | null
           row_version: number
-          slug: string
-          status: string
+          tenant_id: string
           timezone: string
           updated_at: string
           updated_by: string | null
@@ -2551,13 +2567,14 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           created_by?: string | null
+          display_name?: string | null
           id?: string
           locale?: string
+          logo_url?: string | null
           metadata?: Json
-          name: string
+          primary_color?: string | null
           row_version?: number
-          slug: string
-          status?: string
+          tenant_id: string
           timezone?: string
           updated_at?: string
           updated_by?: string | null
@@ -2566,14 +2583,89 @@ export type Database = {
           archived_at?: string | null
           created_at?: string
           created_by?: string | null
+          display_name?: string | null
+          id?: string
+          locale?: string
+          logo_url?: string | null
+          metadata?: Json
+          primary_color?: string | null
+          row_version?: number
+          tenant_id?: string
+          timezone?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: true
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenants: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          document_encrypted: string | null
+          document_hash: string | null
+          document_last4: string | null
+          document_verification_status: string
+          id: string
+          locale: string
+          metadata: Json
+          name: string
+          row_version: number
+          slug: string
+          slug_status: string | null
+          status: string
+          timezone: string
+          type: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_encrypted?: string | null
+          document_hash?: string | null
+          document_last4?: string | null
+          document_verification_status?: string
+          id?: string
+          locale?: string
+          metadata?: Json
+          name: string
+          row_version?: number
+          slug: string
+          slug_status?: string | null
+          status?: string
+          timezone?: string
+          type?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          document_encrypted?: string | null
+          document_hash?: string | null
+          document_last4?: string | null
+          document_verification_status?: string
           id?: string
           locale?: string
           metadata?: Json
           name?: string
           row_version?: number
           slug?: string
+          slug_status?: string | null
           status?: string
           timezone?: string
+          type?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -3224,7 +3316,9 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      check_slug: { Args: { p_slug: string }; Returns: string }
+      normalize_slug: { Args: { p_slug: string }; Returns: string }
+      unaccent_fallback: { Args: { p_text: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
