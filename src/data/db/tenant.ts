@@ -115,8 +115,10 @@ export function checkSlug(slug: string, actorName?: string): Promise<SlugCheck> 
   }, 'invalid')
 }
 
-export function changeSlug(slug: string, actorName?: string): Promise<{ ok: boolean; reason?: SlugCheck }> {
-  return safeCall('tenant.changeSlug', async () => {
+export interface ChangeSlugResult { ok: boolean; reason?: SlugCheck }
+
+export function changeSlug(slug: string, actorName?: string): Promise<ChangeSlugResult> {
+  return safeCall<ChangeSlugResult>('tenant.changeSlug', async () => {
     const status = await checkSlug(slug, actorName)
     if (status !== 'available') return { ok: false, reason: status }
     const normalized = slug.trim().toLowerCase()
@@ -125,5 +127,5 @@ export function changeSlug(slug: string, actorName?: string): Promise<{ ok: bool
     if (error) throw error
     await writeAudit('tenant slug changed', { slug: normalized }, actorName)
     return { ok: true }
-  }, { ok: false, reason: 'invalid' as SlugCheck })
+  }, { ok: false, reason: 'invalid' })
 }
