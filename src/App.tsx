@@ -76,25 +76,31 @@ export default function App() {
 }
 
 function AppInner() {
-  const { setActiveUser } = useSession()
+  const { setActiveUser, status } = useSession()
   const [view, setView] = useState<View>('home')
   const [clientMustChangePwd, setClientMustChangePwd] = useState(false)
 
-  if (view === 'login') {
-    return (
-      <LoginPage
-        onSuccess={(roleStr) => {
-          const roleMap: Record<string, string> = {
-            'PMO': 'u_pmo', 'PM': 'u_pm', 'P.O': 'u_po', 'SM': 'u_sm',
-            'TechLead': 'u_tl', 'Dev': 'u_dev', 'UX/UI': 'u_ux', 'QA': 'u_qa',
-          }
-          const matched = MOCK_USERS.find(u => u.user_id === (roleMap[roleStr] ?? 'u_pm'))
-          if (matched) setActiveUser(matched.user_id)
-          setView('home')
-        }}
-      />
-    )
+  const handleLoginSuccess = (roleStr?: string) => {
+    if (roleStr) {
+      const roleMap: Record<string, string> = {
+        'PMO': 'u_pmo', 'PM': 'u_pm', 'P.O': 'u_po', 'SM': 'u_sm',
+        'TechLead': 'u_tl', 'Dev': 'u_dev', 'UX/UI': 'u_ux', 'QA': 'u_qa',
+      }
+      const matched = MOCK_USERS.find(u => u.user_id === (roleMap[roleStr] ?? 'u_pm'))
+      if (matched) setActiveUser(matched.user_id)
+    }
+    setView('home')
   }
+
+  if (status === 'loading') {
+    return <div style={{ height: '100vh', background: 'var(--bg-page,#0d1321)' }} />
+  }
+
+  // Sem sessão real e sem Inspection Mode → login obrigatório.
+  if (status === 'anonymous' || view === 'login') {
+    return <LoginPage onSuccess={handleLoginSuccess} />
+  }
+
 
   if (view === 'client-login') {
     return (
