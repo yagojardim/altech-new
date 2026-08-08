@@ -135,6 +135,21 @@ insert into public.reserved_slugs (slug) values
 on conflict (slug) do nothing;
 
 -- ─── 4) check_slug ──────────────────────────────────────────────────────────
+-- unaccent pode não estar disponível: fallback por translate
+create or replace function public.unaccent_fallback(p_text text)
+returns text
+language sql
+immutable
+security invoker
+set search_path = public, pg_temp
+as $fn$
+  select translate(
+    coalesce(p_text, ''),
+    'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+    'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'
+  );
+$fn$;
+
 create or replace function public.normalize_slug(p_slug text)
 returns text
 language sql
@@ -149,21 +164,6 @@ as $fn$
     ),
     '-{2,}', '-', 'g'
   ));
-$fn$;
-
--- unaccent pode não estar disponível: fallback por translate
-create or replace function public.unaccent_fallback(p_text text)
-returns text
-language sql
-immutable
-security invoker
-set search_path = public, pg_temp
-as $fn$
-  select translate(
-    coalesce(p_text, ''),
-    'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
-    'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC'
-  );
 $fn$;
 
 create or replace function public.check_slug(p_slug text)
