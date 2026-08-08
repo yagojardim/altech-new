@@ -28,7 +28,7 @@ import {
 import {
   dismissHomeCard, pinHomeCard, getVisibleHomeCards, getGridCards,
   pinGridCard, dismissGridCard,
-  dismissNativeCard, restoreNativeCard, getDismissedNative,
+  dismissNativeCard, restoreNativeCard, getDismissedNative, useDashboardAssignments,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
 import {
@@ -1700,6 +1700,9 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
   const [scope, setScope]           = useState<UserScope | null>(null)
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
   const [rev, setRev]               = useState(0)
+
+  useDashboardAssignments(user.name)
+
 
   useEffect(() => {
     const s = getActiveScope()

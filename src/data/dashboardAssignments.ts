@@ -1,10 +1,14 @@
 /**
- * Altech — Dashboard Card Assignments store (Inspection Mode).
- * Tracks which report cards are assigned to which dashboards, per tenant.
- * Mutated in-place (module-level state, session-persistent).
+ * Altech — Dashboard Card Assignments store.
+ * In-memory cache (screens read it synchronously) hydrated from the real
+ * `dashboard_assignments` Supabase table; every write is persisted back.
  */
+import { useEffect, useSyncExternalStore } from 'react'
 import { MOCK_TENANT } from './session'
 import type { DashboardType } from './session'
+import * as api from './db/dashboardAssignments'
+import { resolveProfileId } from './db/notifications'
+
 
 export type AssignmentTarget = 'executivo' | 'dashview' | DashboardType
 
@@ -44,32 +48,98 @@ export const ASSIGNMENT_TARGETS: TargetDef[] = [
 ]
 
 // ─── Store ────────────────────────────────────────────────────────────────────
-let _assignments: DashboardAssignment[] = [
-  // Pre-seed: Burndown on Executivo + scrum-master
-  {
-    id: 'da_001', card_id: 'burndown', card_title: 'Burndown Chart',
-    targets: ['executivo', 'scrum-master'],
-    assigned_by: 'u_admin', tenant_id: MOCK_TENANT.tenant_id,
-    updated_at: new Date().toISOString(),
-  },
-  // Velocity on pmo + project-manager
-  {
-    id: 'da_002', card_id: 'velocity', card_title: 'Velocity Chart',
-    targets: ['pmo', 'project-manager'],
-    assigned_by: 'u_admin', tenant_id: MOCK_TENANT.tenant_id,
-    updated_at: new Date().toISOString(),
-  },
-  // Health card in the composition grid of product-owner
-  {
-    id: 'da_003', card_id: 'health', card_title: 'Saúde do Projeto',
-    targets: ['product-owner'],
-    slots: { 'product-owner': 'grid' },
-    assigned_by: 'u_admin', tenant_id: MOCK_TENANT.tenant_id,
-    updated_at: new Date().toISOString(),
-  },
-]
+let _assignments: DashboardAssignment[] = []
 
 let _nextId = 10
+
+// ─── Reactivity ───────────────────────────────────────────────────────────────
+let _version = 0
+const _listeners = new Set<() => void>()
+
+function emit() {
+  _version++
+  _listeners.forEach(l => l())
+}
+function subscribe(l: () => void) {
+  _listeners.add(l)
+  return () => { _listeners.delete(l) }
+}
+function getVersion() { return _version }
+
+// ─── Persistence ──────────────────────────────────────────────────────────────
+let _profileId: string | null = null
+let _hydrated = false
+// last persisted `${dashboard}|${slot}` keys per card, so removals can be diffed
+const _persisted = new Map<string, Set<string>>()
+
+function keyOf(dash: string, slot: 'mural' | 'grid') { return `${dash}|${slot}` }
+
+function persistCard(a: DashboardAssignment) {
+  if (!_profileId) return
+  const pid = _profileId
+  const next = new Set<string>()
+  for (const t of a.targets) {
+    const slot = getCardSlot(a, t)
+    next.add(keyOf(t, slot))
+    void api.assign({ profileId: pid, dashboard: t, cardId: a.card_id, cardTitle: a.card_title, slot })
+  }
+  const before = _persisted.get(a.card_id) ?? new Set<string>()
+  for (const k of before) {
+    if (next.has(k)) continue
+    const [dash, slot] = k.split('|')
+    void api.remove(pid, dash, a.card_id, slot as 'mural' | 'grid')
+  }
+  _persisted.set(a.card_id, next)
+}
+
+function persistRemoval(card_id: string) {
+  if (!_profileId) return
+  const pid = _profileId
+  for (const k of _persisted.get(card_id) ?? new Set<string>()) {
+    const [dash, slot] = k.split('|')
+    void api.remove(pid, dash, card_id, slot as 'mural' | 'grid')
+  }
+  _persisted.delete(card_id)
+}
+
+/** Loads the real assignments of the given user into the in-memory cache. */
+export async function hydrateAssignments(userName: string): Promise<void> {
+  const pid = await resolveProfileId(userName)
+  _profileId = pid
+  _hydrated = true
+  if (!pid) { _assignments = []; _persisted.clear(); emit(); return }
+
+  const cards = await api.getAssignedCards(pid)
+  const byCard = new Map<string, DashboardAssignment>()
+  _persisted.clear()
+  for (const c of cards) {
+    const target = c.dashboard as AssignmentTarget
+    const entry = byCard.get(c.cardId) ?? {
+      id: c.id, card_id: c.cardId, card_title: c.cardTitle,
+      targets: [] as AssignmentTarget[], slots: {} as Partial<Record<AssignmentTarget, 'mural' | 'grid'>>,
+      assigned_by: pid, tenant_id: MOCK_TENANT.tenant_id, updated_at: new Date().toISOString(),
+    }
+    if (!entry.targets.includes(target)) entry.targets = [...entry.targets, target]
+    entry.slots = { ...(entry.slots ?? {}), [target]: c.slot }
+    byCard.set(c.cardId, entry)
+
+    const set = _persisted.get(c.cardId) ?? new Set<string>()
+    set.add(keyOf(target, c.slot))
+    _persisted.set(c.cardId, set)
+  }
+  _assignments = [...byCard.values()]
+  emit()
+}
+
+/** Hook: hydrates once per user and re-renders on any local mutation. */
+export function useDashboardAssignments(userName: string): number {
+  const version = useSyncExternalStore(subscribe, getVersion, getVersion)
+  useEffect(() => {
+    if (_hydrated && _profileId !== null) return
+    void hydrateAssignments(userName)
+  }, [userName])
+  return version
+}
 
 // ─── CRUD ─────────────────────────────────────────────────────────────────────
 export function getAssignment(tenant_id: string, card_id: string): DashboardAssignment | undefined {
@@ -99,6 +169,8 @@ export function upsertAssignment(
     existing.slots       = slots
     existing.updated_at  = updated_at
     existing.assigned_by = assigned_by
+    persistCard(existing)
+    emit()
     return existing
   }
   const newA: DashboardAssignment = {
@@ -107,12 +179,17 @@ export function upsertAssignment(
     assigned_by, tenant_id, updated_at,
   }
   _assignments = [..._assignments, newA]
+  persistCard(newA)
+  emit()
   return newA
 }
 
 export function removeAssignment(tenant_id: string, card_id: string): void {
   _assignments = _assignments.filter(a => !(a.tenant_id === tenant_id && a.card_id === card_id))
+  persistRemoval(card_id)
+  emit()
 }
+
 
 // ─── Per-user Home card preferences (session-persistent mock) ─────────────────
 // dismissed: admin-assigned cards the user hid from their Home
@@ -126,15 +203,25 @@ export function dismissHomeCard(userId: string, dashId: string, cardId: string) 
   const k = _prefKey(userId, dashId)
   if (!_dismissed[k]) _dismissed[k] = new Set()
   _dismissed[k].add(cardId)
+  if (_profileId) void api.remove(_profileId, dashId, cardId, 'mural')
+  emit()
 }
 
-export function pinHomeCard(userId: string, dashId: string, cardId: string) {
+export function pinHomeCard(userId: string, dashId: string, cardId: string, cardTitle?: string) {
   const k = _prefKey(userId, dashId)
   if (!_pinned[k]) _pinned[k] = []
   if (!_pinned[k].includes(cardId)) _pinned[k] = [..._pinned[k], cardId]
   // Remove from dismissed in case it was there
   _dismissed[k]?.delete(cardId)
+  if (_profileId) {
+    void api.assign({
+      profileId: _profileId, dashboard: dashId,
+      cardId, cardTitle: cardTitle ?? cardId, slot: 'mural',
+    })
+  }
+  emit()
 }
+
 
 export interface HomeCardSlot {
   cardId:       string

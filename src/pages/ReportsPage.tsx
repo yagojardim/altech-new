@@ -4,7 +4,7 @@ import { can } from '../data/permissions'
 import { getActiveUser, MOCK_TENANT } from '../data/session'
 import {
   ASSIGNMENT_TARGETS, getAssignment, getAllAssignments,
-  upsertAssignment, removeAssignment,
+  upsertAssignment, removeAssignment, useDashboardAssignments,
   type AssignmentTarget,
 } from '../data/dashboardAssignments'
 import {
@@ -477,6 +477,7 @@ function CardContent({ id }: { id: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
+  useDashboardAssignments(getActiveUser().name)
   const [projects, setProjects] = useState<DashboardProjectOption[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [projError, setProjError] = useState<string | null>(null)

@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
-import { MOCK_USERS, MOCK_TENANT } from '../data/session'
+import { MOCK_USERS } from '../data/session'
 import { useSession } from '../data/SessionContext'
-import { getAllSignals, markReadByPo, type ClientSignal } from '../data/clientSignals'
-import { useClientPortal } from '../data/clientPortalStore'
+import * as notificationsApi from '../data/db/notifications'
+import type { NotificationRow } from '../data/db/notifications'
+
 
 type View =
   | 'boards-list' | 'modules' | 'timesheet' | 'hours-approval' | 'client-messages'
@@ -68,63 +69,95 @@ function today() {
   return new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
-const STATIC_NOTIFICATIONS = [
+interface NotifItem {
+  id: string
+  icon: string
+  text: string
+  time: string
+  read: boolean
+  notifId?: string
+}
+
+const STATIC_NOTIFICATIONS: NotifItem[] = [
   { id: 'n1', icon: '🔴', text: 'PM-142 bloqueado — aguardando você', time: '2h',  read: false },
   { id: 'n2', icon: '⚡', text: 'Sprint 14 termina em 3 dias',         time: '1d',  read: false },
 ]
 
-function signalToNotif(s: ClientSignal) {
-  const icon = s.type === 'comment' ? '💬' : '✅'
-  const label = s.type === 'comment' ? 'comentou em' : 'solicitou aprovação de'
-  const text = `${s.author} ${label} "${s.item_title}"`
-  const time = new Date(s.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
-  return { id: s.id, icon, text, time, read: s.read_by_po, signalId: s.id }
+const NOTIF_ICON: Record<string, string> = { comment: '💬', approval: '✅', info: '🔔' }
+
+function rowToNotif(r: NotificationRow): NotifItem {
+  return {
+    id: r.id,
+    icon: NOTIF_ICON[r.type] ?? '🔔',
+    text: r.title,
+    time: new Date(r.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' }),
+    read: r.read,
+    notifId: r.id,
+  }
 }
 
 export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps) {
   const [cmdOpen,    setCmdOpen]    = useState(false)
   const [notifOpen,  setNotifOpen]  = useState(false)
   const [switchOpen, setSwitchOpen] = useState(false)
-  const [tick,       setTick]       = useState(0)
   const [readStatic, setReadStatic] = useState<Set<string>>(new Set())
-
-  void tick
+  const [rows,       setRows]       = useState<NotificationRow[]>([])
+  const [profileId,  setProfileId]  = useState<string | null>(null)
 
   const { activeUser, setActiveUser } = useSession()
-  useClientPortal()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
 
-  // Build merged notification list: unread client signals first, then static
-  const clientSignals = getAllSignals().filter(s => s.tenant_id === MOCK_TENANT.tenant_id)
-  const signalNotifs  = clientSignals.map(signalToNotif)
-  const unreadSignals = signalNotifs.filter(n => !n.read)
-  const readSignals   = signalNotifs.filter(n => n.read)
-  const NOTIFICATIONS = [
-    ...unreadSignals,
+  const refresh = useCallback(async (pid: string) => {
+    setRows(await notificationsApi.list(pid))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      const pid = await notificationsApi.resolveProfileId(activeUser.name)
+      if (cancelled || !pid) { setProfileId(null); setRows([]); return }
+      setProfileId(pid)
+      await notificationsApi.mirrorClientSignals(pid)
+      const list = await notificationsApi.list(pid)
+      if (!cancelled) setRows(list)
+    })()
+    return () => { cancelled = true }
+  }, [activeUser.name])
+
+  // Build merged notification list: unread first, then read
+  const dbNotifs   = rows.map(rowToNotif)
+  const unreadDb   = dbNotifs.filter(n => !n.read)
+  const readDb     = dbNotifs.filter(n => n.read)
+  const NOTIFICATIONS: NotifItem[] = [
+    ...unreadDb,
     ...STATIC_NOTIFICATIONS.filter(n => !readStatic.has(n.id)),
-    ...readSignals,
+    ...readDb,
     ...STATIC_NOTIFICATIONS.filter(n => readStatic.has(n.id)),
   ]
-  const unreadCount = unreadSignals.length + STATIC_NOTIFICATIONS.filter(n => !readStatic.has(n.id)).length
+  const unreadCount = unreadDb.length + STATIC_NOTIFICATIONS.filter(n => !readStatic.has(n.id)).length
 
-  function handleMarkAllRead() {
-    clientSignals.forEach(s => markReadByPo(s.id))
+  async function handleMarkAllRead() {
     setReadStatic(new Set(STATIC_NOTIFICATIONS.map(n => n.id)))
-    setTick(t => t + 1)
+    if (!profileId) return
+    setRows(prev => prev.map(r => ({ ...r, read: true })))
+    await notificationsApi.markAllRead(profileId)
+    await refresh(profileId)
   }
 
-  function handleNotifClick(n: typeof NOTIFICATIONS[number]) {
-    if ('signalId' in n && n.signalId) {
-      markReadByPo(String(n.signalId))
-      setTick(t => t + 1)
+  async function handleNotifClick(n: NotifItem) {
+    if (n.notifId) {
+      setRows(prev => prev.map(r => (r.id === n.notifId ? { ...r, read: true } : r)))
+      await notificationsApi.markRead(n.notifId)
+      if (profileId) await refresh(profileId)
     } else {
       setReadStatic(prev => new Set([...prev, n.id]))
     }
     onViewChange('home')
     setNotifOpen(false)
   }
+
 
   function handleSwitchUser(userId: string) {
     setActiveUser(userId)
