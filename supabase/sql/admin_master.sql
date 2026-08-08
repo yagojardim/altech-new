@@ -33,16 +33,13 @@ candidate as (
   select distinct on (p.tenant_id) p.id, p.tenant_id
   from public.profiles p
   where p.tenant_id not in (select tenant_id from existing)
-    and (
-      coalesce(p.role_context, '') ilike 'admin%'
-      or exists (
-        select 1
-        from public.user_roles ur
-        join public.roles r on r.id = ur.role_id
-        where ur.user_id = p.id
-          and ur.tenant_id = p.tenant_id
-          and (r.key ilike 'admin%' or r.name ilike 'admin%')
-      )
+    and exists (
+      select 1
+      from public.user_roles ur
+      join public.roles r on r.id = ur.role_id
+      where ur.user_id = p.id
+        and ur.tenant_id = p.tenant_id
+        and (r.key ilike 'admin%' or r.label ilike 'admin%')
     )
   order by p.tenant_id, p.created_at asc nulls last, p.id asc
 )
