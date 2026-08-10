@@ -3,6 +3,8 @@
 // NUNCA logar senha nem token.
 import { supabase } from '../integrations/supabase/client'
 import { logger } from '../utils/logger'
+import { clearRememberMe } from './authStorage'
+
 
 export const INSPECTION_MODE_ENABLED =
   String(import.meta.env.VITE_INSPECTION_MODE ?? '') === 'true'
