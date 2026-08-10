@@ -698,7 +698,7 @@ function UserBlock({ collapsed }: { collapsed: boolean }) {
       {/* Sign out */}
       <div style={{ borderTop: `1px solid ${T.border}` }}>
         <button
-          onClick={() => setMenuOpen(false)}
+          onClick={() => { setMenuOpen(false); void signOut() }}
           className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
           style={{ color: T.crit }}
           onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
