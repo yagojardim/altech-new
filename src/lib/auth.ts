@@ -35,6 +35,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
     }
     const user = toAuthUser(data.user)
     if (!user) return { ok: false, error: 'Sessão não retornada.' }
+    clearManualLogout()
     return { ok: true, user }
   } catch (err) {
     logger.error('auth.signIn', err)
