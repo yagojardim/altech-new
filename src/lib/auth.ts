@@ -65,12 +65,16 @@ export async function signOut(): Promise<void> {
     logger.error('auth.signOut', err)
   } finally {
     markManualLogout()
+    clearRememberMe()
     try {
       // limpa caches de sessão/profile em memória e tokens locais do supabase
-      Object.keys(localStorage)
+      const purge = (s: Storage) => Object.keys(s)
         .filter(k => k.startsWith('sb-') && k.includes('auth-token'))
-        .forEach(k => localStorage.removeItem(k))
+        .forEach(k => s.removeItem(k))
+      purge(localStorage)
+      purge(sessionStorage)
     } catch { /* storage indisponível */ }
+
   }
 }
 
