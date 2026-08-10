@@ -68,6 +68,53 @@ export type Database = {
           },
         ]
       }
+      activation_tokens: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          expires_at: string
+          id: string
+          metadata: Json
+          profile_id: string
+          purpose: string
+          tenant_id: string
+          token_hash: string
+          used_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          expires_at: string
+          id?: string
+          metadata?: Json
+          profile_id: string
+          purpose: string
+          tenant_id: string
+          token_hash: string
+          used_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string
+          id?: string
+          metadata?: Json
+          profile_id?: string
+          purpose?: string
+          tenant_id?: string
+          token_hash?: string
+          used_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "activation_tokens_profile_fk"
+            columns: ["tenant_id", "profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["tenant_id", "id"]
+          },
+        ]
+      }
       approver_squads: {
         Row: {
           approver_id: string
@@ -3328,6 +3375,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      __act_add_tenant_fk: {
+        Args: {
+          p_col: string
+          p_constraint: string
+          p_on_delete?: string
+          p_table: string
+          p_target: string
+        }
+        Returns: undefined
+      }
       check_slug: { Args: { p_slug: string }; Returns: string }
       ensure_fk: {
         Args: {
