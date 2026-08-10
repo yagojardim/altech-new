@@ -104,7 +104,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
   const [rows,       setRows]       = useState<NotificationRow[]>([])
   const [profileId,  setProfileId]  = useState<string | null>(null)
 
-  const { activeUser, setActiveUser } = useSession()
+  const { activeUser, setActiveUser, signOut } = useSession()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
