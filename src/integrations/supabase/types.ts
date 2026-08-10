@@ -3329,6 +3329,17 @@ export type Database = {
     }
     Functions: {
       check_slug: { Args: { p_slug: string }; Returns: string }
+      ensure_fk: {
+        Args: {
+          p_columns: string[]
+          p_constraint: string
+          p_on_delete?: string
+          p_ref_columns: string[]
+          p_ref_table: string
+          p_table: string
+        }
+        Returns: undefined
+      }
       normalize_slug: { Args: { p_slug: string }; Returns: string }
       unaccent_fallback: { Args: { p_text: string }; Returns: string }
     }
