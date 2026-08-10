@@ -6,7 +6,7 @@ import {
 } from './session'
 import {
   getSession, onAuthStateChange, signOut as authSignOut,
-  INSPECTION_MODE_ENABLED, type AuthUser,
+  INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
 
