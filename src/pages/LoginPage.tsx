@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
 import { signIn, INSPECTION_MODE_ENABLED } from '../lib/auth'
+import { setRememberMe } from '../lib/authStorage'
 import { loadProfileByAuthUserId, writeLoginAudit, touchAccess } from '../data/db/authProfile'
+
 
 type LoginState = 'idle' | 'loading' | 'error' | 'success'
 
@@ -87,7 +89,9 @@ export default function LoginPage({ onSuccess }: Props) {
     const mail = email.trim().toLowerCase()
     setLoginState('loading')
 
+    setRememberMe(remember)                    // define localStorage vs sessionStorage
     const res = await signIn(mail, password)   // senha nunca é logada
+
     if (!res.ok || !res.user) {
       await writeLoginAudit('login_failed', { email: mail, reason: res.error })
       setErrorMsg('E-mail ou senha inválidos. Verifique e tente novamente.')
