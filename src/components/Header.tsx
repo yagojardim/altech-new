@@ -292,7 +292,10 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
                     style={{ color: item.label === 'Sair' ? T.crit : T.text2 }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                    onClick={() => setSwitchOpen(false)}
+                    onClick={() => {
+                      setSwitchOpen(false)
+                      if (item.label === 'Sair') void signOut()
+                    }}
                   >
                     <span>{item.icon}</span>{item.label}
                   </button>
