@@ -20,6 +20,8 @@ interface SessionCtx {
   inspectionEnabled: boolean
   signOut:       () => Promise<void>
   enterInspection: () => void
+  mustChangePassword: boolean
+  clearMustChangePassword: () => void
 }
 
 const SessionContext = createContext<SessionCtx>(null!)
