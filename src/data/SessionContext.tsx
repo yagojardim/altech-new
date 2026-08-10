@@ -57,8 +57,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
       setDbUser(null)
-      // Fallback de desenvolvimento: Inspection Mode atrás da flag.
-      setStatus(INSPECTION_MODE_ENABLED ? 'inspection' : 'anonymous')
+      // Fallback de desenvolvimento: Inspection Mode atrás da flag,
+      // bloqueado quando o usuário clicou em "Sair".
+      setStatus(fallbackStatus())
     }
 
     getSession().then(resolve)
@@ -70,8 +71,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await authSignOut()
     setDbUser(null)
     setAuthUser(null)
-    setStatus(INSPECTION_MODE_ENABLED ? 'inspection' : 'anonymous')
+    setUserId(ACTIVE_USER_ID)
+    setStatus('anonymous')
   }
+
+  /** Atalho Inspection intencional (dev): libera o fallback novamente. */
+  function enterInspection() {
+    if (!INSPECTION_MODE_ENABLED) return
+    clearManualLogout()
+    setStatus('inspection')
+  }
+
 
   const mockUser = MOCK_USERS.find(u => u.user_id === userId) ?? MOCK_USERS[0]
   const activeUser = dbUser ?? mockUser
