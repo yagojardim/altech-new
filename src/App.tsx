@@ -76,7 +76,7 @@ export default function App() {
 }
 
 function AppInner() {
-  const { setActiveUser, status } = useSession()
+  const { setActiveUser, status, enterInspection } = useSession()
   const [view, setView] = useState<View>('home')
   const [clientMustChangePwd, setClientMustChangePwd] = useState(false)
 
@@ -88,6 +88,7 @@ function AppInner() {
       }
       const matched = MOCK_USERS.find(u => u.user_id === (roleMap[roleStr] ?? 'u_pm'))
       if (matched) setActiveUser(matched.user_id)
+      enterInspection()   // atalho Inspection intencional → libera o fallback
     }
     setView('home')
   }
