@@ -130,10 +130,12 @@ export function setPasswordMustChange(profileId: string, value: boolean): Promis
 }
 
 /** Conclui a troca de senha no profile (flag + first_access_at). */
-export function markPasswordChanged(profileId: string, firstAccessAt: string | null): Promise<boolean> {
+export function markPasswordChanged(profileId: string): Promise<boolean> {
   return safeCall<boolean>('activationTokens.markPasswordChanged', async () => {
     const patch: Record<string, unknown> = { password_must_change: false }
-    if (!firstAccessAt) patch.first_access_at = new Date().toISOString()
+    const { data: cur } = await tbl('profiles')
+      .select('first_access_at').eq('id', profileId).eq('tenant_id', DEFAULT_TENANT_ID).limit(1)
+    if (!(cur ?? [])[0]?.first_access_at) patch.first_access_at = new Date().toISOString()
     const { error } = await tbl('profiles')
       .update(patch)
       .eq('id', profileId)
