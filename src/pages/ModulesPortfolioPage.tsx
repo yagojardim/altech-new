@@ -466,6 +466,8 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
   const canRequest = can(permissions, 'module:request')
 
   const [mods, setMods]       = useState<ModuleView[]>([])
+  const [trials, setTrials]   = useState<Record<string, ModuleTrialRow>>({})
+  const [busyId, setBusyId]   = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadErr, setLoadErr] = useState(false)
 
@@ -475,8 +477,14 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true)
-    const rows = await listModules()
+    await reconcileExpiries()
+    const [rows, trialRows] = await Promise.all([listModules(), listTrials()])
+    const map: Record<string, ModuleTrialRow> = {}
+    for (const t of trialRows) {
+      if (t.status === 'active' || t.status === 'expiring') map[t.module_id] = t
+    }
     setMods(rows)
+    setTrials(map)
     setLoadErr(rows.length === 0)
     setLoading(false)
   }, [])
@@ -493,6 +501,16 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
         <div style={{ fontSize: 12, color: D.text3 }}>Permissão necessária: configuração de módulos</div>
       </div>
     )
+  }
+
+  async function handleTrial(mod: ModuleView) {
+    if (!canRequest) return
+    setBusyId(mod.id)
+    const trial = await startTrial(mod.id, { id: userId || null, name: userName })
+    setBusyId(null)
+    if (!trial) { showToast('Não foi possível iniciar o teste. Tente novamente.'); return }
+    await load()
+    showToast(`Teste de "${mod.name}" iniciado — ${mod.trial_duration_days} dias.`)
   }
 
   function handleAction(mod: ModuleView) {
@@ -622,7 +640,15 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14 }}>
               {catMods.map(mod => (
-                <ModulePortfolioCard key={mod.id} mod={mod} canRequest={canRequest} onAction={handleAction} />
+                <ModulePortfolioCard
+                  key={mod.id}
+                  mod={mod}
+                  canRequest={canRequest}
+                  trial={trials[mod.id] ?? null}
+                  busy={busyId === mod.id}
+                  onAction={handleAction}
+                  onTrial={handleTrial}
+                />
               ))}
             </div>
           </div>
