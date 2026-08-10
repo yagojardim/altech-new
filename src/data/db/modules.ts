@@ -30,6 +30,7 @@ export interface ModuleCatalogRow {
   default_status: string
   display_order: number
   icon: string | null
+  trial_duration_days?: number | null
 }
 
 export interface TenantModuleRow {
@@ -77,6 +78,43 @@ export interface ModuleView {
   notes: string | null
   requested_at: string | null
   cta: ModuleCta
+  contract_status: ContractStatus
+  technical_health: TechnicalHealth
+  trial_duration_days: number
+}
+
+export type ContractStatus =
+  | 'included' | 'trial_available' | 'trialing' | 'trial_expired' | 'pending_activation'
+  | 'active' | 'past_due' | 'suspended' | 'not_contracted' | 'planned'
+
+export type TechnicalHealth = 'operational' | 'degraded' | 'maintenance' | 'unavailable'
+
+const CONTRACT_STATUSES: ContractStatus[] = [
+  'included', 'trial_available', 'trialing', 'trial_expired', 'pending_activation',
+  'active', 'past_due', 'suspended', 'not_contracted', 'planned',
+]
+
+function normalizeContract(raw: unknown, fallback: ModuleStatus): ContractStatus {
+  const k = String(raw ?? '').trim()
+  if ((CONTRACT_STATUSES as string[]).includes(k)) return k as ContractStatus
+  switch (fallback) {
+    case 'operational':
+    case 'implemented':  return 'included'
+    case 'contracted':
+    case 'deploying':    return 'active'
+    case 'pending':      return 'pending_activation'
+    case 'planned':
+    case 'coming-soon':  return 'planned'
+    case 'suspended':    return 'suspended'
+    case 'preview':      return 'included'
+    default:             return 'trial_available'
+  }
+}
+
+function normalizeHealth(raw: unknown): TechnicalHealth {
+  const k = String(raw ?? '').trim()
+  return (['operational', 'degraded', 'maintenance', 'unavailable'] as string[]).includes(k)
+    ? (k as TechnicalHealth) : 'operational'
 }
 
 export interface ModuleCta {
@@ -195,6 +233,9 @@ async function listModules__raw(): Promise<ModuleView[]> {
       notes: (state?.metadata?.notes as string | undefined) ?? null,
       requested_at: state?.requested_at ?? null,
       cta: ctaFor(status),
+      contract_status: normalizeContract((state as any)?.contract_status, status),
+      technical_health: normalizeHealth((state as any)?.technical_health),
+      trial_duration_days: Number((m as any).trial_duration_days ?? 30) || 30,
     }
   })
 }
