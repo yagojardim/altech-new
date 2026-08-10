@@ -566,7 +566,7 @@ const ROLE_CONTEXT_LABEL: Record<string, string> = {
 }
 
 function UserBlock({ collapsed }: { collapsed: boolean }) {
-  const { activeUser, setActiveUser } = useSession()
+  const { activeUser, setActiveUser, signOut } = useSession()
   const name    = activeUser.name
   const email   = activeUser.email
   const rc      = activeUser.role_context
