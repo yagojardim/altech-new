@@ -9,8 +9,12 @@ import { can } from '../data/permissions'
 import { CATEGORY_LABELS, STATUS_META, type ModuleCategory, type ModuleStatus } from '../data/modules'
 import {
   listModules, requestActivation,
-  type ModuleView, type RequestPriority,
+  type ModuleView, type RequestPriority, type ContractStatus, type TechnicalHealth,
 } from '../data/db/modules'
+import {
+  startTrial, reconcileExpiries, listTrials, daysRemaining,
+  type ModuleTrialRow,
+} from '../data/db/moduleTrials'
 
 // ─── Design tokens (dark premium per spec) ────────────────────────────────────
 const D = {
@@ -41,6 +45,53 @@ function ModuleStatusBadge({ status }: { status: ModuleStatus }) {
       {m.label}
     </span>
   )
+}
+
+
+// ─── Commercial status badge (contract_status) ────────────────────────────────
+const CONTRACT_META: Record<ContractStatus, { label: string; color: string }> = {
+  included:           { label: 'Incluído',            color: '#10B981' },
+  trial_available:    { label: 'Teste disponível',    color: '#3B82F6' },
+  trialing:           { label: 'Em teste',            color: '#8B5CF6' },
+  trial_expired:      { label: 'Trial expirado',      color: '#F59E0B' },
+  pending_activation: { label: 'Ativação pendente',   color: '#F59E0B' },
+  active:             { label: 'Contratado',          color: '#10B981' },
+  past_due:           { label: 'Pagamento pendente',  color: '#F59E0B' },
+  suspended:          { label: 'Suspenso',            color: '#EF4444' },
+  not_contracted:     { label: 'Não contratado',      color: '#8A8A9E' },
+  planned:            { label: 'Planejado',           color: '#8A8A9E' },
+}
+
+const HEALTH_META: Record<TechnicalHealth, { label: string; color: string }> = {
+  operational: { label: 'Operacional',  color: '#10B981' },
+  degraded:    { label: 'Degradado',    color: '#F59E0B' },
+  maintenance: { label: 'Manutenção',   color: '#3B82F6' },
+  unavailable: { label: 'Indisponível', color: '#EF4444' },
+}
+
+function Pill({ label, color, outline }: { label: string; color: string; outline?: boolean }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 9px', borderRadius: 99,
+      background: outline ? 'transparent' : `${color}18`,
+      fontSize: 11, color, fontWeight: 700,
+      border: `1px solid ${color}44`, whiteSpace: 'nowrap',
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: 99, background: color, flexShrink: 0 }} />
+      {label}
+    </span>
+  )
+}
+
+function ContractBadge({ status }: { status: ContractStatus }) {
+  const m = CONTRACT_META[status]
+  return <Pill label={m.label} color={m.color} />
+}
+
+function HealthBadge({ health }: { health: TechnicalHealth }) {
+  const m = HEALTH_META[health]
+  return <Pill label={m.label} color={m.color} outline />
 }
 
 // ─── TypeTag ──────────────────────────────────────────────────────────────────
@@ -247,15 +298,44 @@ function ModuleDetailModal({ mod, onClose }: { mod: ModuleView; onClose: () => v
 interface CardProps {
   mod:        ModuleView
   canRequest: boolean
+  trial:      ModuleTrialRow | null
+  busy:       boolean
   onAction:   (mod: ModuleView) => void
+  onTrial:    (mod: ModuleView) => void
 }
 
-function ModulePortfolioCard({ mod, canRequest, onAction }: CardProps) {
+type CardAction = 'trial' | 'open' | 'details' | 'reason' | 'none'
+
+/**
+ * CTA por estado COMERCIAL. "Contratar" fica escondido nesta fase — contratação
+ * é responsabilidade do Altech Control.
+ */
+function planFor(mod: ModuleView, trial: ModuleTrialRow | null): { label: string; action: CardAction } {
+  switch (mod.contract_status) {
+    case 'included':
+    case 'active':           return { label: 'Abrir módulo', action: 'open' }
+    case 'trialing':         return { label: trial ? 'Abrir módulo' : 'Ver detalhes', action: trial ? 'open' : 'details' }
+    case 'trial_expired':    return { label: 'Ver detalhes', action: 'details' }
+    case 'pending_activation': return { label: 'Solicitado — Pendente', action: 'none' }
+    case 'planned':          return { label: 'Conhecer recurso', action: 'details' }
+    case 'suspended':        return { label: 'Ver motivo', action: 'reason' }
+    case 'past_due':         return { label: 'Ver detalhes', action: 'details' }
+    case 'not_contracted':
+    case 'trial_available':
+    default:                 return { label: 'Testar grátis', action: 'trial' }
+  }
+}
+
+function ModulePortfolioCard({ mod, canRequest, trial, busy, onAction, onTrial }: CardProps) {
   const [hovered, setHovered] = useState(false)
   const status = mod.status
-  const { label, action } = mod.cta
-  const { style, color } = ctaStyle(status)
-  const isDisabled = style === 'disabled' || (!canRequest && action === 'request')
+  const plan = planFor(mod, trial)
+  const label = busy ? 'Ativando…' : plan.label
+  const action = plan.action
+  const { style, color } = plan.action === 'trial'
+    ? { style: 'primary' as const, color: D.blue }
+    : ctaStyle(status)
+  const isDisabled = busy || style === 'disabled' || (!canRequest && action === 'trial')
 
   const btnSt: React.CSSProperties = (() => {
     const base: React.CSSProperties = {
@@ -306,8 +386,34 @@ function ModulePortfolioCard({ mod, canRequest, onAction }: CardProps) {
           </div>
           <div style={{ fontSize: 11, color: D.text3 }}>{mod.tagline}</div>
         </div>
-        <ModuleStatusBadge status={status} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+          <ContractBadge status={mod.contract_status} />
+          <HealthBadge health={mod.technical_health} />
+        </div>
       </div>
+
+      {mod.contract_status === 'trialing' && trial && (
+        <div style={{
+          marginBottom: 12, padding: '7px 11px', borderRadius: 8, fontSize: 11, fontWeight: 700,
+          color: daysRemaining(trial) <= 3 ? D.amber : D.violet,
+          background: `${daysRemaining(trial) <= 3 ? D.amber : D.violet}14`,
+          border: `1px solid ${daysRemaining(trial) <= 3 ? D.amber : D.violet}44`,
+        }}>
+          Em teste — {daysRemaining(trial)} dia{daysRemaining(trial) !== 1 ? 's' : ''} restante{daysRemaining(trial) !== 1 ? 's' : ''}
+        </div>
+      )}
+
+      {(mod.contract_status === 'trial_available' || mod.contract_status === 'not_contracted') && (
+        <div style={{ marginBottom: 12, fontSize: 11, color: D.text3 }}>
+          Teste grátis disponível por {mod.trial_duration_days} dias
+        </div>
+      )}
+
+      {mod.contract_status === 'trial_expired' && (
+        <div style={{ marginBottom: 12, fontSize: 11, color: D.amber }}>
+          Trial expirado
+        </div>
+      )}
 
       <p style={{ fontSize: 12, color: D.text2, lineHeight: 1.6, margin: '0 0 14px' }}>
         {mod.description.length > 140 ? mod.description.slice(0, 140) + '…' : mod.description}
@@ -326,14 +432,14 @@ function ModulePortfolioCard({ mod, canRequest, onAction }: CardProps) {
       </div>
 
       {!isDisabled ? (
-        <button onClick={() => onAction(mod)} style={btnSt}>{label}</button>
+        <button onClick={() => (action === 'trial' ? onTrial(mod) : onAction(mod))} style={btnSt}>{label}</button>
       ) : (
         <div style={btnSt}>{label}</div>
       )}
 
-      {!canRequest && action === 'request' && (
+      {!canRequest && action === 'trial' && (
         <div style={{ fontSize: 10, color: D.text3, marginTop: 8, textAlign: 'center' }}>
-          Sem permissão para solicitar ativação
+          Sem permissão para iniciar teste
         </div>
       )}
     </div>
