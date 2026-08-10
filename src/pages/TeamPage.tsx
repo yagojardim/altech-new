@@ -9,7 +9,9 @@ import {
   type Capability, PERMISSION_MATRIX, ROLE_TIER, derivePermissions,
   capabilityVisibility,
 } from '../data/permissions'
-import { getTenantOwnerEmails } from '../data/db/members'
+import { getTenantOwnerEmails, getMembers } from '../data/db/members'
+import { issueToken, setPasswordMustChange, auditPasswordResetRequested, activationLink } from '../data/db/activationTokens'
+import { copyToClipboard } from '../utils/copyToClipboard'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
@@ -418,12 +420,33 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
   const [editingUser, setEditingUser] = useState<UserWithStatus|null>(null)
   const [toast, setToast] = useState<string|null>(null)
   const [ownerEmails, setOwnerEmails] = useState<Set<string>>(()=>new Set())
+  const [profileIds, setProfileIds] = useState<Record<string,string>>({})
+  const [resetLink, setResetLink] = useState<{ name:string; url:string }|null>(null)
+  const [generating, setGenerating] = useState<string|null>(null)
 
   useEffect(()=>{
     let alive = true
     getTenantOwnerEmails().then(set=>{ if (alive) setOwnerEmails(set) })
+    getMembers().then(rows=>{
+      if (!alive) return
+      const map: Record<string,string> = {}
+      rows.forEach(r=>{ if (r.email) map[r.email.toLowerCase()] = r.id })
+      setProfileIds(map)
+    })
     return ()=>{ alive = false }
   }, [])
+
+  async function generateResetLink(u: UserWithStatus) {
+    const profileId = profileIds[(u.email ?? '').toLowerCase()]
+    if (!profileId) { showToast('Perfil não encontrado no banco para este membro'); return }
+    setGenerating(u.user_id)
+    const raw = await issueToken(profileId, 'password_reset', 24)
+    if (!raw) { setGenerating(null); showToast('Não foi possível gerar o link agora'); return }
+    await setPasswordMustChange(profileId, true)
+    await auditPasswordResetRequested(profileId, 24)
+    setResetLink({ name: u.name, url: activationLink(raw) })
+    setGenerating(null)
+  }
 
   function isTenantOwner(u: UserWithStatus) {
     return ownerEmails.has((u.email ?? '').toLowerCase()) || (ownerEmails.size === 0 && u.user_id === 'u_admin')
@@ -600,6 +623,14 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
                         {canManage && (
                           <ActionBtn label="Editar" color={T.accent} onClick={()=>setEditingUser(u)}/>
                         )}
+                        {canManage && (
+                          <ActionBtn
+                            label={generating===u.user_id ? 'Gerando…' : 'Gerar link'}
+                            color={T.neutral}
+                            disabled={generating===u.user_id}
+                            onClick={()=>{ void generateResetLink(u) }}
+                          />
+                        )}
                         {!isAdmin && canManage && st==='active' && (
                           <>
                             <ActionBtn label="Suspender" color={T.warn} onClick={()=>{setConfirmId(u.user_id);setConfirmAction('block')}}/>
@@ -609,7 +640,7 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
                         {!isAdmin && canManage && st!=='active' && (
                           <ActionBtn label="Reativar" color={T.success} onClick={()=>reactivate(u.user_id)}/>
                         )}
-                        {(!canManage||isAdmin)&&(
+                        {(!canManage)&&(
                           <span title={owner ? 'Admin Master do tenant — não pode ser removido/rebaixado' : undefined}
                             style={{ fontSize:11, color:T.text3 }}>—</span>
                         )}
@@ -626,6 +657,26 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
       <p style={{ fontSize:11, color:T.text3, marginTop:12 }}>
         Usuários desativados perdem acesso ao sistema. Suspensos têm acesso temporariamente bloqueado. Nenhuma remoção permanente é realizada.
       </p>
+
+      {resetLink && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60 }}
+          onClick={()=>setResetLink(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{ width:'100%', maxWidth:520, background:T.bgSurface, border:`1px solid ${T.border}`, borderRadius:12, padding:22 }}>
+            <h3 style={{ fontSize:15, fontWeight:700, color:T.text1, marginBottom:6 }}>Link de ativação/reset — {resetLink.name}</h3>
+            <p style={{ fontSize:12, color:T.warn, marginBottom:12 }}>
+              Este link aparece uma única vez, é de uso único e expira em 24 horas. Copie agora.
+            </p>
+            <div style={{ fontSize:12, color:T.text2, background:T.bgSurface2, border:`1px solid ${T.border}`, borderRadius:8, padding:'10px 12px', wordBreak:'break-all', marginBottom:14 }}>
+              {resetLink.url}
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
+              <button onClick={()=>setResetLink(null)} style={{ padding:'8px 16px', borderRadius:8, background:'transparent', border:`1px solid ${T.border2}`, color:T.text2, fontSize:13, cursor:'pointer' }}>Fechar</button>
+              <button onClick={async()=>{ const ok = await copyToClipboard(resetLink.url); showToast(ok?'Link copiado':'Não foi possível copiar') }}
+                style={{ padding:'8px 18px', borderRadius:8, background:T.accent, border:'none', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer' }}>Copiar link</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editingUser && canManage && (
         <EditUserModal

@@ -37,6 +37,8 @@ import TenantSettingsPage from './pages/TenantSettingsPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import CreatePasswordPage from './pages/CreatePasswordPage'
+import ActivatePage from './pages/ActivatePage'
 
 
 const ALL_VIEWS: View[] = [
@@ -76,9 +78,21 @@ export default function App() {
 }
 
 function AppInner() {
-  const { setActiveUser, status, enterInspection } = useSession()
+  const { setActiveUser, status, enterInspection, mustChangePassword } = useSession()
   const [view, setView] = useState<View>('home')
   const [clientMustChangePwd, setClientMustChangePwd] = useState(false)
+  const [activateToken, setActivateToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    if (window.location.pathname !== '/activate') return null
+    return new URLSearchParams(window.location.search).get('token')
+  })
+  const [definePwdFromToken, setDefinePwdFromToken] = useState(false)
+
+  function leaveActivate() {
+    setActivateToken(null)
+    setDefinePwdFromToken(false)
+    try { window.history.replaceState({}, '', '/') } catch { /* noop */ }
+  }
 
   const handleLoginSuccess = (roleStr?: string) => {
     if (roleStr) {
@@ -97,11 +111,33 @@ function AppInner() {
     return <div style={{ height: '100vh', background: 'var(--bg-page,#0d1321)' }} />
   }
 
+  // Rota /activate?token=... — link de ativação/reset.
+  if (activateToken && !definePwdFromToken) {
+    return (
+      <ActivatePage
+        token={activateToken}
+        authenticated={status === 'authenticated'}
+        onDefinePassword={() => setDefinePwdFromToken(true)}
+        onGoToLogin={leaveActivate}
+      />
+    )
+  }
+
   // Sem sessão real e sem Inspection Mode → login obrigatório.
   if (status === 'anonymous' || view === 'login') {
     return <LoginPage onSuccess={handleLoginSuccess} />
   }
 
+
+  // Gate de troca de senha obrigatória — bloqueia toda a navegação.
+  if (status === 'authenticated' && (mustChangePassword || definePwdFromToken)) {
+    return (
+      <CreatePasswordPage
+        rawToken={activateToken}
+        onDone={() => { leaveActivate(); setView('home') }}
+      />
+    )
+  }
 
   if (view === 'client-login') {
     return (

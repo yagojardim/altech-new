@@ -20,6 +20,8 @@ interface SessionCtx {
   inspectionEnabled: boolean
   signOut:       () => Promise<void>
   enterInspection: () => void
+  mustChangePassword: boolean
+  clearMustChangePassword: () => void
 }
 
 const SessionContext = createContext<SessionCtx>(null!)
@@ -29,6 +31,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>('loading')
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
+  const [mustChangePassword, setMustChange] = useState(false)
 
   /** Inspection só vale quando NÃO houve logout manual nesta aba. */
   function fallbackStatus(): SessionStatus {
@@ -52,12 +55,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         if (!alive) return
         if (profile) {
           setDbUser(profile)
+          setMustChange(!!profile.password_must_change)
           setStatus('authenticated')
           void touchAccess(profile.user_id, profile.tenant_id, null)
           return
         }
       }
       setDbUser(null)
+      setMustChange(false)
       // Fallback de desenvolvimento: Inspection Mode atrás da flag,
       // bloqueado quando o usuário clicou em "Sair".
       setStatus(fallbackStatus())
@@ -72,6 +77,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await authSignOut()
     setDbUser(null)
     setAuthUser(null)
+    setMustChange(false)
     setUserId(ACTIVE_USER_ID)
     setStatus('anonymous')
   }
@@ -91,6 +97,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     <SessionContext.Provider value={{
       activeUser, setActiveUser, status, authUser,
       inspectionEnabled: INSPECTION_MODE_ENABLED, signOut, enterInspection,
+      mustChangePassword, clearMustChangePassword: () => setMustChange(false),
     }}>
       {children}
     </SessionContext.Provider>
