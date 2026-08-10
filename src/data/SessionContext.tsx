@@ -90,7 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider value={{
       activeUser, setActiveUser, status, authUser,
-      inspectionEnabled: INSPECTION_MODE_ENABLED, signOut,
+      inspectionEnabled: INSPECTION_MODE_ENABLED, signOut, enterInspection,
     }}>
       {children}
     </SessionContext.Provider>
