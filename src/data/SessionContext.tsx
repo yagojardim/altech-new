@@ -19,6 +19,7 @@ interface SessionCtx {
   authUser:      AuthUser | null
   inspectionEnabled: boolean
   signOut:       () => Promise<void>
+  enterInspection: () => void
 }
 
 const SessionContext = createContext<SessionCtx>(null!)
