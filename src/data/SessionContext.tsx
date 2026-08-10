@@ -29,6 +29,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
 
+  /** Inspection só vale quando NÃO houve logout manual nesta aba. */
+  function fallbackStatus(): SessionStatus {
+    return INSPECTION_MODE_ENABLED && !hasManualLogout() ? 'inspection' : 'anonymous'
+  }
+
+
   function setActiveUser(id: string) {
     _setActiveUser(id)   // keep module var in sync (for non-hook callers)
     setUserId(id)        // trigger React re-render
