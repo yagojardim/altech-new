@@ -6,7 +6,7 @@ import {
 } from './session'
 import {
   getSession, onAuthStateChange, signOut as authSignOut,
-  INSPECTION_MODE_ENABLED, type AuthUser,
+  INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
 
@@ -19,6 +19,7 @@ interface SessionCtx {
   authUser:      AuthUser | null
   inspectionEnabled: boolean
   signOut:       () => Promise<void>
+  enterInspection: () => void
 }
 
 const SessionContext = createContext<SessionCtx>(null!)
@@ -28,6 +29,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<SessionStatus>('loading')
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
+
+  /** Inspection só vale quando NÃO houve logout manual nesta aba. */
+  function fallbackStatus(): SessionStatus {
+    return INSPECTION_MODE_ENABLED && !hasManualLogout() ? 'inspection' : 'anonymous'
+  }
+
 
   function setActiveUser(id: string) {
     _setActiveUser(id)   // keep module var in sync (for non-hook callers)
@@ -51,8 +58,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       }
       setDbUser(null)
-      // Fallback de desenvolvimento: Inspection Mode atrás da flag.
-      setStatus(INSPECTION_MODE_ENABLED ? 'inspection' : 'anonymous')
+      // Fallback de desenvolvimento: Inspection Mode atrás da flag,
+      // bloqueado quando o usuário clicou em "Sair".
+      setStatus(fallbackStatus())
     }
 
     getSession().then(resolve)
@@ -64,8 +72,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     await authSignOut()
     setDbUser(null)
     setAuthUser(null)
-    setStatus(INSPECTION_MODE_ENABLED ? 'inspection' : 'anonymous')
+    setUserId(ACTIVE_USER_ID)
+    setStatus('anonymous')
   }
+
+  /** Atalho Inspection intencional (dev): libera o fallback novamente. */
+  function enterInspection() {
+    if (!INSPECTION_MODE_ENABLED) return
+    clearManualLogout()
+    setStatus('inspection')
+  }
+
 
   const mockUser = MOCK_USERS.find(u => u.user_id === userId) ?? MOCK_USERS[0]
   const activeUser = dbUser ?? mockUser
@@ -73,7 +90,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider value={{
       activeUser, setActiveUser, status, authUser,
-      inspectionEnabled: INSPECTION_MODE_ENABLED, signOut,
+      inspectionEnabled: INSPECTION_MODE_ENABLED, signOut, enterInspection,
     }}>
       {children}
     </SessionContext.Provider>

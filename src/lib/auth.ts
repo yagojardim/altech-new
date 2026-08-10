@@ -35,6 +35,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
     }
     const user = toAuthUser(data.user)
     if (!user) return { ok: false, error: 'Sessão não retornada.' }
+    clearManualLogout()
     return { ok: true, user }
   } catch (err) {
     logger.error('auth.signIn', err)
@@ -42,11 +43,34 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   }
 }
 
+const MANUAL_LOGOUT_KEY = 'altech_manual_logout'
+
+/** Marcador de logout manual — bloqueia o fallback Inspection após "Sair". */
+export function markManualLogout(): void {
+  try { sessionStorage.setItem(MANUAL_LOGOUT_KEY, '1') } catch { /* storage indisponível */ }
+}
+
+export function clearManualLogout(): void {
+  try { sessionStorage.removeItem(MANUAL_LOGOUT_KEY) } catch { /* storage indisponível */ }
+}
+
+export function hasManualLogout(): boolean {
+  try { return sessionStorage.getItem(MANUAL_LOGOUT_KEY) === '1' } catch { return false }
+}
+
 export async function signOut(): Promise<void> {
   try {
     await supabase.auth.signOut()
   } catch (err) {
     logger.error('auth.signOut', err)
+  } finally {
+    markManualLogout()
+    try {
+      // limpa caches de sessão/profile em memória e tokens locais do supabase
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-') && k.includes('auth-token'))
+        .forEach(k => localStorage.removeItem(k))
+    } catch { /* storage indisponível */ }
   }
 }
 

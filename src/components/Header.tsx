@@ -104,7 +104,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
   const [rows,       setRows]       = useState<NotificationRow[]>([])
   const [profileId,  setProfileId]  = useState<string | null>(null)
 
-  const { activeUser, setActiveUser } = useSession()
+  const { activeUser, setActiveUser, signOut } = useSession()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
@@ -292,7 +292,10 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
                     style={{ color: item.label === 'Sair' ? T.crit : T.text2 }}
                     onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
                     onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                    onClick={() => setSwitchOpen(false)}
+                    onClick={() => {
+                      setSwitchOpen(false)
+                      if (item.label === 'Sair') void signOut()
+                    }}
                   >
                     <span>{item.icon}</span>{item.label}
                   </button>
