@@ -51,7 +51,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChange] = useState(false)
 
   /** Inspection só vale quando NÃO houve logout manual nesta aba. */
-  function fallbackStatus(): SessionStatus {
+  function fallbackStatus(): Exclude<SessionStatus, 'loading'> {
     return INSPECTION_MODE_ENABLED && !hasManualLogout() ? 'inspection' : 'anonymous'
   }
 
