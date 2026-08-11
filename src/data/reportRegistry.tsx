@@ -948,7 +948,17 @@ export function ReportChartModal({ reportId, onClose }: { reportId: string; onCl
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>{entry.title}</div>
             <div style={{ fontSize: 12, color: T.text3, marginTop: 3 }}>{entry.subtitle}</div>
+            {scoped && (
+              <div style={{
+                display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 600,
+                color: T.accent, background: `${T.accent}14`, border: `1px solid ${T.accent}33`,
+                borderRadius: 4, padding: '2px 7px',
+              }}>
+                Escopo: {scoped.length} projeto{scoped.length !== 1 ? 's' : ''}
+              </div>
+            )}
           </div>
+
           <button
             onClick={onClose}
             style={{ width: 30, height: 30, borderRadius: 7, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
