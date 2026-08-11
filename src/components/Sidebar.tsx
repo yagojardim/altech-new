@@ -4,6 +4,7 @@ import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
+import { useVisibleBoards } from '@/data/db/boards'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
@@ -348,25 +349,30 @@ const workspaces = [
 ]
 
 // ─── Pill nav button ───────────────────────────────────────────────────────────
-function NavBtn({ item, active, onClick, collapsed }: {
+function NavBtn({ item, active, onClick, collapsed, disabled = false, disabledLabel }: {
   item: NavItem; active: boolean; onClick: () => void; collapsed: boolean
+  disabled?: boolean; disabledLabel?: string
 }) {
   const btn = (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
       className={`flex items-center gap-2 h-8 rounded-lg text-[13px] transition-all duration-150 flex-shrink-0 ${collapsed ? 'w-8 justify-center px-0' : 'w-full px-2.5'}`}
       style={{
-        background: active ? `${T.accent}22` : 'transparent',
-        color: active ? T.accent : T.text2,
-        fontWeight: active ? 600 : 400,
+        background: active && !disabled ? `${T.accent}22` : 'transparent',
+        color: disabled ? T.text3 : active ? T.accent : T.text2,
+        fontWeight: active && !disabled ? 600 : 400,
+        opacity: disabled ? 0.5 : 1,
+        cursor: disabled ? 'not-allowed' : 'pointer',
       }}
-      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
-      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+      onMouseEnter={e => { if (!active && !disabled) (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
+      onMouseLeave={e => { if (!active && !disabled) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
     >
       {/* Active pill indicator on the icon side */}
       <span
         className="flex-shrink-0 flex items-center justify-center w-5 h-5 rounded-md transition-all"
-        style={{ background: active ? `${T.accent}28` : 'transparent' }}
+        style={{ background: active && !disabled ? `${T.accent}28` : 'transparent' }}
       >
         <item.icon />
       </span>
@@ -394,6 +400,13 @@ function NavBtn({ item, active, onClick, collapsed }: {
     </button>
   )
 
+  if (disabled && disabledLabel) {
+    return (
+      <Tooltip label={disabledLabel} side="right">
+        <span className="relative block w-full">{btn}</span>
+      </Tooltip>
+    )
+  }
   if (collapsed) {
     return (
       <Tooltip label={item.label} side="right">
@@ -744,6 +757,11 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
   const canLogHours      = can(permissions, 'log:hours')
   const canApproveHours  = can(permissions, 'approve:hours')
 
+  // Boards visíveis (RBAC + tenant). Em erro de leitura degrada para lista vazia.
+  const { boards: visibleBoards, loading: boardsLoading } = useVisibleBoards()
+  const boardsDisabled = !boardsLoading && visibleBoards.length === 0
+  const NO_BOARDS_LABEL = 'Você não tem acesso a nenhum board'
+
   const sidebarStyle: React.CSSProperties = {
     width: collapsed ? 56 : 240,
     background: T.bgSurface,
@@ -809,7 +827,15 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
           groups.flatMap(g => g.items)
             .filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx)
             .map(item => (
-              <NavBtn key={item.id} item={item} active={activeNav === item.id} onClick={() => onNav(item.id)} collapsed />
+              <NavBtn
+                key={item.id}
+                item={item}
+                active={activeNav === item.id}
+                onClick={() => onNav(item.id)}
+                collapsed
+                disabled={item.id === 'boards-list' && boardsDisabled}
+                disabledLabel={item.id === 'boards-list' ? NO_BOARDS_LABEL : undefined}
+              />
             ))
         ) : (
           // Expanded: grouped
@@ -834,6 +860,8 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
                       active={activeNav === item.id}
                       collapsed={false}
                       onClick={() => onNav(item.id)}
+                      disabled={item.id === 'boards-list' && boardsDisabled}
+                      disabledLabel={item.id === 'boards-list' ? NO_BOARDS_LABEL : undefined}
                     />
                   )}
                   {/* Animated disclosure panel — only after the dashboard item */}
