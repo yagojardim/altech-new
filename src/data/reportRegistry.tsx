@@ -9,6 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { T } from '../components/ds/tokens'
 import { fetchReportsData, type ReportsData } from './db/reports'
 import { setReportNav, type ReportNavIntent } from '@/lib/reportNav'
+import { liveProjects } from '@/data/db/homeLive'
 
 const px = (n: number) => `${n}px`
 
@@ -302,15 +303,54 @@ export function BugsDonut({ variant = 'full', data: explicit }: ChartProps) {
   )
 }
 
+function SmallMultiples({ series }: { series: { projectId: string; created: number[]; resolved: number[] }[] }) {
+  const names = new Map(liveProjects().map(p => [p.id, p.name]))
+  const maxV = Math.max(1, ...series.flatMap(p => [...p.created, ...p.resolved]))
+  const W = 180; const H = 90
+  const PAD = { top: 8, right: 6, bottom: 14, left: 18 }
+  const cw = W - PAD.left - PAD.right
+  const ch = H - PAD.top - PAD.bottom
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 12 }}>
+      {series.map(p => {
+        const n = Math.max(2, p.created.length)
+        const toX = (i: number) => PAD.left + (i / (n - 1)) * cw
+        const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
+        const path = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
+        return (
+          <div key={p.projectId} style={{ minWidth: 0 }}>
+            <div style={{
+              fontSize: 10, color: T.text2, marginBottom: 2,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{names.get(p.projectId) ?? p.projectId}</div>
+            <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+              {[0, maxV].map(t => (
+                <g key={t}>
+                  <line x1={PAD.left} y1={toY(t)} x2={W - PAD.right} y2={toY(t)} stroke={T.border} strokeWidth={0.5} />
+                  <text x={PAD.left - 4} y={toY(t) + 3} textAnchor="end" fontSize={7} fill={T.text3}>{Math.round(t)}</text>
+                </g>
+              ))}
+              <path d={path(p.created)} stroke={T.accent} strokeWidth={1.5} fill="none" />
+              <path d={path(p.resolved)} stroke={T.success} strokeWidth={1.5} strokeDasharray="3 3" fill="none" />
+            </svg>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartProps) {
   const { data, loading, error } = useChartState(explicit)
   const th = variant === 'thumbnail'
   const cvr = data?.createdVsResolved
+  const multi = !th && cvr ? cvr.byProject.length >= 2 && cvr.byProject.length <= 6 : false
   return (
     <ChartFrame data={data} loading={loading} error={error} height={th ? 60 : 150}
       isEmpty={!cvr || (cvr.created.every(v => v === 0) && cvr.resolved.every(v => v === 0))}
       emptyText="Nenhuma issue criada ou resolvida nas últimas 8 semanas.">
       {() => {
+        if (multi) return <SmallMultiples series={cvr!.byProject} />
         const c = cvr!
         const W = 520; const H = 150
         const PAD = { top: th ? 4 : 20, right: 8, bottom: th ? 4 : 28, left: th ? 4 : 28 }
