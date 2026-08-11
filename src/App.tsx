@@ -183,6 +183,7 @@ function AppInner() {
 
   return (
     <CatalogProvider>
+      <AdminMasterOverlay />
       <ShellWithRole view={view} setView={setView} />
     </CatalogProvider>
   )
