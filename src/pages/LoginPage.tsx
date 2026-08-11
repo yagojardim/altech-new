@@ -3,6 +3,7 @@ import { T } from '../components/ds/tokens'
 import { signIn, INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { setRememberMe } from '../lib/authStorage'
 import { loadProfileByAuthUserId, writeLoginAudit, touchAccess } from '../data/db/authProfile'
+import { requestPasswordReset } from '../lib/passwordReset'
 
 
 type LoginState = 'idle' | 'loading' | 'error' | 'success'
@@ -82,6 +83,19 @@ export default function LoginPage({ onSuccess }: Props) {
   const [remember, setRemember] = useState(false)
   const [selectedRole, setSelectedRole] = useState('Dev')
   const [errorMsg, setErrorMsg] = useState('E-mail ou senha inválidos. Verifique e tente novamente.')
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotBusy, setForgotBusy] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault()
+    if (!forgotEmail.trim() || forgotBusy) return
+    setForgotBusy(true)
+    await requestPasswordReset(forgotEmail)   // e-mail nunca é logado
+    setForgotBusy(false)
+    setForgotSent(true)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -331,7 +345,11 @@ export default function LoginPage({ onSuccess }: Props) {
                     />
                     Manter conectado
                   </label>
-                  <a href="#" style={{ fontSize: 12, color: T.accent, textDecoration: 'none' }} onClick={e => e.preventDefault()}>
+                  <a
+                    href="#"
+                    style={{ fontSize: 12, color: T.accent, textDecoration: 'none' }}
+                    onClick={e => { e.preventDefault(); setForgotEmail(email); setForgotSent(false); setForgotOpen(true) }}
+                  >
                     Esqueci a senha
                   </a>
                 </div>
@@ -413,6 +431,65 @@ export default function LoginPage({ onSuccess }: Props) {
             </div>
           )}
         </div>
+
+        {forgotOpen && (
+          <div
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 24,
+            }}
+            onClick={() => setForgotOpen(false)}
+          >
+            <form
+              onClick={e => e.stopPropagation()}
+              onSubmit={handleForgot}
+              style={{ width: '100%', maxWidth: 380, background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 14, padding: 24 }}
+            >
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: T.text1, margin: '0 0 6px' }}>Esqueci a senha</h3>
+              <p style={{ fontSize: 12.5, color: T.text3, margin: '0 0 16px' }}>
+                Informe seu e-mail e enviaremos um link para redefinir a senha.
+              </p>
+
+              {forgotSent ? (
+                <div style={{ background: T.successDim, border: `1px solid ${T.success}40`, borderRadius: 8, padding: 10, fontSize: 12, color: T.success, marginBottom: 16 }}>
+                  Se o e-mail existir, enviaremos um link de redefinição.
+                </div>
+              ) : (
+                <input
+                  type="email"
+                  value={forgotEmail}
+                  onChange={e => setForgotEmail(e.target.value)}
+                  placeholder="voce@empresa.com"
+                  autoComplete="email"
+                  style={{ ...inputStyle(false), marginBottom: 16 }}
+                />
+              )}
+
+              {!forgotSent && (
+                <button
+                  type="submit"
+                  disabled={!forgotEmail.trim() || forgotBusy}
+                  style={{
+                    width: '100%', height: 40, borderRadius: 8, border: 'none', marginBottom: 10,
+                    background: forgotEmail.trim() && !forgotBusy ? T.accent : T.bgSurface2,
+                    color: forgotEmail.trim() && !forgotBusy ? 'white' : T.text3,
+                    fontSize: 13.5, fontWeight: 600, cursor: forgotEmail.trim() && !forgotBusy ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {forgotBusy ? 'Enviando…' : 'Enviar link'}
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={() => setForgotOpen(false)}
+                style={{ width: '100%', height: 36, borderRadius: 8, background: 'transparent', border: `1px solid ${T.border}`, color: T.text2, fontSize: 12.5, cursor: 'pointer' }}
+              >
+                {forgotSent ? 'Fechar' : 'Cancelar'}
+              </button>
+            </form>
+          </div>
+        )}
 
         {/* Atalho de desenvolvimento — Inspection Mode atrás da flag */}
         {INSPECTION_MODE_ENABLED && !isSuccess && (
