@@ -4,6 +4,7 @@ import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
+import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
 import {
@@ -648,51 +649,55 @@ function UserBlock({ collapsed }: { collapsed: boolean }) {
         </button>
       ))}
 
-      {/* User switcher */}
-      <button
-        onClick={() => setSwitchOpen(o => !o)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
-        style={{ color: T.text2, borderTop: `1px solid ${T.border}` }}
-        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-      >
-        <span>🔄</span>
-        <span className="flex-1">Trocar usuário (inspeção)</span>
-        <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ transform: switchOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: T.text3 }}>
-          <path d="M1.5 3.5L4.5 6.5L7.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-        </svg>
-      </button>
+      {/* User switcher (inspection only) */}
+      {INSPECTION_MODE_ENABLED && (
+        <>
+          <button
+            onClick={() => setSwitchOpen(o => !o)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
+            style={{ color: T.text2, borderTop: `1px solid ${T.border}` }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+          >
+            <span>🔄</span>
+            <span className="flex-1">Trocar usuário (inspeção)</span>
+            <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ transform: switchOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s', color: T.text3 }}>
+              <path d="M1.5 3.5L4.5 6.5L7.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </button>
 
-      {switchOpen && (
-        <div style={{ maxHeight: 220, overflowY: 'auto', borderTop: `1px solid ${T.border}` }}>
-          <p className="px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>Inspection Mode</p>
-          {MOCK_USERS.map(u => {
-            const s = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
-            const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
-            const isActive = u.user_id === activeUser.user_id
-            return (
-              <button
-                key={u.user_id}
-                onClick={() => { setActiveUser(u.user_id); setMenuOpen(false); setSwitchOpen(false) }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
-                style={{ background: isActive ? `${s.color}14` : 'transparent' }}
-                onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-                onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-              >
-                <Avatar name={u.name} size="sm" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-medium truncate" style={{ color: isActive ? s.color : T.text1 }}>{u.name}</p>
-                  <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
-                </div>
-                {isActive && (
-                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
-                    <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </button>
-            )
-          })}
-        </div>
+          {switchOpen && (
+            <div style={{ maxHeight: 220, overflowY: 'auto', borderTop: `1px solid ${T.border}` }}>
+              <p className="px-3 py-1.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>Inspection Mode</p>
+              {MOCK_USERS.map(u => {
+                const s = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
+                const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
+                const isActive = u.user_id === activeUser.user_id
+                return (
+                  <button
+                    key={u.user_id}
+                    onClick={() => { setActiveUser(u.user_id); setMenuOpen(false); setSwitchOpen(false) }}
+                    className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
+                    style={{ background: isActive ? `${s.color}14` : 'transparent' }}
+                    onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                    onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                  >
+                    <Avatar name={u.name} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12px] font-medium truncate" style={{ color: isActive ? s.color : T.text1 }}>{u.name}</p>
+                      <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
+                    </div>
+                    {isActive && (
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+                        <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Sign out */}
