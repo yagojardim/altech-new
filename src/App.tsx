@@ -184,7 +184,7 @@ function AppInner() {
 
   return (
     <CatalogProvider>
-      <AdminMasterOverlay />
+      <ErrorBoundary scope="AdminMasterOverlay" fallback={null}><AdminMasterOverlay /></ErrorBoundary>
       <ShellWithRole view={view} setView={setView} />
     </CatalogProvider>
   )

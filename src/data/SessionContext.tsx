@@ -9,6 +9,7 @@ import {
   INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
+import { logger } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
 
@@ -50,17 +51,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async function resolve(u: AuthUser | null) {
       if (!alive) return
       setAuthUser(u)
-      if (u) {
-        const profile = await loadProfileByAuthUserId(u.id, u.email)
-        if (!alive) return
-        if (profile) {
-          setDbUser(profile)
-          setMustChange(!!profile.password_must_change)
-          setStatus('authenticated')
-          void touchAccess(profile.user_id, profile.tenant_id, null)
-          return
+      try {
+        if (u) {
+          const profile = await loadProfileByAuthUserId(u.id, u.email)
+          if (!alive) return
+          if (profile) {
+            setDbUser(profile)
+            setMustChange(!!profile.password_must_change)
+            setStatus('authenticated')
+            void touchAccess(profile.user_id, profile.tenant_id, null)
+            return
+          }
         }
+      } catch (err) {
+        logger.error('SessionContext.resolve', err)
       }
+      if (!alive) return
       setDbUser(null)
       setMustChange(false)
       // Fallback de desenvolvimento: Inspection Mode atrás da flag,
@@ -68,7 +74,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStatus(fallbackStatus())
     }
 
-    getSession().then(resolve)
+    getSession().then(resolve).catch(err => {
+      logger.error('SessionContext.getSession', err)
+      if (alive) setStatus(fallbackStatus())
+    })
     const unsub = onAuthStateChange(u => { void resolve(u) })
     return () => { alive = false; unsub() }
   }, [])

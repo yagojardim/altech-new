@@ -9,6 +9,7 @@ import {
   inviteAsAdminMaster, remindLater, type AdminMasterState,
 } from '../data/db/adminMaster'
 import { copyToClipboard } from '../utils/copyToClipboard'
+import { logger } from '../utils/logger'
 
 type Mode = 'choice' | 'invite' | 'link' | 'auto'
 
@@ -28,22 +29,31 @@ export function AdminMasterOverlay() {
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
+  const [loaded, setLoaded] = useState(false)
+
   useEffect(() => {
     let alive = true
     if (status !== 'authenticated' && status !== 'inspection') return
     void (async () => {
-      // Avaliação preguiçosa no login (mesmo padrão do reconcileExpiries dos trials).
-      const reconciled = await reconcileAdminMaster()
-      const current = reconciled.autoElected ? reconciled : await getAdminMasterState()
-      if (!alive) return
-      setState(current)
-      if (reconciled.autoElected) { setMode('auto'); setOpen(true) }
-      else if (current.status === 'pending') { setMode('choice'); setOpen(true) }
+      try {
+        // Avaliação preguiçosa no login (mesmo padrão do reconcileExpiries dos trials).
+        const reconciled = await reconcileAdminMaster()
+        const current = reconciled.autoElected ? reconciled : await getAdminMasterState()
+        if (!alive) return
+        setState(current)
+        if (reconciled.autoElected) { setMode('auto'); setOpen(true) }
+        else if (current.status === 'pending') { setMode('choice'); setOpen(true) }
+      } catch (err) {
+        logger.error('AdminMasterOverlay.load', err)
+      } finally {
+        if (alive) setLoaded(true)
+      }
     })()
     return () => { alive = false }
   }, [status])
 
-  if (!open || !state) return null
+  // Só renderiza depois que o estado carregou — nunca bloqueia o app.
+  if (!loaded || !open || !state) return null
 
   const days = state.daysRemaining
 

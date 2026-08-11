@@ -2731,6 +2731,12 @@ export type Database = {
       }
       tenant_settings: {
         Row: {
+          admin_master_defined_at: string | null
+          admin_master_defined_by: string | null
+          admin_master_defined_method: string | null
+          admin_master_grace_days: number
+          admin_master_grace_until: string | null
+          admin_master_status: string
           archived_at: string | null
           created_at: string
           created_by: string | null
@@ -2740,6 +2746,7 @@ export type Database = {
           logo_url: string | null
           metadata: Json
           primary_color: string | null
+          registrant_profile_id: string | null
           row_version: number
           tenant_id: string
           timezone: string
@@ -2747,6 +2754,12 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          admin_master_defined_at?: string | null
+          admin_master_defined_by?: string | null
+          admin_master_defined_method?: string | null
+          admin_master_grace_days?: number
+          admin_master_grace_until?: string | null
+          admin_master_status?: string
           archived_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -2756,6 +2769,7 @@ export type Database = {
           logo_url?: string | null
           metadata?: Json
           primary_color?: string | null
+          registrant_profile_id?: string | null
           row_version?: number
           tenant_id: string
           timezone?: string
@@ -2763,6 +2777,12 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          admin_master_defined_at?: string | null
+          admin_master_defined_by?: string | null
+          admin_master_defined_method?: string | null
+          admin_master_grace_days?: number
+          admin_master_grace_until?: string | null
+          admin_master_status?: string
           archived_at?: string | null
           created_at?: string
           created_by?: string | null
@@ -2772,6 +2792,7 @@ export type Database = {
           logo_url?: string | null
           metadata?: Json
           primary_color?: string | null
+          registrant_profile_id?: string | null
           row_version?: number
           tenant_id?: string
           timezone?: string
