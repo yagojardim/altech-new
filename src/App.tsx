@@ -37,6 +37,7 @@ import TenantSettingsPage from './pages/TenantSettingsPage'
 import { MOCK_USERS } from './data/session'
 import InviteMemberModal from './components/InviteMemberModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { AdminMasterOverlay } from './components/AdminMasterOverlay'
 import CreatePasswordPage from './pages/CreatePasswordPage'
 import ActivatePage from './pages/ActivatePage'
 
@@ -183,6 +184,7 @@ function AppInner() {
 
   return (
     <CatalogProvider>
+      <AdminMasterOverlay />
       <ShellWithRole view={view} setView={setView} />
     </CatalogProvider>
   )

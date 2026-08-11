@@ -1428,6 +1428,124 @@ export type Database = {
           },
         ]
       }
+      module_entitlements: {
+        Row: {
+          created_by: string | null
+          expires_at: string | null
+          granted_at: string
+          id: string
+          metadata: Json
+          module_id: string
+          source: string
+          status: string
+          tenant_id: string
+          trial_id: string | null
+        }
+        Insert: {
+          created_by?: string | null
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          metadata?: Json
+          module_id: string
+          source: string
+          status?: string
+          tenant_id: string
+          trial_id?: string | null
+        }
+        Update: {
+          created_by?: string | null
+          expires_at?: string | null
+          granted_at?: string
+          id?: string
+          metadata?: Json
+          module_id?: string
+          source?: string
+          status?: string
+          tenant_id?: string
+          trial_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_entitlements_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_entitlements_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_entitlements_trial_id_fkey"
+            columns: ["trial_id"]
+            isOneToOne: false
+            referencedRelation: "module_trials"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      module_trials: {
+        Row: {
+          activated_by: string | null
+          cancelled_at: string | null
+          converted_at: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          metadata: Json
+          module_id: string
+          started_at: string
+          status: string
+          tenant_id: string
+        }
+        Insert: {
+          activated_by?: string | null
+          cancelled_at?: string | null
+          converted_at?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          metadata?: Json
+          module_id: string
+          started_at?: string
+          status?: string
+          tenant_id: string
+        }
+        Update: {
+          activated_by?: string | null
+          cancelled_at?: string | null
+          converted_at?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          metadata?: Json
+          module_id?: string
+          started_at?: string
+          status?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "module_trials_module_id_fkey"
+            columns: ["module_id"]
+            isOneToOne: false
+            referencedRelation: "modules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "module_trials_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       modules: {
         Row: {
           archived_at: string | null
@@ -1447,6 +1565,7 @@ export type Database = {
           module_type: string | null
           name: string
           row_version: number
+          trial_duration_days: number
           updated_at: string
           updated_by: string | null
         }
@@ -1468,6 +1587,7 @@ export type Database = {
           module_type?: string | null
           name: string
           row_version?: number
+          trial_duration_days?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -1489,6 +1609,7 @@ export type Database = {
           module_type?: string | null
           name?: string
           row_version?: number
+          trial_duration_days?: number
           updated_at?: string
           updated_by?: string | null
         }
@@ -2526,6 +2647,7 @@ export type Database = {
           status: string
           suspended_at: string | null
           suspended_reason: string | null
+          technical_health: string
           tenant_id: string
           updated_at: string
           updated_by: string | null
@@ -2548,6 +2670,7 @@ export type Database = {
           status?: string
           suspended_at?: string | null
           suspended_reason?: string | null
+          technical_health?: string
           tenant_id: string
           updated_at?: string
           updated_by?: string | null
@@ -2570,6 +2693,7 @@ export type Database = {
           status?: string
           suspended_at?: string | null
           suspended_reason?: string | null
+          technical_health?: string
           tenant_id?: string
           updated_at?: string
           updated_by?: string | null
