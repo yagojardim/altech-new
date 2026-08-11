@@ -41,6 +41,9 @@ import { AdminMasterOverlay } from './components/AdminMasterOverlay'
 import CreatePasswordPage from './pages/CreatePasswordPage'
 import ActivatePage from './pages/ActivatePage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
+import ProfilePage from './pages/ProfilePage'
+import PreferencesPage from './pages/PreferencesPage'
+import { initAppPrefs } from './lib/appPrefs'
 import { RESET_PATH } from './lib/passwordReset'
 
 
@@ -51,6 +54,7 @@ const ALL_VIEWS: View[] = [
   'issue','client','task-drawer',
   'login','role-dashboard','client-access','client-login','client-messages',
   'timesheet','hours-approval','boards-list','modules','tenant-settings',
+  'profile','preferences',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -68,7 +72,10 @@ export const VIEW_LABELS: Record<View, string> = {
   'boards-list':'Boards',
   modules:'Módulos',
   'tenant-settings':'Config. do Tenant',
+  profile:'Meu perfil', preferences:'Preferências',
 }
+
+initAppPrefs()
 
 export default function App() {
   return (
@@ -288,6 +295,8 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='timesheet'        && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TimesheetPage /></div>}
         {view==='hours-approval'   && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><HoursApprovalPage /></div>}
         {view==='boards-list'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setView('project') }} /></div>}
+        {view==='profile'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProfilePage /></div>}
+        {view==='preferences'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><PreferencesPage /></div>}
         {view==='modules'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         </ErrorBoundary>
       </Shell>

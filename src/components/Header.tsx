@@ -284,7 +284,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
                       </span>
                     </div>
                     {[
-                      { icon: '👤', label: 'Perfil' },
+                      { icon: '👤', label: 'Meu perfil' },
                       { icon: '⚙️', label: 'Preferências' },
                       { icon: '🔑', label: 'Segurança' },
                       { icon: '🚪', label: 'Sair' },
@@ -298,6 +298,8 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
                         onClick={() => {
                           setSwitchOpen(false)
                           if (item.label === 'Sair') void signOut()
+                          else if (item.label === 'Meu perfil') onViewChange('profile')
+                          else if (item.label === 'Preferências') onViewChange('preferences')
                         }}
                       >
                         <span>{item.icon}</span>{item.label}
