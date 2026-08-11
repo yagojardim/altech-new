@@ -3,6 +3,7 @@ import { T } from '../components/ds/tokens'
 import { signIn, INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { setRememberMe } from '../lib/authStorage'
 import { loadProfileByAuthUserId, writeLoginAudit, touchAccess } from '../data/db/authProfile'
+import { requestPasswordReset } from '../lib/passwordReset'
 
 
 type LoginState = 'idle' | 'loading' | 'error' | 'success'
@@ -82,6 +83,19 @@ export default function LoginPage({ onSuccess }: Props) {
   const [remember, setRemember] = useState(false)
   const [selectedRole, setSelectedRole] = useState('Dev')
   const [errorMsg, setErrorMsg] = useState('E-mail ou senha inválidos. Verifique e tente novamente.')
+  const [forgotOpen, setForgotOpen] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotBusy, setForgotBusy] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+
+  async function handleForgot(e: React.FormEvent) {
+    e.preventDefault()
+    if (!forgotEmail.trim() || forgotBusy) return
+    setForgotBusy(true)
+    await requestPasswordReset(forgotEmail)   // e-mail nunca é logado
+    setForgotBusy(false)
+    setForgotSent(true)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -331,7 +345,11 @@ export default function LoginPage({ onSuccess }: Props) {
                     />
                     Manter conectado
                   </label>
-                  <a href="#" style={{ fontSize: 12, color: T.accent, textDecoration: 'none' }} onClick={e => e.preventDefault()}>
+                  <a
+                    href="#"
+                    style={{ fontSize: 12, color: T.accent, textDecoration: 'none' }}
+                    onClick={e => { e.preventDefault(); setForgotEmail(email); setForgotSent(false); setForgotOpen(true) }}
+                  >
                     Esqueci a senha
                   </a>
                 </div>
