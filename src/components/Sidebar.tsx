@@ -756,6 +756,11 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
   const canLogHours      = can(permissions, 'log:hours')
   const canApproveHours  = can(permissions, 'approve:hours')
 
+  // Boards visíveis (RBAC + tenant). Em erro de leitura degrada para lista vazia.
+  const { boards: visibleBoards, loading: boardsLoading } = useVisibleBoards()
+  const boardsDisabled = !boardsLoading && visibleBoards.length === 0
+  const NO_BOARDS_LABEL = 'Você não tem acesso a nenhum board'
+
   const sidebarStyle: React.CSSProperties = {
     width: collapsed ? 56 : 240,
     background: T.bgSurface,
