@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, type CSSProperties } from 'react'
+import { takeReportNav } from '@/lib/reportNav'
 import { T } from '../components/ds/tokens'
 import { can } from '../data/permissions'
 import { getActiveUser, MOCK_TENANT } from '../data/session'
@@ -253,9 +254,10 @@ interface ReportCardProps {
   tick:       number
   onAssign:   (card: ReportCardDef, anchorEl: HTMLElement) => void
   children:   React.ReactNode
+  focused?:   boolean
 }
 
-function ReportCard({ def, canManage, tick, onAssign, children }: ReportCardProps) {
+function ReportCard({ def, canManage, tick, onAssign, children, focused = false }: ReportCardProps) {
   const [hovered, setHovered] = useState(false)
   const pinBtnRef = useRef<HTMLButtonElement>(null)
   const tid = MOCK_TENANT.tenant_id
@@ -520,6 +522,17 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
 
   // tick forces re-render of all cards after an assignment is saved
   const [tick, setTick] = useState(0)
+  // A report/KPI card elsewhere in the app can deep-link into a specific report.
+  const [focusId, setFocusId] = useState<string | null>(null)
+  useEffect(() => {
+    const intent = takeReportNav('reports')
+    if (!intent?.reportId) return
+    setFocusId(intent.reportId)
+    const el = document.getElementById(`report-card-${intent.reportId}`)
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    const t = setTimeout(() => setFocusId(null), 2600)
+    return () => clearTimeout(t)
+  }, [])
   const { msg: toastMsg, toast } = useToast()
   const { data, loading, error, reload } = useReportsData()
 
@@ -613,7 +626,7 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
       {/* ── Report grid ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: px(16), padding: px(24) }}>
         {REPORT_CARDS.map(def => (
-          <ReportCard key={def.id} def={def} canManage={canManage} tick={tick} onAssign={openAssign}>
+          <ReportCard key={def.id} def={def} canManage={canManage} tick={tick} onAssign={openAssign} focused={focusId === def.id}>
             <CardContent id={def.id} />
           </ReportCard>
         ))}
