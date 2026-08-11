@@ -223,14 +223,26 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
   const weeks: string[] = []
   const created: number[] = []
   const resolved: number[] = []
+  const weekRanges: { from: Date; to: Date }[] = []
   for (let w = 7; w >= 0; w--) {
     const from = addDays(now, -(w + 1) * 7)
     const to = addDays(now, -w * 7)
+    weekRanges.push({ from, to })
     weeks.push(`W${8 - w}`)
     created.push(itemRows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length)
     resolved.push(itemRows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length)
   }
   const cvrMax = Math.max(1, ...created, ...resolved)
+  const cvrByProject = (scoped ?? []).map(pid => {
+    const rows = itemRows.filter(i => i.project_id === pid)
+    return {
+      projectId: pid,
+      created: weekRanges.map(({ from, to }) =>
+        rows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length),
+      resolved: weekRanges.map(({ from, to }) =>
+        rows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length),
+    }
+  })
 
   // ── Workload ───────────────────────────────────────────────────────────────
   const workload = profileRows
