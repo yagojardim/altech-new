@@ -32,8 +32,11 @@ import {
   dismissNativeCard, restoreNativeCard, getDismissedNative, useDashboardAssignments,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
+import { safeCall } from '../utils/logger'
+import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
+  ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
   BurndownChart,
   type ReportEntry,
 } from '../data/reportRegistry'
@@ -185,7 +188,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const [kpis, setKpis] = useState<AdminKpis | null>(null)
   useEffect(() => {
     let alive = true
-    void safeCall(() => fetchAdminKpis(), null, 'fetchAdminKpis').then(k => { if (alive && k) setKpis(k) })
+    void safeCall('admin-kpis', () => fetchAdminKpis(), null as AdminKpis | null)
+      .then(k => { if (alive && k) setKpis(k) })
     return () => { alive = false }
   }, [])
 
