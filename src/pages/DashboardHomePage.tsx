@@ -32,8 +32,11 @@ import {
   dismissNativeCard, restoreNativeCard, getDismissedNative, useDashboardAssignments,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
+import { safeCall } from '../utils/logger'
+import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
+  ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
   BurndownChart,
   type ReportEntry,
 } from '../data/reportRegistry'
@@ -182,19 +185,21 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
-  const projectIds = activeUser.project_id === '*' ? liveProjects().map(p => p.id) : [activeUser.project_id]
-  const _boards = getBoardsForScope(projectIds, activeUser.tenant_id)
-  const _activeBoards = _boards.filter(b => b.status === 'active').length
-  const [_modCounts, _setModCounts] = useState<{ active: number; total: number }>({ active: 0, total: 0 })
-  useEffect(() => { void countActiveModules().then(_setModCounts) }, [])
-  const _pendingInvites = countPendingInvites(activeUser.tenant_id)
-  const _nearestInvite  = nearestExpiry(activeUser.tenant_id)
-  const _inviteSub = _nearestInvite
-    ? (() => {
-        const days = Math.floor((new Date(_nearestInvite.expires_at).getTime() - Date.now()) / 86400000)
-        return days <= 0 ? 'expira hoje' : `expira em ${days}d`
-      })()
-    : 'nenhum pendente'
+  const [kpis, setKpis] = useState<AdminKpis | null>(null)
+  useEffect(() => {
+    let alive = true
+    void safeCall('admin-kpis', () => fetchAdminKpis(), null as AdminKpis | null)
+      .then(k => { if (alive && k) setKpis(k) })
+    return () => { alive = false }
+  }, [])
+
+  const inviteSub = kpis == null
+    ? '—'
+    : kpis.invites.pending === 0
+      ? 'nenhum pendente'
+      : kpis.invites.nextExpiryDays == null
+        ? `${kpis.invites.pending} pendente${kpis.invites.pending !== 1 ? 's' : ''}`
+        : kpis.invites.nextExpiryDays <= 0 ? 'expira hoje' : `expira em ${kpis.invites.nextExpiryDays}d`
 
   const modules = [
     { name: 'Board & Sprint',   active: true,  users: 9 },
@@ -219,13 +224,39 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   ]
   const statusC = { active: T.success, blocked: T.crit, inactive: T.neutral }
 
+  // Counts come straight from the tenant's tables; proportions render as donuts,
+  // pure counts render as a single-value bar — never a fabricated trend.
+  const ratioViz = (part: number, total: number, color: string): ReactNode =>
+    <ReportMiniViz viz={{ kind: 'donut', values: [], ratio: total > 0 ? (part / total) * 100 : 0, color }} />
+
   const nativeCards: MuralNativeCard[] = [
-    { id: 'admin:projects', value: '3', label: 'Projetos', sub: '2 ativos', disclaimer: 'projetos ativos neste tenant', miniViz: <MiniBarChart data={[{label:'Q1',value:2},{label:'Q2',value:2},{label:'Q3',value:3,current:true}]} showAvg={false} />, onClick: () => onNav('projects-list') },
-    { id: 'admin:boards', value: String(_boards.length), label: 'Boards', sub: `${_activeBoards} ativo${_activeBoards !== 1 ? 's' : ''}`, disclaimer: 'boards de Kanban disponíveis', miniViz: <MiniBarChart data={[{label:'Jan',value:3},{label:'Mar',value:4},{label:'Jun',value:5,current:true}]} showAvg={false} />, onClick: () => onNav('boards-list') },
-    { id: 'admin:modules', value: String(_modCounts.active), label: 'Módulos ativos', sub: `de ${_modCounts.total}`, disclaimer: 'módulos habilitados para este tenant', miniViz: <MiniBarChart data={[{label:'Jan',value:2},{label:'Mar',value:3},{label:'Jun',value:3,current:true}]} showAvg={false} />, onClick: () => onNav('modules') },
-    { id: 'admin:users', value: '11', label: 'Usuários', sub: '9 ativos', disclaimer: 'membros registrados no tenant', miniViz: <MiniSparkline data={[{label:'Jan',value:7},{value:8},{value:9},{value:10},{label:'Jul',value:11}]} />, onClick: () => onNav('team:membros') },
-    { id: 'admin:invites', value: String(_pendingInvites), label: 'Convites', sub: _inviteSub, disclaimer: 'convites pendentes de aceitação', color: _pendingInvites > 0 ? T.warn : undefined, miniViz: <MiniSparkline data={[{label:'Jan',value:0},{value:1},{value:2},{value:3},{label:'Jul',value:2}]} color="#f5a524" />, onClick: () => onNav('team:convites') },
+    { id: 'admin:projects', value: kpis ? String(kpis.projects.total) : '—', label: 'Projetos',
+      sub: kpis ? `${kpis.projects.active} ativo${kpis.projects.active !== 1 ? 's' : ''}` : 'carregando…',
+      disclaimer: 'projetos do tenant (não arquivados)',
+      miniViz: kpis ? ratioViz(kpis.projects.active, kpis.projects.total, T.accent) : undefined,
+      onClick: () => onNav('projects-list') },
+    { id: 'admin:boards', value: kpis ? String(kpis.boards.total) : '—', label: 'Boards',
+      sub: kpis ? `${kpis.boards.active} ativo${kpis.boards.active !== 1 ? 's' : ''}` : 'carregando…',
+      disclaimer: 'boards de Kanban do tenant',
+      miniViz: kpis ? ratioViz(kpis.boards.active, kpis.boards.total, T.indigo) : undefined,
+      onClick: () => onNav('boards-list') },
+    { id: 'admin:modules', value: kpis ? String(kpis.modules.active) : '—', label: 'Módulos ativos',
+      sub: kpis ? `de ${kpis.modules.total}` : 'carregando…',
+      disclaimer: 'módulos habilitados para este tenant',
+      miniViz: kpis ? ratioViz(kpis.modules.active, kpis.modules.total, T.purple) : undefined,
+      onClick: () => onNav('modules') },
+    { id: 'admin:users', value: kpis ? String(kpis.users.total) : '—', label: 'Usuários',
+      sub: kpis ? `${kpis.users.active} ativo${kpis.users.active !== 1 ? 's' : ''}${kpis.users.blocked ? ` · ${kpis.users.blocked} bloqueado(s)` : ''}` : 'carregando…',
+      disclaimer: 'perfis registrados no tenant',
+      miniViz: kpis ? ratioViz(kpis.users.active, kpis.users.total, T.success) : undefined,
+      onClick: () => onNav('team:membros') },
+    { id: 'admin:invites', value: kpis ? String(kpis.invites.pending) : '—', label: 'Convites',
+      sub: inviteSub, disclaimer: 'convites pendentes de aceitação',
+      color: kpis && kpis.invites.pending > 0 ? T.warn : undefined,
+      alert: !!kpis && kpis.invites.pending > 0,
+      onClick: () => onNav('team:convites') },
   ]
+
 
   return (
     <>
@@ -1329,8 +1360,8 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
                     {filteredReports.map(r => (
                       <div key={r.id} style={{ background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ height: 80, overflow: 'hidden', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', background: T.bgSurface }}>
-                          <r.Component variant="thumbnail" />
+                        <div style={{ minHeight: 62, borderBottom: `1px solid ${T.border}`, padding: '10px 12px', background: T.bgSurface }}>
+                          <ReportKpiPreview entry={r} compact />
                         </div>
                         <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>{r.title}</div>
@@ -1358,17 +1389,19 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
 }
 
 // ─── Report card tile ─────────────────────────────────────────────────────────
-function ReportCardTile({ slot, onOpen, onDismiss }: {
+function ReportCardTile({ slot, onOpen, onDismiss, onNav }: {
   slot: HomeCardSlot
   onOpen: (cardId: string) => void
   onDismiss: (cardId: string) => void
+  onNav?: (view: string) => void
 }) {
   const [hov, setHov] = useState(false)
   const [xHov, setXHov] = useState(false)
   const entry = REPORT_REGISTRY[slot.cardId]
   return (
     <div
-      onClick={() => onOpen(slot.cardId)}
+      onClick={() => { if (entry) navigateToReport(entry, onNav); else onOpen(slot.cardId) }}
+      title={entry ? `Abrir ${entry.title} na tela correspondente` : undefined}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -1412,14 +1445,14 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
         {entry && <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{entry.subtitle}</div>}
       </div>
 
-      {/* Thumbnail */}
+      {/* Real value + type-coherent thumbnail */}
       {entry && (
-        <div style={{ height: 90, overflow: 'hidden', borderRadius: 8, background: T.bgPage, marginBottom: 10 }}>
-          <entry.Component variant="thumbnail" />
+        <div style={{ borderRadius: 8, background: T.bgPage, padding: '10px 12px', marginBottom: 10 }}>
+          <ReportKpiPreview entry={entry} />
         </div>
       )}
 
-      {/* Open button */}
+      {/* Open chart modal */}
       <button
         onClick={e => { e.stopPropagation(); onOpen(slot.cardId) }}
         style={{
@@ -1427,7 +1460,7 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
           border: `1px solid ${T.accentBorder}`, borderRadius: 5,
           padding: '3px 9px', cursor: 'pointer',
         }}
-      >Abrir →</button>
+      >Ver gráfico →</button>
     </div>
   )
 }
@@ -1666,7 +1699,7 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
             <NativeMuralTile key={card.id} card={card} onDismiss={handleDismissNative} />
           ))}
           {reportSlots.map(slot => (
-            <ReportCardTile key={slot.cardId} slot={slot} onOpen={setOpenChartId} onDismiss={handleDismissReport} />
+            <ReportCardTile key={slot.cardId} slot={slot} onOpen={setOpenChartId} onDismiss={handleDismissReport} onNav={onNav} />
           ))}
         </div>
       )}
@@ -1719,7 +1752,16 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
-export default function DashboardHomePage({ onNav, onInvite }: Props) {
+export default function DashboardHomePage(props: Props) {
+  // Single shared fetch of the real report aggregates for every KPI/thumbnail below.
+  return (
+    <ReportsDataProvider>
+      <DashboardHomeInner {...props} />
+    </ReportsDataProvider>
+  )
+}
+
+function DashboardHomeInner({ onNav, onInvite }: Props) {
   const { activeUser: user } = useSession()
   const [scope, setScope]           = useState<UserScope | null>(null)
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
