@@ -344,7 +344,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     burndown,
     cfd: { days: cfdDays, layers: cfdLayers, max: cfdMax * 1.1 },
     bugs,
-    createdVsResolved: { weeks, created, resolved, max: cvrMax * 1.2 },
+    createdVsResolved: { weeks, created, resolved, max: cvrMax * 1.2, byProject: cvrByProject },
     workload,
     aging,
     leadCycle,
