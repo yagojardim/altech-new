@@ -17,7 +17,7 @@ import {
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
-  useLiveDashboard, liveItems, liveCurrentSprintName, liveAggregates,
+  useLiveDashboard, liveItems, liveCurrentSprintName, liveAggregates, liveProjects,
   getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
 } from '../data/db/homeLive'
@@ -37,7 +37,7 @@ import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
   ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
-  BurndownChart,
+  BurndownChart, useReportsData,
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
@@ -1504,6 +1504,29 @@ function ReportCardTile({ slot, onOpen, onDismiss, onNav }: {
 // ─── Composition Grid ────────────────────────────────────────────────────────
 // Span2-aware grid of assigned report cards for the secondary dashboard area.
 // Self-contained: manages its own add modal, dismiss, and real-data props.
+
+/** Scope chip: reflects the project filter actually applied to the report data. */
+function ReportScopeChip() {
+  const { data } = useReportsData()
+  const scoped = data?.scopeProjectIds ?? null
+  let label: string
+  if (!scoped || scoped.length === 0) label = 'Sem escopo'
+  else if (scoped.length === 1) {
+    const opts = [...liveProjects(), ...ALLOWED_LIST] as { id: string; name: string }[]
+    label = opts.find(p => p.id === scoped[0])?.name ?? '1 projeto'
+  } else label = `${scoped.length} projetos`
+
+  return (
+    <div style={{
+      display: 'inline-block', marginBottom: 6, fontSize: 10, fontWeight: 600,
+      color: T.accent, background: `${T.accent}14`, border: `1px solid ${T.accent}33`,
+      borderRadius: 4, padding: '2px 7px',
+    }}>
+      Escopo: {label}
+    </div>
+  )
+}
+
 function CompositionGrid({ dashId, tenantId, selProj }: {
   dashId: DashboardType
   tenantId: string
@@ -1618,6 +1641,7 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
                   }
                 >
                   <div style={{ paddingTop: 4 }}>
+                    <ReportScopeChip />
                     <Comp variant="full" {...extraProps} />
                   </div>
                 </SCard>
