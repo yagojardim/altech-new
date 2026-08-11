@@ -12,7 +12,7 @@ function KpiCard({ label, value, sub, disclaimer, color, trend }: {
   return (
     <div style={{
       background: T.bgSurface, border: `1px solid ${T.border}`,
-      borderRadius: 10, padding: '16px 18px', flex: 1, minWidth: 140,
+      borderRadius: 10, padding: '16px 18px', minWidth: 0,
       display: 'flex', flexDirection: 'column',
     }}>
       <div style={{ fontSize: 10, color: T.text3, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>{label}</div>
@@ -31,6 +31,20 @@ function KpiCard({ label, value, sub, disclaimer, color, trend }: {
           }}
         >{disclaimer}</div>
       )}
+    </div>
+  )
+}
+
+function KpiRow({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+      gap: 12,
+      width: '100%',
+      minWidth: 0,
+    }}>
+      {children}
     </div>
   )
 }
@@ -202,14 +216,14 @@ function AdminDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="Minha empresa está corretamente administrada?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Usuários da empresa" value={18}  sub="12 ativos"          disclaimer="total de contas registradas no tenant" />
         <KpiCard label="Projetos criados"     value={6}   sub="4 em andamento"    disclaimer="criados neste tenant, incluindo arquivados" />
         <KpiCard label="Boards criados"       value={11}                           disclaimer="boards de Kanban ativos no tenant" />
         <KpiCard label="Módulos ativos"       value={3}   sub="de 6 disponíveis"  disclaimer="módulos habilitados para este tenant" />
         <KpiCard label="Usuários bloqueados"  value={1}   color={T.crit}           disclaimer="contas temporariamente suspensas" />
         <KpiCard label="Convites pendentes"   value={2}   color={T.warn}           disclaimer="convites enviados ainda não aceitos" />
-      </div>
+      </KpiRow>
 
       {/* Gestão de Usuários */}
       <Card>
@@ -325,12 +339,12 @@ function PMODashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="Quais projetos precisam de atenção?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Projetos ativos"      value={4}     disclaimer="projetos com sprint ativa ou em andamento" />
         <KpiCard label="Em risco / atrasados" value={2}     color={T.warn}    disclaimer="projetos com RAG amarelo ou vermelho" />
         <KpiCard label="Previsibilidade"      value="71%"   sub="Planejado x real"  disclaimer="% do planejado efetivamente entregue" />
         <KpiCard label="Concluído no prazo"   value="68%"   color={T.success} trend="+3% vs sprint anterior" disclaimer="% de entregas dentro do prazo previsto" />
-      </div>
+      </KpiRow>
 
       {/* RAG Health */}
       <Card>
@@ -428,12 +442,12 @@ function ProjectManagerDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O que preciso destravar neste projeto?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Progresso sprint" value="4/16" sub="tasks done" color={T.accent} disclaimer="tasks concluídas ÷ total comprometido na sprint" />
         <KpiCard label="Dias restantes"   value={13}   sub="Sprint 14"                   disclaimer="dias até o fim da sprint corrente" />
         <KpiCard label="Itens bloqueados" value={2}    color={T.crit}                    disclaimer="demandas atualmente bloqueadas neste projeto" />
         <KpiCard label="Risco de escopo"  value="Médio" color={T.warn} sub="3 dependências abertas" disclaimer="variação de escopo vs. o planejado" />
-      </div>
+      </KpiRow>
 
       {/* Sprint board por status */}
       <Card>
@@ -534,12 +548,12 @@ function ProductManagerDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O produto gera valor real?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="MAU (Ativos mensais)"  value="4.820" sub="usuários únicos · jul/25" trend="+8% MoM"  disclaimer="usuários únicos ativos nos últimos 30 dias" />
         <KpiCard label="Stickiness (DAU/MAU)"  value="31%"   sub="média D7"  trend="+2pp"                   disclaimer="frequência de uso: ativos diários ÷ mensais" />
         <KpiCard label="Churn (usuários)"      value="2,4%"  color={T.warn}  sub="por tenant, sem billing" trend="-0,3pp" disclaimer="taxa de abandono por tenant — sem impacto billing" />
         <KpiCard label="Adoção média features" value="53%"   sub="sobre base elegível" color={T.accent}     disclaimer="% de adoção médio sobre base elegível por feature" />
-      </div>
+      </KpiRow>
 
       {/* Funil de Ativação */}
       <Card>
@@ -634,12 +648,12 @@ function ProductOwnerDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O backlog está claro, priorizado, refinado e pronto?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Cobertura Ready"       value="2,3 sprints" sub="pts prontos ÷ velocidade" color={T.success} disclaimer="pontos prontos ÷ velocidade média da sprint" />
         <KpiCard label="Saúde do backlog"      value="68%"         sub="itens saudáveis / avaliáveis" color={T.warn} disclaimer="itens saudáveis ÷ total de itens avaliáveis" />
         <KpiCard label="Progresso funcional"   value="41%"         sub="considera aceite, não só Done" disclaimer="considera critério de aceite, não só status Done" />
         <KpiCard label="Bugs funcionais crit."  value={3}           color={T.crit}                    disclaimer="bugs com impacto direto no aceite do PO" />
-      </div>
+      </KpiRow>
 
       {/* Backlog com alertas */}
       <Card>
@@ -681,7 +695,7 @@ function ProductOwnerDashboard() {
       {/* Time atuando */}
       <Card>
         <SectionTitle>Time atuando no projeto</SectionTitle>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+        <KpiRow>
           {team.map(m => (
             <div key={m.name} style={{
               background: T.bgSurface2, borderRadius: 8, padding: '10px 14px',
@@ -694,7 +708,7 @@ function ProductOwnerDashboard() {
               {m.status === 'crítico' && <div style={{ fontSize: 9, color: T.crit, marginTop: 4 }}>Sem responsável</div>}
             </div>
           ))}
-        </div>
+        </KpiRow>
       </Card>
     </div>
   )
@@ -728,12 +742,12 @@ function ScrumMasterDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O time está fluindo e o que impede a sprint de avançar?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Saúde da sprint"      value="68%"  sub="progresso" color={T.warn}   disclaimer="% de conclusão em relação à meta da sprint" />
         <KpiCard label="Impedimentos ativos"  value={3}    color={T.crit}                    disclaimer="impedimentos formais sem resolução registrada" />
         <KpiCard label="Risco sprint goal"    value="Médio" color={T.warn} sub="2 itens em risco" disclaimer="itens que ameaçam atingir o objetivo da sprint" />
         <KpiCard label="WIP atual"            value={7}    sub="limite: 6" color={T.crit}    disclaimer="itens em andamento vs. limite acordado pelo time" />
-      </div>
+      </KpiRow>
 
       {/* Impedimentos por responsável */}
       <Card>
@@ -837,12 +851,12 @@ function TechLeadDashboard() {
       </Card>
 
       {/* KPIs */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Saúde técnica"       value="72/100" color={T.warn} sub="⬇ -5 pts vs sprint ant." disclaimer="score composto de cobertura, débito e estabilidade" />
         <KpiCard label="Bugs críticos/block." value={2}     color={T.crit}                                disclaimer="bugs P0/P1 bloqueando entrega ou em produção" />
         <KpiCard label="Cycle time médio"    value="4,2h"   sub="code → prod"                             disclaimer="tempo médio de commit até deploy em produção" />
         <KpiCard label="Error rate"          value="0,8%"   sub="p99 latency 340ms" color={T.success}     disclaimer="taxa de erro em produção nas últimas 24h" />
-      </div>
+      </KpiRow>
 
       {/* PRs / Gargalos */}
       <Card>
@@ -912,12 +926,12 @@ function DevDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O que preciso resolver primeiro hoje?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Meus itens ativos"      value={5}  color={T.accent}                            disclaimer="tarefas atribuídas a mim nesta sprint" />
         <KpiCard label="Atrasados / próx. prazo" value={2}  color={T.crit} sub="2 com prazo hoje/vencido" disclaimer="itens com prazo hoje ou já vencido" />
         <KpiCard label="Meus itens bloqueados"   value={1}  color={T.warn}                              disclaimer="minhas tarefas aguardando desbloqueio externo" />
         <KpiCard label="Meus PRs / code review"  value={3}  sub="1 aguardando ação"                    disclaimer="pull requests abertos nos quais estou envolvido" />
-      </div>
+      </KpiRow>
 
       {/* Minha Fila Ativa */}
       <Card>
@@ -999,12 +1013,12 @@ function UXDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="A experiência está clara, validada, consistente e pronta para virar entrega?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Fluxos em design"             value={4}  color={T.accent}                    disclaimer="fluxos com trabalho de design em progresso" />
         <KpiCard label="Protótipos p/ validação"      value={2}  sub="aguardando feedback"           disclaimer="protótipos aguardando feedback de usuário ou PO" />
         <KpiCard label="Pendências UX críticas"       value={3}  color={T.crit}                      disclaimer="fluxos sem spec, protótipo ou validação completa" />
         <KpiCard label="Handoff pronto para Dev"      value={1}  color={T.success}                   disclaimer="entregas de design prontas para implementação" />
-      </div>
+      </KpiRow>
 
       {/* Fila de design */}
       <Card>
@@ -1097,12 +1111,12 @@ function QADashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <CentralQuestion question="O que preciso testar agora para garantir a entrega?" />
 
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <KpiRow>
         <KpiCard label="Aguardando teste"       value={4}    color={T.accent} sub="Ready for QA + Em Homolog." disclaimer="itens em fila de QA ou em homologação ativa" />
         <KpiCard label="Bugs críticos/block."   value={2}    color={T.crit}   sub="1 sem evidência"           disclaimer="bugs P0/P1 bloqueando entrega da sprint" />
         <KpiCard label="Taxa de rejeição"       value="18%"  color={T.warn}   sub="itens devolvidos ao Dev"   disclaimer="% de itens devolvidos ao Dev pelo QA" />
         <KpiCard label="Evidências pendentes"   value={2}    color={T.crit}                                    disclaimer="bugs sem evidência de reprodução registrada" />
-      </div>
+      </KpiRow>
 
       {/* Fila de execução */}
       <Card>
@@ -1228,7 +1242,7 @@ export default function RoleDashboard({ onBack }: Props) {
 
   return (
     <div style={{ height: '100%', overflowY: 'auto', padding: 24, fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div style={{ maxWidth: 980, margin: '0 auto' }}>
+      <div style={{ width: '100%', minWidth: 0, margin: '0 auto' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 24 }}>
           <span style={{
