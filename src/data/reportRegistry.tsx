@@ -589,6 +589,93 @@ export function EpicBurndown({ variant = 'full', data: explicit }: ChartProps) {
   )
 }
 
+// ─── Mini visualizations (KPI thumbnails) ─────────────────────────────────────
+// The thumbnail kind is derived from the metric type, never chosen arbitrarily:
+//   line  → time series / trend      bars → counts per category      donut → ratio
+
+export type VizKind = 'line' | 'bars' | 'donut'
+
+export interface VizSeries {
+  kind: VizKind
+  /** Values for line/bars. */
+  values: number[]
+  /** Optional comparison series (line only). */
+  values2?: number[]
+  /** 0–100 for donut. */
+  ratio?: number
+  color: string
+  color2?: string
+}
+
+export interface ReportKpi {
+  value: string
+  sub?: string
+  viz: VizSeries
+}
+
+function MiniLine({ s }: { s: VizSeries }) {
+  const series = [s.values, ...(s.values2 ? [s.values2] : [])].filter(v => v.length > 1)
+  if (series.length === 0) return null
+  const all = series.flat()
+  const min = Math.min(...all)
+  const max = Math.max(...all)
+  const range = max - min || 1
+  const W = 92; const H = 40; const P = 3
+  const path = (vals: number[]) => vals
+    .map((v, i) => `${i === 0 ? 'M' : 'L'} ${P + (i / (vals.length - 1)) * (W - P * 2)} ${P + (H - P * 2) - ((v - min) / range) * (H - P * 2)}`)
+    .join(' ')
+  const area = `${path(s.values)} L ${W - P} ${H - P} L ${P} ${H - P} Z`
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block', overflow: 'visible' }}>
+      <path d={area} fill={s.color} fillOpacity={0.14} stroke="none" />
+      {s.values2 && s.values2.length > 1 && (
+        <path d={path(s.values2)} fill="none" stroke={s.color2 ?? T.text3} strokeWidth={1.4} strokeDasharray="3,2" />
+      )}
+      <path d={path(s.values)} fill="none" stroke={s.color} strokeWidth={1.6} strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function MiniBars({ s }: { s: VizSeries }) {
+  if (s.values.length === 0) return null
+  const W = 92; const H = 40; const P = 3
+  const max = Math.max(1, ...s.values)
+  const n = s.values.length
+  const gap = 2
+  const bw = Math.max(3, (W - P * 2 - gap * (n - 1)) / n)
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+      {s.values.map((v, i) => {
+        const h = Math.max(1.5, (v / max) * (H - P * 2))
+        return (
+          <rect key={i} x={P + i * (bw + gap)} y={H - P - h} width={bw} height={h} rx={1.5}
+            fill={s.color} fillOpacity={i === n - 1 ? 1 : 0.55} />
+        )
+      })}
+    </svg>
+  )
+}
+
+function MiniDonut({ s }: { s: VizSeries }) {
+  const pct = Math.max(0, Math.min(100, Math.round(s.ratio ?? 0)))
+  const R = 16; const SW = 5; const C = 2 * Math.PI * R
+  return (
+    <svg width={40} height={40} viewBox="0 0 40 40" style={{ display: 'block' }}>
+      <circle cx={20} cy={20} r={R} fill="none" stroke={T.border} strokeWidth={SW} />
+      <circle cx={20} cy={20} r={R} fill="none" stroke={s.color} strokeWidth={SW} strokeLinecap="round"
+        strokeDasharray={`${(pct / 100) * C} ${C}`} transform="rotate(-90 20 20)" />
+      <text x={20} y={23} textAnchor="middle" fontSize={10} fontWeight={700} fill={T.text1}>{pct}</text>
+    </svg>
+  )
+}
+
+/** Renders the mini visualization matching the metric type. */
+export function ReportMiniViz({ viz }: { viz: VizSeries }) {
+  if (viz.kind === 'donut') return <MiniDonut s={viz} />
+  if (viz.kind === 'bars') return <MiniBars s={viz} />
+  return <MiniLine s={viz} />
+}
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 export interface ReportEntry {
@@ -597,22 +684,234 @@ export interface ReportEntry {
   subtitle: string
   span2: boolean
   Component: (props: ChartProps) => ReactElement
+  /** Where clicking the card should take the user (already filtered). */
+  nav: ReportNavIntent
+  /** Message shown when the underlying query returns nothing. */
+  emptyText: string
+  /** Real KPI value + coherent thumbnail derived from the Supabase aggregates. */
+  kpi: (d: ReportsData) => ReportKpi | null
 }
 
+const numFmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+
 export const REPORT_REGISTRY: Record<string, ReportEntry> = {
-  burndown: { id:'burndown', title:'Burndown Chart',        subtitle:'Sprint ativa · Story points restantes vs. ideal',         span2:true,  Component: BurndownChart   },
-  velocity: { id:'velocity', title:'Velocity Chart',         subtitle:'Story points entregues por sprint concluída',             span2:false, Component: VelocityChart   },
-  cfd:      { id:'cfd',      title:'CFD / Cumulative Flow',  subtitle:'Distribuição de itens por status nos últimos 14 dias',    span2:true,  Component: CFDChart        },
-  bugs:     { id:'bugs',     title:'Bugs por Severidade',    subtitle:'Bugs abertos no escopo selecionado',                      span2:false, Component: BugsDonut       },
-  criados:  { id:'criados',  title:'Criados vs Resolvidos',  subtitle:'Issues criadas e resolvidas por semana (8 semanas)',      span2:true,  Component: CreatedVsResolved},
-  workload: { id:'workload', title:'Workload por Pessoa',    subtitle:'Story points ativos por membro da equipe',                span2:false, Component: WorkloadChart   },
-  aging:    { id:'aging',    title:'Aging de Issues',        subtitle:'Dias no status atual por issue em andamento',             span2:false, Component: AgingChart      },
-  leadtime: { id:'leadtime', title:'Lead Time & Cycle Time', subtitle:'Tempo médio de entrega e execução',                       span2:false, Component: LeadCycleChart  },
-  health:   { id:'health',   title:'Saúde do Projeto',       subtitle:'Score geral baseado em 5 dimensões reais',                span2:false, Component: ProjectHealth   },
-  epic:     { id:'epic',     title:'Epic / Release Burndown',subtitle:'Story points restantes por épico (6 semanas)',            span2:true,  Component: EpicBurndown    },
+  burndown: {
+    id: 'burndown', title: 'Burndown Chart', span2: true,
+    subtitle: 'Sprint ativa · Story points restantes vs. ideal',
+    Component: BurndownChart,
+    nav: { view: 'reports', reportId: 'burndown' },
+    emptyText: 'Nenhuma sprint ativa com pontos estimados.',
+    kpi: d => {
+      const b = d.burndown
+      const actual = b.actual.filter(v => !Number.isNaN(v))
+      if (!b.sprintName || b.total === 0 || actual.length === 0) return null
+      const remaining = actual[actual.length - 1]
+      return {
+        value: `${numFmt(remaining)} pts`,
+        sub: `restantes de ${numFmt(b.total)} · ${b.sprintName}`,
+        viz: { kind: 'line', values: actual, values2: b.ideal, color: T.accent, color2: T.text3 },
+      }
+    },
+  },
+  velocity: {
+    id: 'velocity', title: 'Velocity Chart', span2: false,
+    subtitle: 'Story points entregues por sprint concluída',
+    Component: VelocityChart,
+    nav: { view: 'reports', reportId: 'velocity' },
+    emptyText: 'Nenhuma sprint concluída ainda.',
+    kpi: d => {
+      const v = d.velocity
+      if (v.sprints.length === 0) return null
+      return {
+        value: `${numFmt(v.sprints[v.sprints.length - 1].value)} pts`,
+        sub: `média ${numFmt(v.avg)} pts · ${v.sprints.length} sprints`,
+        viz: { kind: 'bars', values: v.sprints.map(s => s.value), color: T.accent },
+      }
+    },
+  },
+  cfd: {
+    id: 'cfd', title: 'CFD / Cumulative Flow', span2: true,
+    subtitle: 'Distribuição de itens por status nos últimos 14 dias',
+    Component: CFDChart,
+    nav: { view: 'reports', reportId: 'cfd' },
+    emptyText: 'Sem histórico de status nos últimos 14 dias.',
+    kpi: d => {
+      const c = d.cfd
+      if (c.days.length === 0 || c.layers.length === 0) return null
+      const totals = c.days.map((_, i) => c.layers.reduce((a, l) => a + (l.data[i] ?? 0), 0))
+      if (totals.every(t => t === 0)) return null
+      return {
+        value: String(totals[totals.length - 1]),
+        sub: 'itens em fluxo hoje',
+        viz: { kind: 'line', values: totals, color: T.indigo },
+      }
+    },
+  },
+  bugs: {
+    id: 'bugs', title: 'Bugs por Severidade', span2: false,
+    subtitle: 'Bugs abertos no escopo selecionado',
+    Component: BugsDonut,
+    nav: { view: 'list', itemType: 'bug' },
+    emptyText: 'Nenhum bug aberto.',
+    kpi: d => {
+      if (d.bugs.length === 0) return null
+      const total = d.bugs.reduce((a, b) => a + b.val, 0)
+      if (total === 0) return null
+      return {
+        value: String(total),
+        sub: d.bugs.map(b => `${b.label} ${b.val}`).join(' · '),
+        viz: { kind: 'bars', values: d.bugs.map(b => b.val), color: T.crit },
+      }
+    },
+  },
+  criados: {
+    id: 'criados', title: 'Criados vs Resolvidos', span2: true,
+    subtitle: 'Issues criadas e resolvidas por semana (8 semanas)',
+    Component: CreatedVsResolved,
+    nav: { view: 'reports', reportId: 'criados' },
+    emptyText: 'Nenhuma issue criada ou resolvida nas últimas 8 semanas.',
+    kpi: d => {
+      const c = d.createdVsResolved
+      const sumC = c.created.reduce((a, b) => a + b, 0)
+      const sumR = c.resolved.reduce((a, b) => a + b, 0)
+      if (sumC === 0 && sumR === 0) return null
+      return {
+        value: `${sumC}/${sumR}`,
+        sub: 'criadas / resolvidas em 8 semanas',
+        viz: { kind: 'line', values: c.created, values2: c.resolved, color: T.accent, color2: T.success },
+      }
+    },
+  },
+  workload: {
+    id: 'workload', title: 'Workload por Pessoa', span2: false,
+    subtitle: 'Story points ativos por membro da equipe',
+    Component: WorkloadChart,
+    nav: { view: 'team:membros' },
+    emptyText: 'Nenhum item atribuído em andamento.',
+    kpi: d => {
+      if (d.workload.length === 0) return null
+      const total = d.workload.reduce((a, w) => a + w.pts, 0)
+      return {
+        value: `${numFmt(total)} pts`,
+        sub: `${d.workload.length} pessoas com carga ativa`,
+        viz: { kind: 'bars', values: d.workload.map(w => w.pts), color: T.purple },
+      }
+    },
+  },
+  aging: {
+    id: 'aging', title: 'Aging de Issues', span2: false,
+    subtitle: 'Dias no status atual por issue em andamento',
+    Component: AgingChart,
+    nav: { view: 'list', itemStatus: 'in_progress' },
+    emptyText: 'Nenhuma issue em andamento.',
+    kpi: d => {
+      if (d.aging.length === 0) return null
+      const max = Math.max(...d.aging.map(a => a.days))
+      return {
+        value: `${max}d`,
+        sub: `mais antigo · ${d.aging.length} itens em andamento`,
+        viz: { kind: 'bars', values: d.aging.map(a => a.days), color: T.warn },
+      }
+    },
+  },
+  leadtime: {
+    id: 'leadtime', title: 'Lead Time & Cycle Time', span2: false,
+    subtitle: 'Tempo médio de entrega e execução',
+    Component: LeadCycleChart,
+    nav: { view: 'reports', reportId: 'leadtime' },
+    emptyText: 'Nenhum item concluído para medir lead time.',
+    kpi: d => {
+      const l = d.leadCycle
+      if (l.leadAvg === 0 && l.cycleAvg === 0) return null
+      return {
+        value: `${numFmt(l.leadAvg)}d`,
+        sub: `cycle ${numFmt(l.cycleAvg)}d`,
+        viz: { kind: 'bars', values: l.buckets.map(b => b.value), color: T.accent },
+      }
+    },
+  },
+  health: {
+    id: 'health', title: 'Saúde do Projeto', span2: false,
+    subtitle: 'Score geral baseado em 5 dimensões reais',
+    Component: ProjectHealth,
+    nav: { view: 'reports', reportId: 'health' },
+    emptyText: 'Sem dados suficientes para calcular a saúde.',
+    kpi: d => {
+      if (d.empty) return null
+      const score = d.health.score
+      return {
+        value: `${score}%`,
+        sub: 'score de saúde do portfólio',
+        viz: { kind: 'donut', values: [], ratio: score, color: score >= 70 ? T.success : score >= 40 ? T.warn : T.crit },
+      }
+    },
+  },
+  epic: {
+    id: 'epic', title: 'Epic / Release Burndown', span2: true,
+    subtitle: 'Story points restantes por épico (6 semanas)',
+    Component: EpicBurndown,
+    nav: { view: 'epics' },
+    emptyText: 'Nenhum épico com pontos estimados.',
+    kpi: d => {
+      const e = d.epicBurndown
+      if (e.epics.length === 0) return null
+      const remaining = e.epics.reduce((a, ep) => a + (ep.data[ep.data.length - 1] ?? 0), 0)
+      if (remaining === 0) return null
+      const totals = e.weeks.map((_, i) => e.epics.reduce((a, ep) => a + (ep.data[i] ?? 0), 0))
+      return {
+        value: `${numFmt(remaining)} pts`,
+        sub: `restantes em ${e.epics.length} épicos`,
+        viz: { kind: 'line', values: totals, color: T.purple },
+      }
+    },
+  },
 }
 
 export const REPORT_CARDS_LIST: ReportEntry[] = Object.values(REPORT_REGISTRY)
+
+/** Navigates to the screen behind a report card, carrying its filter. */
+export function navigateToReport(entry: ReportEntry, onNav?: (view: string) => void): void {
+  setReportNav(entry.nav)
+  onNav?.(entry.nav.view)
+}
+
+/**
+ * Real value + coherent thumbnail for a report card.
+ * Handles loading / error / empty explicitly — never shows an invented number.
+ */
+export function ReportKpiPreview({ entry, compact = false }: { entry: ReportEntry; compact?: boolean }) {
+  const { data, loading, error } = useReportsData()
+  if (loading && !data) {
+    return <div style={{ height: compact ? 40 : 48, borderRadius: 8, background: T.bgSurface2 }} />
+  }
+  if (error) {
+    return <div style={{ fontSize: 11, color: T.crit }}>Falha ao carregar métrica.</div>
+  }
+  const kpi = data ? entry.kpi(data) : null
+  if (!kpi) {
+    return (
+      <div style={{
+        fontSize: 11, color: T.text3, border: `1px dashed ${T.border}`,
+        borderRadius: 8, padding: '10px 12px', textAlign: 'center',
+      }}>{entry.emptyText}</div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: compact ? 20 : 24, fontWeight: 700, color: T.text1, lineHeight: 1.1 }}>{kpi.value}</div>
+        {kpi.sub && (
+          <div style={{ fontSize: 10, color: T.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {kpi.sub}
+          </div>
+        )}
+      </div>
+      <div style={{ flexShrink: 0 }}><ReportMiniViz viz={kpi.viz} /></div>
+    </div>
+  )
+}
+
+
 
 // ─── Chart Modal ──────────────────────────────────────────────────────────────
 
