@@ -4,6 +4,7 @@ import { supabase } from '../integrations/supabase/client'
 import { safeCall, logger } from '../utils/logger'
 import { auditPasswordResetCompleted, requestPasswordReset } from '../lib/passwordReset'
 import { markPasswordChanged } from '../data/db/activationTokens'
+import { loadProfileByAuthUserId } from '../data/db/authProfile'
 
 interface Props {
   /** Volta para o login (limpa a rota). */
@@ -72,12 +73,18 @@ export default function ResetPasswordPage({ onGoToLogin, onDone }: Props) {
         setBusy(false)
         return
       }
-      const userId = await safeCall('resetPassword.getUser', async () => {
+      const authUser = await safeCall('resetPassword.getUser', async () => {
         const { data } = await supabase.auth.getUser()
-        return data.user?.id ?? null
+        return data.user ?? null
       }, null)
-      if (userId) await safeCall('resetPassword.mustChange', () => markPasswordChanged(userId), false)
-      await auditPasswordResetCompleted({})
+      const profile = authUser
+        ? await safeCall('resetPassword.profile', () => loadProfileByAuthUserId(authUser.id, authUser.email ?? ''), null)
+        : null
+      if (profile) await safeCall('resetPassword.mustChange', () => markPasswordChanged(profile.user_id), false)
+      await auditPasswordResetCompleted({
+        tenantId: profile?.tenant_id ?? null,
+        profileId: profile?.user_id ?? null,
+      })
       setPhase('done')
       setBusy(false)
     } catch (err) {
