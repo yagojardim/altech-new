@@ -37,7 +37,7 @@ import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
   ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
-  BurndownChart,
+  BurndownChart, useReportsData,
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
