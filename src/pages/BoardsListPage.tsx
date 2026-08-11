@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
-import { useSession } from '../data/SessionContext'
-import { getBoardsForScope, type BoardDef, type BoardStatus } from '../data/boards'
-import { getActiveScope } from '../data/session'
+import { useVisibleBoards, type VisibleBoard, type VisibleBoardStatus } from '@/data/db/boards'
+
+type BoardDef = VisibleBoard
+type BoardStatus = VisibleBoardStatus
 
 interface Props {
   onSelectBoard: (boardId: string) => void
@@ -77,7 +78,7 @@ function BoardCard({ board, onOpen }: { board: BoardDef; onOpen: () => void }) {
         {board.columns.slice(0, 5).map((col, i) => (
           <div key={i} style={{
             height: 28, width: 5, borderRadius: 3,
-            background: isArchived ? T.border : `${T.accent}${Math.round(40 + (i / (board.columns.length - 1)) * 80).toString(16).padStart(2, '0')}`,
+            background: isArchived ? T.border : `${T.accent}${Math.round(40 + (board.columns.length > 1 ? i / (board.columns.length - 1) : 0) * 80).toString(16).padStart(2, '0')}`,
             transition: 'background 0.15s',
           }} />
         ))}
@@ -98,9 +99,7 @@ function BoardCard({ board, onOpen }: { board: BoardDef; onOpen: () => void }) {
 }
 
 export default function BoardsListPage({ onSelectBoard }: Props) {
-  const { activeUser } = useSession()
-  const scope = getActiveScope()
-  const boards = getBoardsForScope(scope.projects_allowed, activeUser.tenant_id)
+  const { boards, loading } = useVisibleBoards()
 
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<BoardStatus | 'all'>('all')
@@ -166,7 +165,11 @@ export default function BoardsListPage({ onSelectBoard }: Props) {
       </div>
 
       {/* Content */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, padding: '60px 20px', textAlign: 'center', fontSize: 13, color: T.text3 }}>
+          Carregando boards…
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 12, padding: '60px 20px', textAlign: 'center' }}>
           <svg width="36" height="36" viewBox="0 0 36 36" fill="none" style={{ marginBottom: 12 }}>
             <rect x="4" y="4" width="9" height="28" rx="3" fill={T.border2} opacity="0.6" />
