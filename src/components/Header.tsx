@@ -3,6 +3,7 @@ import { Avatar } from './ds/Avatar'
 import { T } from './ds/tokens'
 import { MOCK_USERS } from '../data/session'
 import { useSession } from '../data/SessionContext'
+import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import * as notificationsApi from '../data/db/notifications'
 import type { NotificationRow } from '../data/db/notifications'
 
