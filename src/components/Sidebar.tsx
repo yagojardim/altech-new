@@ -566,7 +566,7 @@ const ROLE_CONTEXT_LABEL: Record<string, string> = {
   Dev: 'Dev', UX: 'UX / UI', QA: 'QA',
 }
 
-function UserBlock({ collapsed }: { collapsed: boolean }) {
+function UserBlock({ collapsed, onNav }: { collapsed: boolean; onNav: (id: string) => void }) {
   const { activeUser, setActiveUser, signOut } = useSession()
   const name    = activeUser.name
   const email   = activeUser.email
@@ -636,8 +636,8 @@ function UserBlock({ collapsed }: { collapsed: boolean }) {
 
       {/* Menu items */}
       {[
-        { icon: '👤', label: 'Meu perfil',    action: () => setMenuOpen(false) },
-        { icon: '⚙️', label: 'Preferências',  action: () => setMenuOpen(false) },
+        { icon: '👤', label: 'Meu perfil',    action: () => { setMenuOpen(false); onNav('profile') } },
+        { icon: '⚙️', label: 'Preferências',  action: () => { setMenuOpen(false); onNav('preferences') } },
       ].map(item => (
         <button key={item.label} onClick={item.action}
           className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] text-left transition-colors"
@@ -913,7 +913,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
 
       {/* User block (pinned bottom) */}
       <div className="flex-shrink-0 px-1.5 py-2" style={{ borderTop: `1px solid ${T.border}` }}>
-        <UserBlock collapsed={collapsed} />
+        <UserBlock collapsed={collapsed} onNav={onNav} />
       </div>
     </aside>
   )
