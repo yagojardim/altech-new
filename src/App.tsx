@@ -40,6 +40,8 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { AdminMasterOverlay } from './components/AdminMasterOverlay'
 import CreatePasswordPage from './pages/CreatePasswordPage'
 import ActivatePage from './pages/ActivatePage'
+import ResetPasswordPage from './pages/ResetPasswordPage'
+import { RESET_PATH } from './lib/passwordReset'
 
 
 const ALL_VIEWS: View[] = [
@@ -88,6 +90,16 @@ function AppInner() {
     return new URLSearchParams(window.location.search).get('token')
   })
   const [definePwdFromToken, setDefinePwdFromToken] = useState(false)
+  const [resetRoute, setResetRoute] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false
+    return window.location.pathname === RESET_PATH
+      || window.location.hash.includes('type=recovery')
+  })
+
+  function leaveReset() {
+    setResetRoute(false)
+    try { window.history.replaceState({}, '', '/') } catch { /* noop */ }
+  }
 
   function leaveActivate() {
     setActivateToken(null)
@@ -138,6 +150,18 @@ function AppInner() {
           </div>
         </div>
       </div>
+    )
+  }
+
+  // Rota /reset-password — fluxo nativo de recuperação do Supabase.
+  if (resetRoute) {
+    return (
+      <ErrorBoundary scope="ResetPassword">
+        <ResetPasswordPage
+          onGoToLogin={() => { leaveReset(); setView('login') }}
+          onDone={() => { leaveReset(); setView('home') }}
+        />
+      </ErrorBoundary>
     )
   }
 
