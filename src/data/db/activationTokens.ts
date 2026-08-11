@@ -80,24 +80,20 @@ export function issueToken(
   }, null)
 }
 
-/** Estado de um token bruto. Nunca loga o token. */
+/** Estado de um token bruto — validado por Edge Function (pré-login). Nunca loga o token. */
 export function validateToken(rawToken: string): Promise<ValidationResult> {
   return safeCall<ValidationResult>('activationTokens.validateToken', async () => {
     const trimmed = (rawToken ?? '').trim()
     if (!trimmed) return { state: 'invalid' as TokenState }
 
-    const token_hash = await sha256Hex(trimmed)
-    const { data, error } = await tbl('activation_tokens')
-      .select('id, tenant_id, profile_id, purpose, expires_at, used_at')
-      .eq('token_hash', token_hash)
-      .limit(1)
+    const { data, error } = await supabase.functions.invoke('validate-activation', {
+      body: { token: trimmed },
+    })
     if (error) throw error
 
-    const row = (data ?? [])[0] as TokenRow | undefined
-    if (!row) return { state: 'invalid' as TokenState }
-    if (row.used_at) return { state: 'used' as TokenState, token: row }
-    if (new Date(row.expires_at).getTime() < Date.now()) return { state: 'expired' as TokenState, token: row }
-    return { state: 'valid' as TokenState, token: row }
+    const state = (data as { state?: TokenState } | null)?.state
+    if (state === 'valid' || state === 'expired' || state === 'used') return { state }
+    return { state: 'invalid' as TokenState }
   }, { state: 'invalid' })
 }
 
