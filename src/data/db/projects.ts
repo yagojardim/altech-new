@@ -219,6 +219,33 @@ export async function updateProject(
 
 }
 
+/**
+ * `permission_overrides` ainda não expõe colunas de escopo nos tipos gerados;
+ * a leitura é feita por um acesso estreitamente tipado (sem `any`).
+ */
+interface ProjectOverrideRow {
+  scope_id: string | null
+  scope_type: string | null
+  granted: boolean | null
+}
+
+interface OverrideQuery {
+  select: (cols: string) => {
+    eq: (col: string, val: string) => {
+      eq: (col: string, val: string) => PromiseLike<{ data: ProjectOverrideRow[] | null }>
+    }
+  }
+}
+
+async function fetchProjectOverrides(tenantId: string, profileId: string): Promise<ProjectOverrideRow[]> {
+  const client = supabase as unknown as { from: (table: string) => OverrideQuery }
+  const res = await client.from('permission_overrides')
+    .select('scope_id, scope_type, granted')
+    .eq('tenant_id', tenantId)
+    .eq('profile_id', profileId)
+  return res.data ?? []
+}
+
 /** Options for the Home project filter: projects assigned to the profile. */
 export interface AssignedProject { id: string; name: string }
 
@@ -244,15 +271,14 @@ export function fetchAssignedProjects(opts: {
       const [members, overrides] = await Promise.all([
         supabase.from('project_members').select('project_id')
           .eq('tenant_id', tenantId).eq('profile_id', profileId),
-        supabase.from('permission_overrides').select('scope_id, scope_type, granted')
-          .eq('tenant_id', tenantId).eq('profile_id', profileId),
+        fetchProjectOverrides(tenantId, profileId),
       ])
 
       const ids = new Set<string>()
       for (const row of members.data ?? []) {
         if (row.project_id) ids.add(row.project_id)
       }
-      for (const row of overrides.data ?? []) {
+      for (const row of overrides) {
         if (row.granted !== false && row.scope_type === 'project' && row.scope_id) ids.add(row.scope_id)
       }
       allowedProjectIds = [...ids]
