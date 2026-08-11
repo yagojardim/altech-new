@@ -1641,6 +1641,7 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
                   }
                 >
                   <div style={{ paddingTop: 4 }}>
+                    <ReportScopeChip />
                     <Comp variant="full" {...extraProps} />
                   </div>
                 </SCard>
