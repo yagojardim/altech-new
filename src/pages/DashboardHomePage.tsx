@@ -11,8 +11,8 @@ import {
   type WorkItem, type FilterState, type RagStatus,
 } from '../components/ds/DashboardKit'
 import {
-  MOCK_TENANT, MOCK_USERS, getActiveScope,
-  DASHBOARD_CATALOG, type UserScope, type DashboardType,
+  MOCK_TENANT, MOCK_USERS,
+  DASHBOARD_CATALOG, type MockUser, type UserScope, type DashboardType,
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
@@ -69,6 +69,29 @@ function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange
 /** Project options come from the database (tenant-scoped). */
 const PROJECTS = () => liveProjects()
 const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
+
+function sessionScope(user: MockUser): UserScope | null {
+  const assigned = Array.isArray(user.assigned_dashboards)
+    ? user.assigned_dashboards.filter(d => d.status === 'active')
+    : []
+  const defaultDashboard = assigned.find(d => d.is_default) ?? assigned[0]
+  if (!defaultDashboard) return null
+
+  return {
+    user_id: user.user_id,
+    tenant_id: user.tenant_id,
+    role_context: user.role_context,
+    projects_allowed: user.project_id === '*' ? liveProjects().map(p => p.id) : [user.project_id],
+    workspaces_allowed: [`ws_${user.tenant_id}`],
+    squads_allowed: user.squad_id === '*' ? [] : [user.squad_id],
+    modules_allowed: Array.isArray(user.modules_enabled) ? user.modules_enabled : [],
+    features_allowed: (user.modules_enabled ?? []).map(m => `feat_${m}`),
+    repositories_allowed: [],
+    permissions: Array.isArray(user.permissions) ? user.permissions : [],
+    assigned_dashboards: assigned,
+    default_dashboard: defaultDashboard,
+  }
+}
 
 /** Selection defaults to "all projects" and re-syncs once the data lands. */
 function useProjSel(): [Set<string>, (s: Set<string>) => void] {
@@ -158,8 +181,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
-  const _scope = getActiveScope()
-  const _boards = getBoardsForScope(_scope.projects_allowed, activeUser.tenant_id)
+  const projectIds = activeUser.project_id === '*' ? liveProjects().map(p => p.id) : [activeUser.project_id]
+  const _boards = getBoardsForScope(projectIds, activeUser.tenant_id)
   const _activeBoards = _boards.filter(b => b.status === 'active').length
   const [_modCounts, _setModCounts] = useState<{ active: number; total: number }>({ active: 0, total: 0 })
   useEffect(() => { void countActiveModules().then(_setModCounts) }, [])
@@ -1705,9 +1728,9 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
 
 
   useEffect(() => {
-    const s = getActiveScope()
+    const s = sessionScope(user)
     setScope(s)
-    setActiveDash(s.default_dashboard.dashboard_id as DashboardType)
+    setActiveDash(s?.default_dashboard.dashboard_id as DashboardType ?? null)
   }, [rev, user.user_id])
 
   const activeDef = activeDashId ? DASHBOARD_CATALOG[activeDashId] : null
@@ -1720,7 +1743,7 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
       </div>
     )
   }
-  const assignedDefs = scope.assigned_dashboards.map(d => ({
+  const assignedDefs = (scope.assigned_dashboards ?? []).map(d => ({
     dashboard_id: d.dashboard_id,
     label: DASHBOARD_CATALOG[d.dashboard_id as DashboardType]?.label ?? d.dashboard_id,
   }))
@@ -1754,7 +1777,7 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
 
       {/* ── Scope debug pills ───────────────────────────────────── */}
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 20 }}>
-        {[`Papel: ${scope.role_context}`, `Usuário: ${user.name}`, `Módulos: ${scope.modules_allowed.join(' · ')}`].map(t => (
+        {[`Papel: ${scope.role_context}`, `Usuário: ${user.name}`, `Módulos: ${(scope.modules_allowed ?? []).join(' · ')}`].map(t => (
           <span key={t} style={{ fontSize: 9, color: T.text3, background: `${T.text3}0A`, border: `1px solid ${T.border}`, borderRadius: 4, padding: '1px 7px' }}>{t}</span>
         ))}
       </div>
