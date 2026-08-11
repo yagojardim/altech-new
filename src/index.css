@@ -82,6 +82,63 @@
   --fs-2xl: 32px;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ALTECH LIGHT — contraparte clara dos tokens acima.
+   Marca e semânticas permanecem idênticas ao dark.
+   ═══════════════════════════════════════════════════════════════ */
+:root[data-theme='light'] {
+  --bg-page:       #F7F7F9;
+  --bg-surface:    #FFFFFF;
+  --bg-surface-2:  #F1F1F5;
+  --bg-overlay:    rgba(24,24,32,0.40);
+
+  --border-subtle: #E4E4EC;
+  --border-default:#D2D2DE;
+
+  --text-primary:  #16161D;
+  --text-secondary:#55556B;
+  --text-muted:    #7A7A93;
+
+  --shadow-1: 0 1px 2px rgba(16,16,29,0.06), 0 1px 3px rgba(16,16,29,0.08);
+  --shadow-2: 0 4px 16px rgba(16,16,29,0.10);
+  --shadow-3: 0 16px 48px rgba(16,16,29,0.14);
+  --shadow-modal: 0 32px 80px rgba(16,16,29,0.24);
+}
+
+/* Wrappers dark locais também seguem o tema claro */
+:root[data-theme='light'] .dark-shell,
+:root[data-theme='light'] .dark-content {
+  --bg-page:         #F7F7F9;
+  --bg-surface:      #FFFFFF;
+  --bg-surface-2:    #F1F1F5;
+  --border-subtle:   #E4E4EC;
+  --border-default:  #D2D2DE;
+  --text-primary:    #16161D;
+  --text-secondary:  #55556B;
+  --text-muted:      #7A7A93;
+  --primary:         #3B82F6;
+  --primary-hover:   #2563EB;
+  --primary-active:  #1D4ED8;
+  --accent:          #3B82F6;
+  --focus-ring:      rgba(59,130,246,0.35);
+  --healthy:         #10B981;
+  --healthy-tint:    rgba(16,185,129,0.12);
+  --warning:         #F59E0B;
+  --warning-tint:    rgba(245,158,11,0.12);
+  --blocked:         #EF4444;
+  --blocked-tint:    rgba(239,68,68,0.12);
+  --inprogress:      #3B82F6;
+  --inprogress-tint: rgba(59,130,246,0.12);
+  --backlog:         #7A7A93;
+  --backlog-tint:    rgba(122,122,147,0.12);
+  --success:         #10B981;
+  --success-dim:     rgba(16,185,129,0.12);
+  --warn:            #F59E0B;
+  --warn-dim:        rgba(245,158,11,0.12);
+  --crit:            #EF4444;
+  --crit-dim:        rgba(239,68,68,0.12);
+}
+
 /* ── .dark-shell reinforces Altech dark on wrapped pages ──────── */
 .dark-shell {
   --bg-page:         #0e1016;
