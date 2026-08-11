@@ -499,3 +499,39 @@ export const getClientPermissions = (email: string, projectId?: string): Promise
 
 export const setPortalPasswordChanged = (userId: string): Promise<void> =>
   safeCall('clientPortal.setPortalPasswordChanged', () => setPortalPasswordChanged__raw(userId), undefined, { userId })
+
+// ─── Pré-login do Portal do Cliente (Edge Function, sem sessão) ───────────────
+export interface PortalLoginUser {
+  id: string
+  name: string
+  email: string
+  tenantId: string
+  permission: 'viewer' | 'admin'
+  mustChangePassword: boolean
+  canApprove: boolean
+  canPreview: boolean
+  canComment: boolean
+  projectIds: string[]
+}
+
+export interface PortalLoginResult {
+  ok: boolean
+  user?: PortalLoginUser
+  error?: string
+}
+
+/** Valida o acesso do cliente via Edge Function (service_role no servidor). */
+export function portalLogin(email: string): Promise<PortalLoginResult> {
+  return safeCall<PortalLoginResult>('clientPortal.portalLogin', async () => {
+    const { data, error } = await supabase.functions.invoke('client-portal-login', {
+      body: { email: (email ?? '').trim().toLowerCase() },
+    })
+    if (error) {
+      logger.error('clientPortal.portalLogin', error)
+      return { ok: false, error: 'unavailable' }
+    }
+    const res = data as PortalLoginResult | null
+    if (!res?.ok || !res.user) return { ok: false, error: res?.error ?? 'invalid_credentials' }
+    return res
+  }, { ok: false, error: 'unavailable' })
+}
