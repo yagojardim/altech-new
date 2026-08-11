@@ -396,3 +396,69 @@ export async function listDashboardProjects(): Promise<DashboardProjectOption[]>
   if (error) throw new Error(missingTableMessage('projects', error.message))
   return (data ?? []).map((p, i) => ({ id: p.id, name: p.name, color: dashProjectColor(p, i) }))
 }
+
+// ─── Admin Master KPIs ────────────────────────────────────────────────────────
+
+export interface AdminKpis {
+  projects: { total: number; active: number }
+  boards: { total: number; active: number }
+  modules: { total: number; active: number }
+  users: { total: number; active: number; blocked: number }
+  invites: { pending: number; nextExpiryDays: number | null }
+}
+
+const ACTIVE_MODULE_STATUSES = ['operational', 'implemented', 'preview', 'trial', 'active']
+
+/** Real per-tenant counts for the Admin Master dashboard. Never cross-tenant. */
+export async function fetchAdminKpis(): Promise<AdminKpis> {
+  const tid = DEFAULT_TENANT_ID
+  const [projects, boards, modules, profiles, invites] = await Promise.all([
+    supabase.from('projects').select('id, status').eq('tenant_id', tid).is('archived_at', null),
+    supabase.from('boards').select('id, status').eq('tenant_id', tid).is('archived_at', null),
+    supabase.from('tenant_modules').select('id, status').eq('tenant_id', tid).is('archived_at', null),
+    supabase.from('profiles').select('id, status').eq('tenant_id', tid).is('archived_at', null),
+    supabase.from('invitations').select('id, status, expires_at').eq('tenant_id', tid),
+  ])
+
+  const failed = [
+    ['projects', projects.error], ['boards', boards.error], ['tenant_modules', modules.error],
+    ['profiles', profiles.error], ['invitations', invites.error],
+  ].find(([, e]) => e) as [string, { message: string }] | undefined
+  if (failed) throw new Error(missingTableMessage(failed[0], failed[1].message))
+
+  const projectRows = projects.data ?? []
+  const boardRows = boards.data ?? []
+  const moduleRows = modules.data ?? []
+  const profileRows = profiles.data ?? []
+  const inviteRows = (invites.data ?? []).filter(i => (i.status ?? '').toLowerCase() === 'pending')
+
+  const nextExpiry = inviteRows
+    .map(i => new Date(i.expires_at).getTime())
+    .filter(t => !Number.isNaN(t))
+    .sort((a, b) => a - b)[0]
+
+  return {
+    projects: {
+      total: projectRows.length,
+      active: projectRows.filter(p => ['active', 'in_progress', 'em_andamento'].includes((p.status ?? '').toLowerCase())).length,
+    },
+    boards: {
+      total: boardRows.length,
+      active: boardRows.filter(b => (b.status ?? '').toLowerCase() === 'active').length,
+    },
+    modules: {
+      total: moduleRows.length,
+      active: moduleRows.filter(m => ACTIVE_MODULE_STATUSES.includes((m.status ?? '').toLowerCase())).length,
+    },
+    users: {
+      total: profileRows.length,
+      active: profileRows.filter(p => (p.status ?? '').toLowerCase() === 'active').length,
+      blocked: profileRows.filter(p => ['blocked', 'suspended'].includes((p.status ?? '').toLowerCase())).length,
+    },
+    invites: {
+      pending: inviteRows.length,
+      nextExpiryDays: nextExpiry != null ? Math.floor((nextExpiry - Date.now()) / 86400000) : null,
+    },
+  }
+}
+
