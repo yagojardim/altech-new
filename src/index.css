@@ -80,6 +80,9 @@
   --fs-lg:  19px;
   --fs-xl:  24px;
   --fs-2xl: 32px;
+
+  /* ── Brand panel (login hero) ─────────────────────────────── */
+  --brand-panel: linear-gradient(145deg, #080b11 0%, #0e1016 50%, #111827 100%);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -103,6 +106,8 @@
   --shadow-2: 0 4px 16px rgba(16,16,29,0.10);
   --shadow-3: 0 16px 48px rgba(16,16,29,0.14);
   --shadow-modal: 0 32px 80px rgba(16,16,29,0.24);
+
+  --brand-panel: linear-gradient(145deg, #FFFFFF 0%, #F2F5FB 50%, #E7EDFA 100%);
 }
 
 /* Wrappers dark locais também seguem o tema claro */
