@@ -214,12 +214,14 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
   const [kpis, setKpis] = useState<AdminKpis | null>(null)
+  const selKey = [...selProj].sort().join(',')
   useEffect(() => {
     let alive = true
-    void safeCall('admin-kpis', () => fetchAdminKpis(), null as AdminKpis | null)
+    const ids = selKey ? selKey.split(',') : undefined
+    void safeCall('admin-kpis', () => fetchAdminKpis(ids), null as AdminKpis | null)
       .then(k => { if (alive && k) setKpis(k) })
     return () => { alive = false }
-  }, [])
+  }, [selKey])
 
   const inviteSub = kpis == null
     ? '—'
