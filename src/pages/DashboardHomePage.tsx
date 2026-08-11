@@ -62,17 +62,43 @@ function applyFilters(items: WorkItem[], f: FilterState): WorkItem[] {
   )
 }
 
+// ─── Project filter scope (RBAC) ─────────────────────────────────────────────
+interface ProjOption { id: string; name: string; color?: string }
+
+interface HomeFilterValue {
+  /** Projects the signed-in profile is allowed to see (RBAC). */
+  allowed: ProjOption[]
+  sel: Set<string>
+  setSel: (s: Set<string>) => void
+}
+
+const HomeFilterCtx = createContext<HomeFilterValue>({ allowed: [], sel: new Set(), setSel: () => {} })
+
+/** Mirror of the allowed ids so non-hook helpers (byProjects) stay in sync. */
+let ALLOWED_IDS: Set<string> | null = null
+let ALLOWED_LIST: ProjOption[] = []
+
 function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const { allowed } = useContext(HomeFilterCtx)
+  const partial = allowed.length > 0 && selected.size > 0 && selected.size < allowed.length
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
-      <ProjectMultiSelect projects={liveProjects()} selected={selected} onChange={onChange} />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+      {partial && (
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: T.accent, background: `${T.accent}14`,
+          border: `1px solid ${T.accent}33`, borderRadius: 4, padding: '2px 7px',
+        }}>
+          Filtrado: {selected.size} de {allowed.length} projetos
+        </span>
+      )}
+      <ProjectMultiSelect projects={allowed} selected={selected} onChange={onChange} />
     </div>
   )
 }
 
-/** Project options come from the database (tenant-scoped). */
-const PROJECTS = () => liveProjects()
-const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
+/** Project options come from the database, restricted to the profile's scope. */
+const PROJECTS = () => ALLOWED_LIST
+const ALL_PROJ_IDS = () => new Set(ALLOWED_LIST.map(p => p.id))
 
 function sessionScope(user: MockUser): UserScope | null {
   const assigned = Array.isArray(user.assigned_dashboards)
@@ -85,7 +111,7 @@ function sessionScope(user: MockUser): UserScope | null {
     user_id: user.user_id,
     tenant_id: user.tenant_id,
     role_context: user.role_context,
-    projects_allowed: user.project_id === '*' ? liveProjects().map(p => p.id) : [user.project_id],
+    projects_allowed: user.project_id === '*' ? ALLOWED_LIST.map(p => p.id) : [user.project_id],
     workspaces_allowed: [`ws_${user.tenant_id}`],
     squads_allowed: user.squad_id === '*' ? [] : [user.squad_id],
     modules_allowed: Array.isArray(user.modules_enabled) ? user.modules_enabled : [],
@@ -97,21 +123,21 @@ function sessionScope(user: MockUser): UserScope | null {
   }
 }
 
-/** Selection defaults to "all projects" and re-syncs once the data lands. */
+/** Every panel shares the same selection, so one filter drives all cards. */
 function useProjSel(): [Set<string>, (s: Set<string>) => void] {
-  const [sel, setSel] = useState<Set<string>>(() => ALL_PROJ_IDS())
-  const count = liveProjects().length
-  useEffect(() => {
-    if (sel.size === 0 && count > 0) setSel(ALL_PROJ_IDS())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count])
+  const { sel, setSel } = useContext(HomeFilterCtx)
   return [sel, setSel]
 }
 
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
-  if (sel.size === 0 || sel.size >= liveProjects().length) return items
-  return items.filter(w => sel.has(w.project_id ?? ''))
+  const scope = ALLOWED_IDS
+  // Sem restrição de escopo e sem recorte ativo ⇒ nada a filtrar.
+  const all = !scope || sel.size === 0 || sel.size >= scope.size
+  if (all && !scope) return items
+  const active = all ? scope! : sel
+  return items.filter(w => active.has(w.project_id ?? ''))
 }
+
 
 
 const SQUADS = [
