@@ -1779,13 +1779,69 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
 export default function DashboardHomePage(props: Props) {
-  // Single shared fetch of the real report aggregates for every KPI/thumbnail below.
   return (
-    <ReportsDataProvider>
-      <DashboardHomeInner {...props} />
-    </ReportsDataProvider>
+    <HomeFilterProvider>
+      <DashboardHomeScoped {...props} />
+    </HomeFilterProvider>
   )
 }
+
+/**
+ * Escopo de projetos da Home: lista só os projetos visíveis para o perfil
+ * (RBAC via boards/project_members) e propaga a seleção ativa para os
+ * agregados de relatório, para que todo card reflita o filtro.
+ */
+function HomeFilterProvider({ children }: { children: ReactNode }) {
+  const { activeUser } = useSession()
+  useLiveDashboard()
+  const { boards, loading: boardsLoading } = useVisibleBoards()
+  const perms = Array.isArray(activeUser.permissions) ? activeUser.permissions : []
+  const tenantWide = can(perms, 'users:manage') || can(perms, 'board:manage')
+
+  const allProjects = liveProjects()
+  const allKey = allProjects.map(p => p.id).join(',')
+  const boardKey = boards.map(b => b.project_id).join(',')
+
+  const allowed = useMemo<ProjOption[]>(() => {
+    if (tenantWide) return allProjects
+    if (boardsLoading) return []
+    const ids = new Set(boards.map(b => b.project_id).filter(Boolean))
+    return allProjects.filter(p => ids.has(p.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allKey, boardKey, boardsLoading, tenantWide])
+
+  ALLOWED_LIST = allowed
+  ALLOWED_IDS = allowed.length > 0 ? new Set(allowed.map(p => p.id)) : null
+
+  const allowedKey = allowed.map(p => p.id).join(',')
+  const [sel, setSel] = useState<Set<string>>(() => new Set(allowed.map(p => p.id)))
+
+  // Sem seleção explícita (ou escopo recém-carregado) ⇒ todos os permitidos.
+  useEffect(() => {
+    const ids = allowedKey ? allowedKey.split(',') : []
+    setSel(prev => {
+      const kept = [...prev].filter(id => ids.includes(id))
+      return kept.length > 0 ? new Set(kept) : new Set(ids)
+    })
+  }, [allowedKey])
+
+  const selIds = [...sel]
+  const projectIds = allowed.length > 0 && selIds.length < allowed.length ? selIds : undefined
+
+  return (
+    <HomeFilterCtx.Provider value={{ allowed, sel, setSel }}>
+      {/* Single shared fetch of the real report aggregates, scoped by the filter. */}
+      <ReportsDataProvider projectIds={projectIds}>
+        {children}
+      </ReportsDataProvider>
+    </HomeFilterCtx.Provider>
+  )
+}
+
+function DashboardHomeScoped(props: Props) {
+  return <DashboardHomeInner {...props} />
+}
+
 
 function DashboardHomeInner({ onNav, onInvite }: Props) {
   const { activeUser: user } = useSession()
