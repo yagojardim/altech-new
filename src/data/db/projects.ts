@@ -3,6 +3,8 @@
 import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { DEFAULT_TENANT_ID, projectColor } from './timeline'
+import { safeCall } from '@/utils/logger'
+import { can } from '@/data/permissions'
 
 export { DEFAULT_TENANT_ID, projectColor }
 
@@ -215,4 +217,80 @@ export async function updateProject(
     period_end: project.period_end, lead_id: project.lead_id, client_name: project.client_name,
   }, payload as AuditPayload)
 
+}
+
+/**
+ * `permission_overrides` ainda não expõe colunas de escopo nos tipos gerados;
+ * a leitura é feita por um acesso estreitamente tipado (sem `any`).
+ */
+interface ProjectOverrideRow {
+  scope_id: string | null
+  scope_type: string | null
+  granted: boolean | null
+}
+
+interface OverrideQuery {
+  select: (cols: string) => {
+    eq: (col: string, val: string) => {
+      eq: (col: string, val: string) => PromiseLike<{ data: ProjectOverrideRow[] | null }>
+    }
+  }
+}
+
+async function fetchProjectOverrides(tenantId: string, profileId: string): Promise<ProjectOverrideRow[]> {
+  const client = supabase as unknown as { from: (table: string) => OverrideQuery }
+  const res = await client.from('permission_overrides')
+    .select('scope_id, scope_type, granted')
+    .eq('tenant_id', tenantId)
+    .eq('profile_id', profileId)
+  return res.data ?? []
+}
+
+/** Options for the Home project filter: projects assigned to the profile. */
+export interface AssignedProject { id: string; name: string }
+
+/**
+ * Projetos atribuídos ao perfil (não depende de board).
+ * Gestão (`users:manage` / `board:manage`) enxerga todos os projetos do tenant.
+ * Degrada para lista vazia em qualquer falha — nunca cross-tenant.
+ */
+export function fetchAssignedProjects(opts: {
+  tenantId: string
+  profileId: string
+  permissions: string[]
+}): Promise<AssignedProject[]> {
+  const { tenantId, profileId, permissions } = opts
+
+  return safeCall<AssignedProject[]>('projects.fetchAssignedProjects', async () => {
+    if (!tenantId) return []
+
+    const tenantWide = can(permissions, 'users:manage') || can(permissions, 'board:manage')
+    let allowedProjectIds: string[] | null = null // null ⇒ todos do tenant
+
+    if (!tenantWide) {
+      const [members, overrides] = await Promise.all([
+        supabase.from('project_members').select('project_id')
+          .eq('tenant_id', tenantId).eq('profile_id', profileId),
+        fetchProjectOverrides(tenantId, profileId),
+      ])
+
+      const ids = new Set<string>()
+      for (const row of members.data ?? []) {
+        if (row.project_id) ids.add(row.project_id)
+      }
+      for (const row of overrides) {
+        if (row.granted !== false && row.scope_type === 'project' && row.scope_id) ids.add(row.scope_id)
+      }
+      allowedProjectIds = [...ids]
+      if (allowedProjectIds.length === 0) return []
+    }
+
+    let query = supabase.from('projects').select('id, name')
+      .eq('tenant_id', tenantId).is('archived_at', null).order('name')
+    if (allowedProjectIds) query = query.in('id', allowedProjectIds)
+
+    const res = await query
+    if (res.error) throw fail('projects', res.error.message)
+    return (res.data ?? []).map(p => ({ id: p.id, name: p.name }))
+  }, [])
 }

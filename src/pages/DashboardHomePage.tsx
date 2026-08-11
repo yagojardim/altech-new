@@ -17,7 +17,7 @@ import {
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
-  useLiveDashboard, liveProjects, liveItems, liveCurrentSprintName, liveAggregates,
+  useLiveDashboard, liveItems, liveCurrentSprintName, liveAggregates,
   getBlockedItems, getSprintItems, getReadyItems,
   getTestingItems, getBacklogWithAlerts,
 } from '../data/db/homeLive'
@@ -41,7 +41,7 @@ import {
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
-import { useVisibleBoards } from '../data/db/boards'
+import { fetchAssignedProjects } from '../data/db/projects'
 import { can } from '../data/permissions'
 import { countActiveModules } from '../data/db/modules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
@@ -79,6 +79,10 @@ const HomeFilterCtx = createContext<HomeFilterValue>({ allowed: [], sel: new Set
 /** Mirror of the allowed ids so non-hook helpers (byProjects) stay in sync. */
 let ALLOWED_IDS: Set<string> | null = null
 let ALLOWED_LIST: ProjOption[] = []
+/** True quando o perfil tem visão de gestão (todos os projetos do tenant). */
+let ALLOWED_TENANT_WIDE = false
+/** Escopo efetivo enviado aos agregados (undefined só para gestão sem recorte). */
+let SCOPE_IDS: string[] | undefined = undefined
 
 function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
   const { allowed } = useContext(HomeFilterCtx)
@@ -133,6 +137,8 @@ function useProjSel(): [Set<string>, (s: Set<string>) => void] {
 
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
   const scope = ALLOWED_IDS
+  // Perfil não-gestão sem projeto atribuído ⇒ nunca mostra dados do tenant.
+  if (!scope && !ALLOWED_TENANT_WIDE) return []
   // Sem restrição de escopo e sem recorte ativo ⇒ nada a filtrar.
   const all = !scope || sel.size === 0 || sel.size >= scope.size
   if (all && !scope) return items
@@ -217,7 +223,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const selKey = [...selProj].sort().join(',')
   useEffect(() => {
     let alive = true
-    const ids = selKey ? selKey.split(',') : undefined
+    const ids = selKey ? selKey.split(',') : SCOPE_IDS
     void safeCall('admin-kpis', () => fetchAdminKpis(ids), null as AdminKpis | null)
       .then(k => { if (alive && k) setKpis(k) })
     return () => { alive = false }
@@ -1798,27 +1804,35 @@ export default function DashboardHomePage(props: Props) {
 function HomeFilterProvider({ children }: { children: ReactNode }) {
   const { activeUser } = useSession()
   useLiveDashboard()
-  const { boards, loading: boardsLoading } = useVisibleBoards()
-  const perms = Array.isArray(activeUser.permissions) ? activeUser.permissions : []
+  const perms = useMemo(
+    () => (Array.isArray(activeUser.permissions) ? activeUser.permissions : []),
+    [activeUser.permissions],
+  )
   const tenantWide = can(perms, 'users:manage') || can(perms, 'board:manage')
 
-  const allProjects = liveProjects()
-  const allKey = allProjects.map(p => p.id).join(',')
-  const boardKey = boards.map(b => b.project_id).join(',')
+  const [allowed, setAllowed] = useState<ProjOption[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const allowed = useMemo<ProjOption[]>(() => {
-    if (tenantWide) return allProjects
-    if (boardsLoading) return []
-    const ids = new Set(boards.map(b => b.project_id).filter(Boolean))
-    return allProjects.filter(p => ids.has(p.id))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allKey, boardKey, boardsLoading, tenantWide])
+  const tenantId = activeUser.tenant_id
+  const profileId = activeUser.user_id
+  const permKey = perms.join(',')
+
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    fetchAssignedProjects({ tenantId, profileId, permissions: permKey ? permKey.split(',') : [] })
+      .then(rows => { if (alive) setAllowed(rows.map(r => ({ id: r.id, name: r.name }))) })
+      .catch(() => { if (alive) setAllowed([]) })
+      .finally(() => { if (alive) setLoading(false) })
+    return () => { alive = false }
+  }, [tenantId, profileId, permKey])
 
   ALLOWED_LIST = allowed
   ALLOWED_IDS = allowed.length > 0 ? new Set(allowed.map(p => p.id)) : null
+  ALLOWED_TENANT_WIDE = tenantWide
 
   const allowedKey = allowed.map(p => p.id).join(',')
-  const [sel, setSel] = useState<Set<string>>(() => new Set(allowed.map(p => p.id)))
+  const [sel, setSel] = useState<Set<string>>(new Set())
 
   // Sem seleção explícita (ou escopo recém-carregado) ⇒ todos os permitidos.
   useEffect(() => {
@@ -1830,13 +1844,13 @@ function HomeFilterProvider({ children }: { children: ReactNode }) {
   }, [allowedKey])
 
   // Escopo efetivo dos agregados: a seleção ativa; sem seleção ⇒ todos os
-  // projetos permitidos (RBAC). Nunca `undefined` quando há escopo conhecido,
-  // caso contrário os cards do Board de Composição leriam o tenant inteiro.
+  // permitidos. Para não-gestão sem projeto atribuído o escopo é [] (vazio),
+  // nunca `undefined`, para não vazar dados de todo o tenant.
   const allowedIds = allowed.map(p => p.id)
   const selIds = [...sel].filter(id => allowedIds.includes(id))
   const scopeIds = selIds.length > 0 ? selIds : allowedIds
-  const projectIds = scopeIds.length > 0 ? scopeIds : undefined
-
+  const projectIds = scopeIds.length > 0 ? scopeIds : (tenantWide && loading ? undefined : [])
+  SCOPE_IDS = projectIds
 
   return (
     <HomeFilterCtx.Provider value={{ allowed, sel, setSel }}>
