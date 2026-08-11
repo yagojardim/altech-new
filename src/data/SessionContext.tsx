@@ -9,6 +9,7 @@ import {
   INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
+import { logger } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
 
