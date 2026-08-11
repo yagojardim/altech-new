@@ -926,8 +926,11 @@ export function ReportKpiPreview({ entry, compact = false }: { entry: ReportEntr
 
 export function ReportChartModal({ reportId, onClose }: { reportId: string; onClose: () => void }) {
   const entry = REPORT_REGISTRY[reportId]
+  const { data } = useReportsData()
   if (!entry) return null
   const Chart = entry.Component
+  const scoped = data?.scopeProjectIds ?? null
+
   return (
     <>
       <div
