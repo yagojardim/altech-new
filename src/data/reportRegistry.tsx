@@ -322,10 +322,17 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
         const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const areaPath = (d: number[]) => linePath(d) + ` L ${toX(weeks - 1)} ${PAD.top + ch} L ${toX(0)} ${PAD.top + ch} Z`
-        const ticks = [0, Math.round(maxV / 2), Math.round(maxV)]
+        const ticks = [...new Set([0, Math.round(maxV / 2), Math.round(maxV)])]
+        const sumC = c.created.reduce((a, b) => a + b, 0)
+        const sumR = c.resolved.reduce((a, b) => a + b, 0)
         return (
           <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
-            {ticks.map(t => <line key={t} x1={PAD.left} y1={toY(t)} x2={W - PAD.right} y2={toY(t)} stroke={T.border} strokeWidth={0.5} />)}
+            {ticks.map(t => (
+              <g key={t}>
+                <line x1={PAD.left} y1={toY(t)} x2={W - PAD.right} y2={toY(t)} stroke={T.border} strokeWidth={0.5} />
+                {!th && <text x={PAD.left - 5} y={toY(t) + 3} textAnchor="end" fontSize={8} fill={T.text3}>{t}</text>}
+              </g>
+            ))}
             <path d={areaPath(c.created)} fill={T.warn} opacity={0.15} />
             <path d={areaPath(c.resolved)} fill={T.success} opacity={0.15} />
             <path d={linePath(c.created)} stroke={T.warn} strokeWidth={2} fill="none" />
@@ -335,9 +342,10 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
             {!th && c.weeks.map((w, i) => <text key={w} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>)}
             {!th && (
               <g transform={`translate(${PAD.left}, ${PAD.top - 10})`}>
-                <line x1={0} y1={0} x2={14} y2={0} stroke={T.warn} strokeWidth={2} /><text x={18} y={4} fontSize={9} fill={T.text2}>Criados</text>
-                <line x1={70} y1={0} x2={84} y2={0} stroke={T.success} strokeWidth={2} /><text x={88} y={4} fontSize={9} fill={T.text2}>Resolvidos</text>
+                <line x1={0} y1={0} x2={14} y2={0} stroke={T.warn} strokeWidth={2} /><text x={18} y={4} fontSize={9} fill={T.text2}>Criados {sumC}</text>
+                <line x1={92} y1={0} x2={106} y2={0} stroke={T.success} strokeWidth={2} /><text x={110} y={4} fontSize={9} fill={T.text2}>Resolvidos {sumR}</text>
               </g>
+
             )}
           </svg>
         )
@@ -918,8 +926,11 @@ export function ReportKpiPreview({ entry, compact = false }: { entry: ReportEntr
 
 export function ReportChartModal({ reportId, onClose }: { reportId: string; onClose: () => void }) {
   const entry = REPORT_REGISTRY[reportId]
+  const { data } = useReportsData()
   if (!entry) return null
   const Chart = entry.Component
+  const scoped = data?.scopeProjectIds ?? null
+
   return (
     <>
       <div
@@ -937,7 +948,17 @@ export function ReportChartModal({ reportId, onClose }: { reportId: string; onCl
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>{entry.title}</div>
             <div style={{ fontSize: 12, color: T.text3, marginTop: 3 }}>{entry.subtitle}</div>
+            {scoped && (
+              <div style={{
+                display: 'inline-block', marginTop: 6, fontSize: 10, fontWeight: 600,
+                color: T.accent, background: `${T.accent}14`, border: `1px solid ${T.accent}33`,
+                borderRadius: 4, padding: '2px 7px',
+              }}>
+                Escopo: {scoped.length} projeto{scoped.length !== 1 ? 's' : ''}
+              </div>
+            )}
           </div>
+
           <button
             onClick={onClose}
             style={{ width: 30, height: 30, borderRadius: 7, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 18, lineHeight: 1, flexShrink: 0 }}
