@@ -61,7 +61,7 @@ export default function PreferencesPage() {
       <section className="mt-4 rounded-2xl p-6" style={{ background: T.bgSurface, border: `1px solid ${T.border}` }}>
         <h2 className="m-0 text-[14px] font-semibold" style={{ color: T.text1 }}>Idioma</h2>
         <p className="mt-1 mb-4 text-[12px]" style={{ color: T.text2 }}>
-          Idioma da interface.
+          Idioma da interface. Outros idiomas estão em construção.
         </p>
         <select
           value={lang}
@@ -71,7 +71,7 @@ export default function PreferencesPage() {
           aria-label="Idioma da interface"
         >
           {LANGUAGES.map(l => (
-            <option key={l.code} value={l.code}>{l.label}</option>
+            <option key={l.code} value={l.code} disabled={l.disabled}>{l.label}</option>
           ))}
         </select>
       </section>

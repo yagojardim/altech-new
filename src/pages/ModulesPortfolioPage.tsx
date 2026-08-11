@@ -18,8 +18,8 @@ import {
 
 // ─── Design tokens (dark premium per spec) ────────────────────────────────────
 const D = {
-  card:    '#16161D',
-  border:  '#262633',
+  card:    T.bgSurface,
+  border:  T.border,
   green:   '#10B981',
   amber:   '#F59E0B',
   red:     '#EF4444',
