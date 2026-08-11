@@ -120,9 +120,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       settleStatus(fallbackStatus())
     }
 
-    withTimeout(getSession(), BOOT_READ_TIMEOUT_MS, 'getSession').then(resolve).catch(err => {
+    withTimeout(getSession(), BOOT_READ_TIMEOUT_MS, 'getSession').then(u => {
+      // An auth event or the watchdog may have settled boot while this read
+      // was in flight. Never let a stale initial response overwrite it.
+      if (!bootSettled) resolve(u)
+    }).catch(err => {
       logger.error('SessionContext.getSession', err)
-      settleStatus(fallbackStatus())
+      if (!bootSettled) settleStatus(fallbackStatus())
     })
     const unsub = onAuthStateChange(resolve)
     return () => {
