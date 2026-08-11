@@ -387,5 +387,54 @@ begin
 end $$;
 
 -- Trigger functions não precisam ser chamáveis via API
-revoke all on function public.tg_touch_row() from public, anon, authenticated;
-revoke all on function public.tg_tenants_validate() from public, anon, authenticated;
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and (p.prokind = 't' or p.prorettype = 'trigger'::regtype)
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+  end loop;
+end $$;
+
+-- ─── 7. Nenhuma função SECURITY DEFINER exposta na API ──────────────────────
+-- Toda função SECURITY DEFINER que sobrou em `public` deixa de ser executável
+-- por anon/authenticated; a lógica privilegiada vive no schema `app`, e o
+-- wrapper público public.check_slug é SECURITY INVOKER.
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+    execute format('grant execute on function %s to service_role', r.sig);
+  end loop;
+end $$;
+
+-- Helpers de DDL nunca devem ser chamáveis pela API
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('ensure_fk', '__act_add_tenant_fk')
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+  end loop;
+end $$;
+
+-- Sem execução de funções novas por anon por padrão
+alter default privileges in schema public revoke execute on functions from anon;
+revoke usage on schema public from anon;
