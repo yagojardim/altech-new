@@ -4,6 +4,7 @@ import { Avatar } from './ds/Avatar'
 import { Tooltip } from './ds/Tooltip'
 import { T } from './ds/tokens'
 import { useSession } from '../data/SessionContext'
+import { useVisibleBoards } from '@/data/db/boards'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
@@ -826,7 +827,15 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
           groups.flatMap(g => g.items)
             .filter((item, idx, arr) => arr.findIndex(x => x.id === item.id) === idx)
             .map(item => (
-              <NavBtn key={item.id} item={item} active={activeNav === item.id} onClick={() => onNav(item.id)} collapsed />
+              <NavBtn
+                key={item.id}
+                item={item}
+                active={activeNav === item.id}
+                onClick={() => onNav(item.id)}
+                collapsed
+                disabled={item.id === 'boards-list' && boardsDisabled}
+                disabledLabel={item.id === 'boards-list' ? NO_BOARDS_LABEL : undefined}
+              />
             ))
         ) : (
           // Expanded: grouped
@@ -851,6 +860,8 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
                       active={activeNav === item.id}
                       collapsed={false}
                       onClick={() => onNav(item.id)}
+                      disabled={item.id === 'boards-list' && boardsDisabled}
+                      disabledLabel={item.id === 'boards-list' ? NO_BOARDS_LABEL : undefined}
                     />
                   )}
                   {/* Animated disclosure panel — only after the dashboard item */}
