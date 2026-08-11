@@ -37,7 +37,14 @@ export interface ReportsData {
   }
   cfd: { days: string[]; layers: { label: string; color: string; data: number[] }[]; max: number }
   bugs: { label: string; color: string; val: number }[]
-  createdVsResolved: { weeks: string[]; created: number[]; resolved: number[]; max: number }
+  createdVsResolved: {
+    weeks: string[]
+    created: number[]
+    resolved: number[]
+    max: number
+    /** Séries por projeto — só preenchido quando há escopo selecionado. */
+    byProject: { projectId: string; created: number[]; resolved: number[] }[]
+  }
   workload: { name: string; fullName: string; pts: number }[]
   aging: { id: string; itemId: string; days: number; tag: string | null; color: string }[]
   leadCycle: { leadAvg: number; cycleAvg: number; buckets: { label: string; value: number }[] }
