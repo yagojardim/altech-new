@@ -109,7 +109,36 @@ function AppInner() {
   }
 
   if (status === 'loading') {
-    return <div style={{ height: '100vh', background: 'var(--bg-page,#0d1321)' }} />
+    return (
+      <div
+        className="h-screen w-full flex items-center justify-center"
+        style={{ background: 'var(--bg-page)' }}
+        role="status"
+        aria-live="polite"
+        aria-label="Carregando Altech Project"
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative h-12 w-12" aria-hidden="true">
+            <div
+              className="absolute inset-0 rounded-full opacity-30"
+              style={{ border: '2px solid var(--border-default)' }}
+            />
+            <div
+              className="spin absolute inset-0 rounded-full"
+              style={{ border: '2px solid transparent', borderTopColor: 'var(--primary)' }}
+            />
+            <div
+              className="absolute inset-[15px] rounded-sm"
+              style={{ background: 'var(--primary)' }}
+            />
+          </div>
+          <div className="text-center">
+            <p className="m-0 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>ALTECH PROJECT</p>
+            <p className="mt-1 mb-0 text-xs" style={{ color: 'var(--text-secondary)' }}>Carregando seu workspace…</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   // Rota /activate?token=... — link de ativação/reset.

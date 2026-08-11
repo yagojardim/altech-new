@@ -13,6 +13,22 @@ import { logger } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
 
+const BOOT_READ_TIMEOUT_MS = 3500
+const BOOT_WATCHDOG_MS = 4000
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, scope: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error(`${scope} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise.then(
+      value => { window.clearTimeout(timeoutId); resolve(value) },
+      error => { window.clearTimeout(timeoutId); reject(error) },
+    )
+  })
+}
+
 interface SessionCtx {
   activeUser:    MockUser
   setActiveUser: (id: string) => void
@@ -35,7 +51,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChange] = useState(false)
 
   /** Inspection só vale quando NÃO houve logout manual nesta aba. */
-  function fallbackStatus(): SessionStatus {
+  function fallbackStatus(): Exclude<SessionStatus, 'loading'> {
     return INSPECTION_MODE_ENABLED && !hasManualLogout() ? 'inspection' : 'anonymous'
   }
 
@@ -47,18 +63,38 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let alive = true
+    let bootSettled = false
+    const watchdogId = window.setTimeout(() => {
+      if (!alive || bootSettled) return
+      bootSettled = true
+      logger.warn('SessionContext.boot', 'Watchdog acionado; liberando o boot pelo fallback', {
+        timeoutMs: BOOT_WATCHDOG_MS,
+      })
+      setStatus(fallbackStatus())
+    }, BOOT_WATCHDOG_MS)
+
+    function settleStatus(nextStatus: Exclude<SessionStatus, 'loading'>) {
+      if (!alive) return
+      bootSettled = true
+      window.clearTimeout(watchdogId)
+      setStatus(nextStatus)
+    }
 
     async function resolve(u: AuthUser | null) {
       if (!alive) return
       setAuthUser(u)
       try {
         if (u) {
-          const profile = await loadProfileByAuthUserId(u.id, u.email)
+          const profile = await withTimeout(
+            loadProfileByAuthUserId(u.id, u.email),
+            BOOT_READ_TIMEOUT_MS,
+            'loadProfileByAuthUserId',
+          )
           if (!alive) return
           if (profile) {
             setDbUser(profile)
             setMustChange(!!profile.password_must_change)
-            setStatus('authenticated')
+            settleStatus('authenticated')
             void touchAccess(profile.user_id, profile.tenant_id, null)
             return
           }
@@ -71,15 +107,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setMustChange(false)
       // Fallback de desenvolvimento: Inspection Mode atrás da flag,
       // bloqueado quando o usuário clicou em "Sair".
-      setStatus(fallbackStatus())
+      settleStatus(fallbackStatus())
     }
 
-    getSession().then(resolve).catch(err => {
+    withTimeout(getSession(), BOOT_READ_TIMEOUT_MS, 'getSession').then(resolve).catch(err => {
       logger.error('SessionContext.getSession', err)
-      if (alive) setStatus(fallbackStatus())
+      settleStatus(fallbackStatus())
     })
     const unsub = onAuthStateChange(u => { void resolve(u) })
-    return () => { alive = false; unsub() }
+    return () => {
+      alive = false
+      window.clearTimeout(watchdogId)
+      unsub()
+    }
   }, [])
 
   async function signOut() {
