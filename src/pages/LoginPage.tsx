@@ -160,7 +160,7 @@ export default function LoginPage({ onSuccess }: Props) {
       <div style={{
         width: '42%',
         minHeight: '100vh',
-        background: 'linear-gradient(145deg, #080b11 0%, #0e1016 50%, #111827 100%)',
+        background: 'var(--brand-panel, linear-gradient(145deg, #080b11 0%, #0e1016 50%, #111827 100%))',
         display: 'flex',
         flexDirection: 'column',
         padding: '32px',

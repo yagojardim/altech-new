@@ -5,9 +5,25 @@ export const LANG_KEY = 'altech_lang'
 export type ThemeMode = 'dark' | 'light'
 export type LangCode = 'pt-BR'
 
-export const LANGUAGES: { code: LangCode; label: string }[] = [
+export interface LanguageOption {
+  code: string
+  label: string
+  /** Idiomas em construção aparecem na lista mas não são selecionáveis. */
+  disabled?: boolean
+}
+
+export const LANGUAGES: LanguageOption[] = [
   { code: 'pt-BR', label: 'Português (Brasil)' },
+  { code: 'en-US', label: 'Inglês (EUA) (em construção)', disabled: true },
+  { code: 'es-ES', label: 'Espanhol (em construção)', disabled: true },
+  { code: 'pt-PT', label: 'Português (Portugal) (em construção)', disabled: true },
+  { code: 'fr-FR', label: 'Francês (em construção)', disabled: true },
+  { code: 'de-DE', label: 'Alemão (em construção)', disabled: true },
+  { code: 'it-IT', label: 'Italiano (em construção)', disabled: true },
 ]
+
+/** Apenas idiomas realmente disponíveis. */
+export const ACTIVE_LANGUAGES = LANGUAGES.filter(l => !l.disabled)
 
 export function getTheme(): ThemeMode {
   if (typeof window === 'undefined') return 'dark'
@@ -35,7 +51,7 @@ export function getLang(): LangCode {
   if (typeof window === 'undefined') return 'pt-BR'
   try {
     const v = window.localStorage.getItem(LANG_KEY)
-    return (LANGUAGES.some(l => l.code === v) ? v : 'pt-BR') as LangCode
+    return (ACTIVE_LANGUAGES.some(l => l.code === v) ? v : 'pt-BR') as LangCode
   } catch { return 'pt-BR' }
 }
 

@@ -340,7 +340,7 @@ function EditUserModal({
                     <div key={cap} style={{
                       display:'flex', alignItems:'center', gap:10, padding:'7px 10px', borderRadius:8,
                       background:isDefault?`${T.success}08`:isGranted?`${T.accent}08`:'transparent',
-                      border:`1px solid ${isDefault?T.success+'22':isGranted?T.accent+'22':T.border+'44'}`,
+                      border:`1px solid ${isDefault?T.success+'22':isGranted?T.accent+'22':T.border}`,
                     }}>
                       <span style={{ flex:1, fontSize:12, color:isHidden?T.text3:T.text1 }}>{CAP_LABELS[cap] ?? cap}</span>
                       {isDefault && <span title="Padrão do papel" style={{ fontSize:14, color:T.success }}>●</span>}
