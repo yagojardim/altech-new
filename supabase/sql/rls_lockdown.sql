@@ -293,6 +293,19 @@ create policy client_portal_users_admin_write on public.client_portal_users
   using (tenant_id = app.current_tenant_id() and app.is_tenant_admin())
   with check (tenant_id = app.current_tenant_id() and app.is_tenant_admin());
 
+-- activation_tokens: nunca acessível anonimamente; só admin do tenant e o
+-- service_role. O hash do token deixa de ser legível pela API (column grant).
+drop policy if exists activation_tokens_tenant_scope on public.activation_tokens;
+revoke all on public.activation_tokens from anon, authenticated;
+grant select (id, tenant_id, profile_id, purpose, expires_at, used_at, created_at, created_by, metadata)
+  on public.activation_tokens to authenticated;
+grant insert, update, delete on public.activation_tokens to authenticated;
+grant all on public.activation_tokens to service_role;
+create policy activation_tokens_admin_only on public.activation_tokens
+  for all to authenticated
+  using (tenant_id = app.current_tenant_id() and app.is_tenant_admin())
+  with check (tenant_id = app.current_tenant_id() and app.is_tenant_admin());
+
 -- ─── 5. Funções SECURITY DEFINER expostas no schema public ──────────────────
 -- check_slug: lógica movida para o schema privado; wrapper público é INVOKER.
 create or replace function app.check_slug(p_slug text)
@@ -374,5 +387,54 @@ begin
 end $$;
 
 -- Trigger functions não precisam ser chamáveis via API
-revoke all on function public.tg_touch_row() from public, anon, authenticated;
-revoke all on function public.tg_tenants_validate() from public, anon, authenticated;
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and (p.prokind = 't' or p.prorettype = 'trigger'::regtype)
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+  end loop;
+end $$;
+
+-- ─── 7. Nenhuma função SECURITY DEFINER exposta na API ──────────────────────
+-- Toda função SECURITY DEFINER que sobrou em `public` deixa de ser executável
+-- por anon/authenticated; a lógica privilegiada vive no schema `app`, e o
+-- wrapper público public.check_slug é SECURITY INVOKER.
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.prosecdef
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+    execute format('grant execute on function %s to service_role', r.sig);
+  end loop;
+end $$;
+
+-- Helpers de DDL nunca devem ser chamáveis pela API
+do $$
+declare r record;
+begin
+  for r in
+    select p.oid::regprocedure as sig
+    from pg_proc p
+    join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public'
+      and p.proname in ('ensure_fk', '__act_add_tenant_fk')
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', r.sig);
+  end loop;
+end $$;
+
+-- Sem execução de funções novas por anon por padrão
+alter default privileges in schema public revoke execute on functions from anon;
+revoke usage on schema public from anon;
