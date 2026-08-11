@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode, type ReactElement } from 'react'
+import { useState, useEffect, useMemo, createContext, useContext, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { T } from '../components/ds/tokens'
@@ -41,6 +41,8 @@ import {
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
+import { useVisibleBoards } from '../data/db/boards'
+import { can } from '../data/permissions'
 import { countActiveModules } from '../data/db/modules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
@@ -62,17 +64,43 @@ function applyFilters(items: WorkItem[], f: FilterState): WorkItem[] {
   )
 }
 
+// ─── Project filter scope (RBAC) ─────────────────────────────────────────────
+interface ProjOption { id: string; name: string; color?: string }
+
+interface HomeFilterValue {
+  /** Projects the signed-in profile is allowed to see (RBAC). */
+  allowed: ProjOption[]
+  sel: Set<string>
+  setSel: (s: Set<string>) => void
+}
+
+const HomeFilterCtx = createContext<HomeFilterValue>({ allowed: [], sel: new Set(), setSel: () => {} })
+
+/** Mirror of the allowed ids so non-hook helpers (byProjects) stay in sync. */
+let ALLOWED_IDS: Set<string> | null = null
+let ALLOWED_LIST: ProjOption[] = []
+
 function ProjFilterRow({ selected, onChange }: { selected: Set<string>; onChange: (s: Set<string>) => void }) {
+  const { allowed } = useContext(HomeFilterCtx)
+  const partial = allowed.length > 0 && selected.size > 0 && selected.size < allowed.length
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 10 }}>
-      <ProjectMultiSelect projects={liveProjects()} selected={selected} onChange={onChange} />
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+      {partial && (
+        <span style={{
+          fontSize: 10, fontWeight: 600, color: T.accent, background: `${T.accent}14`,
+          border: `1px solid ${T.accent}33`, borderRadius: 4, padding: '2px 7px',
+        }}>
+          Filtrado: {selected.size} de {allowed.length} projetos
+        </span>
+      )}
+      <ProjectMultiSelect projects={allowed} selected={selected} onChange={onChange} />
     </div>
   )
 }
 
-/** Project options come from the database (tenant-scoped). */
-const PROJECTS = () => liveProjects()
-const ALL_PROJ_IDS = () => new Set(liveProjects().map(p => p.id))
+/** Project options come from the database, restricted to the profile's scope. */
+const PROJECTS = () => ALLOWED_LIST
+const ALL_PROJ_IDS = () => new Set(ALLOWED_LIST.map(p => p.id))
 
 function sessionScope(user: MockUser): UserScope | null {
   const assigned = Array.isArray(user.assigned_dashboards)
@@ -85,7 +113,7 @@ function sessionScope(user: MockUser): UserScope | null {
     user_id: user.user_id,
     tenant_id: user.tenant_id,
     role_context: user.role_context,
-    projects_allowed: user.project_id === '*' ? liveProjects().map(p => p.id) : [user.project_id],
+    projects_allowed: user.project_id === '*' ? ALLOWED_LIST.map(p => p.id) : [user.project_id],
     workspaces_allowed: [`ws_${user.tenant_id}`],
     squads_allowed: user.squad_id === '*' ? [] : [user.squad_id],
     modules_allowed: Array.isArray(user.modules_enabled) ? user.modules_enabled : [],
@@ -97,21 +125,21 @@ function sessionScope(user: MockUser): UserScope | null {
   }
 }
 
-/** Selection defaults to "all projects" and re-syncs once the data lands. */
+/** Every panel shares the same selection, so one filter drives all cards. */
 function useProjSel(): [Set<string>, (s: Set<string>) => void] {
-  const [sel, setSel] = useState<Set<string>>(() => ALL_PROJ_IDS())
-  const count = liveProjects().length
-  useEffect(() => {
-    if (sel.size === 0 && count > 0) setSel(ALL_PROJ_IDS())
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [count])
+  const { sel, setSel } = useContext(HomeFilterCtx)
   return [sel, setSel]
 }
 
 function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<string>): T[] {
-  if (sel.size === 0 || sel.size >= liveProjects().length) return items
-  return items.filter(w => sel.has(w.project_id ?? ''))
+  const scope = ALLOWED_IDS
+  // Sem restrição de escopo e sem recorte ativo ⇒ nada a filtrar.
+  const all = !scope || sel.size === 0 || sel.size >= scope.size
+  if (all && !scope) return items
+  const active = all ? scope! : sel
+  return items.filter(w => active.has(w.project_id ?? ''))
 }
+
 
 
 const SQUADS = [
@@ -186,12 +214,14 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
   const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
   const [kpis, setKpis] = useState<AdminKpis | null>(null)
+  const selKey = [...selProj].sort().join(',')
   useEffect(() => {
     let alive = true
-    void safeCall('admin-kpis', () => fetchAdminKpis(), null as AdminKpis | null)
+    const ids = selKey ? selKey.split(',') : undefined
+    void safeCall('admin-kpis', () => fetchAdminKpis(ids), null as AdminKpis | null)
       .then(k => { if (alive && k) setKpis(k) })
     return () => { alive = false }
-  }, [])
+  }, [selKey])
 
   const inviteSub = kpis == null
     ? '—'
@@ -1753,13 +1783,69 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
 export default function DashboardHomePage(props: Props) {
-  // Single shared fetch of the real report aggregates for every KPI/thumbnail below.
   return (
-    <ReportsDataProvider>
-      <DashboardHomeInner {...props} />
-    </ReportsDataProvider>
+    <HomeFilterProvider>
+      <DashboardHomeScoped {...props} />
+    </HomeFilterProvider>
   )
 }
+
+/**
+ * Escopo de projetos da Home: lista só os projetos visíveis para o perfil
+ * (RBAC via boards/project_members) e propaga a seleção ativa para os
+ * agregados de relatório, para que todo card reflita o filtro.
+ */
+function HomeFilterProvider({ children }: { children: ReactNode }) {
+  const { activeUser } = useSession()
+  useLiveDashboard()
+  const { boards, loading: boardsLoading } = useVisibleBoards()
+  const perms = Array.isArray(activeUser.permissions) ? activeUser.permissions : []
+  const tenantWide = can(perms, 'users:manage') || can(perms, 'board:manage')
+
+  const allProjects = liveProjects()
+  const allKey = allProjects.map(p => p.id).join(',')
+  const boardKey = boards.map(b => b.project_id).join(',')
+
+  const allowed = useMemo<ProjOption[]>(() => {
+    if (tenantWide) return allProjects
+    if (boardsLoading) return []
+    const ids = new Set(boards.map(b => b.project_id).filter(Boolean))
+    return allProjects.filter(p => ids.has(p.id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allKey, boardKey, boardsLoading, tenantWide])
+
+  ALLOWED_LIST = allowed
+  ALLOWED_IDS = allowed.length > 0 ? new Set(allowed.map(p => p.id)) : null
+
+  const allowedKey = allowed.map(p => p.id).join(',')
+  const [sel, setSel] = useState<Set<string>>(() => new Set(allowed.map(p => p.id)))
+
+  // Sem seleção explícita (ou escopo recém-carregado) ⇒ todos os permitidos.
+  useEffect(() => {
+    const ids = allowedKey ? allowedKey.split(',') : []
+    setSel(prev => {
+      const kept = [...prev].filter(id => ids.includes(id))
+      return kept.length > 0 ? new Set(kept) : new Set(ids)
+    })
+  }, [allowedKey])
+
+  const selIds = [...sel]
+  const projectIds = allowed.length > 0 && selIds.length < allowed.length ? selIds : undefined
+
+  return (
+    <HomeFilterCtx.Provider value={{ allowed, sel, setSel }}>
+      {/* Single shared fetch of the real report aggregates, scoped by the filter. */}
+      <ReportsDataProvider projectIds={projectIds}>
+        {children}
+      </ReportsDataProvider>
+    </HomeFilterCtx.Provider>
+  )
+}
+
+function DashboardHomeScoped(props: Props) {
+  return <DashboardHomeInner {...props} />
+}
+
 
 function DashboardHomeInner({ onNav, onInvite }: Props) {
   const { activeUser: user } = useSession()

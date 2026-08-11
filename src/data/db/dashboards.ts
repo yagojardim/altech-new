@@ -410,15 +410,23 @@ export interface AdminKpis {
 const ACTIVE_MODULE_STATUSES = ['operational', 'implemented', 'preview', 'trial', 'active']
 
 /** Real per-tenant counts for the Admin Master dashboard. Never cross-tenant. */
-export async function fetchAdminKpis(): Promise<AdminKpis> {
+export async function fetchAdminKpis(projectIds?: string[]): Promise<AdminKpis> {
   const tid = DEFAULT_TENANT_ID
+  const ids = projectIds && projectIds.length > 0 ? projectIds : null
+
+  let projectsQ = supabase.from('projects').select('id, status').eq('tenant_id', tid).is('archived_at', null)
+  if (ids) projectsQ = projectsQ.in('id', ids)
+  let boardsQ = supabase.from('boards').select('id, status').eq('tenant_id', tid).is('archived_at', null)
+  if (ids) boardsQ = boardsQ.in('project_id', ids)
+
   const [projects, boards, modules, profiles, invites] = await Promise.all([
-    supabase.from('projects').select('id, status').eq('tenant_id', tid).is('archived_at', null),
-    supabase.from('boards').select('id, status').eq('tenant_id', tid).is('archived_at', null),
+    projectsQ,
+    boardsQ,
     supabase.from('tenant_modules').select('id, status').eq('tenant_id', tid).is('archived_at', null),
     supabase.from('profiles').select('id, status').eq('tenant_id', tid).is('archived_at', null),
     supabase.from('invitations').select('id, status, expires_at').eq('tenant_id', tid),
   ])
+
 
   const failed = [
     ['projects', projects.error], ['boards', boards.error], ['tenant_modules', modules.error],
