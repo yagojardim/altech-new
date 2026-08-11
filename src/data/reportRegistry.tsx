@@ -9,6 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { T } from '../components/ds/tokens'
 import { fetchReportsData, type ReportsData } from './db/reports'
 import { setReportNav, type ReportNavIntent } from '@/lib/reportNav'
+import { liveProjects } from '@/data/db/homeLive'
 
 const px = (n: number) => `${n}px`
 
