@@ -293,6 +293,14 @@ create policy client_portal_users_admin_write on public.client_portal_users
   using (tenant_id = app.current_tenant_id() and app.is_tenant_admin())
   with check (tenant_id = app.current_tenant_id() and app.is_tenant_admin());
 
+-- activation_tokens: hashes de ativação/reset — nunca legíveis pela API.
+-- Só o service_role (server-side) manipula; nenhum grant para authenticated.
+drop policy if exists activation_tokens_tenant_scope on public.activation_tokens;
+revoke all on public.activation_tokens from anon, authenticated;
+grant all on public.activation_tokens to service_role;
+create policy activation_tokens_service_only on public.activation_tokens
+  for all to service_role using (true) with check (true);
+
 -- ─── 5. Funções SECURITY DEFINER expostas no schema public ──────────────────
 -- check_slug: lógica movida para o schema privado; wrapper público é INVOKER.
 create or replace function app.check_slug(p_slug text)
