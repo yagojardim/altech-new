@@ -218,94 +218,113 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
             </button>
           )}
 
-          {/* Inspection User Switcher */}
-          <div className="relative mr-2">
-            <button
-              onClick={() => setSwitchOpen(o => !o)}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors"
-              style={{ background: rcStyle.bg, color: rcStyle.color, border: `1px solid ${rcStyle.color}30` }}
-              title="Trocar usuário de inspeção"
-            >
-              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                <circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M1.5 9c0-1.9 1.6-3.5 3.5-3.5s3.5 1.6 3.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-              {rcLabel}
-              <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-            </button>
+          {INSPECTION_MODE_ENABLED ? (
+            <>
+              {/* Inspection User Switcher */}
+              <div className="relative mr-2">
+                <button
+                  onClick={() => setSwitchOpen(o => !o)}
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[11px] font-semibold transition-colors"
+                  style={{ background: rcStyle.bg, color: rcStyle.color, border: `1px solid ${rcStyle.color}30` }}
+                  title="Trocar usuário de inspeção"
+                >
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <circle cx="5" cy="3.5" r="2" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M1.5 9c0-1.9 1.6-3.5 3.5-3.5s3.5 1.6 3.5 3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                  {rcLabel}
+                  <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                    <path d="M1.5 3L4 5.5L6.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                </button>
 
-            {switchOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 z-50 py-1 rounded-xl overflow-hidden fade-rise"
-                style={{ width: 230, background: T.bgSurface, border: `1px solid ${T.border2}`, boxShadow: T.shadowModal }}
-                onMouseLeave={() => setSwitchOpen(false)}
-              >
-                <p className="px-3 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>
-                  Inspection Mode — trocar usuário
-                </p>
-                {MOCK_USERS.map(u => {
-                  const s   = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
-                  const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
-                  const active = u.user_id === activeUser.user_id
-                  return (
-                    <button
-                      key={u.user_id}
-                      onClick={() => handleSwitchUser(u.user_id)}
-                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
-                      style={{ background: active ? `${s.color}14` : 'transparent' }}
-                      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-                      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                    >
-                      <Avatar name={u.name} size="sm" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[12px] font-medium truncate" style={{ color: active ? s.color : T.text1 }}>{u.name}</p>
-                        <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
-                      </div>
-                      {active && (
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
-                          <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </button>
-                  )
-                })}
+                {switchOpen && (
+                  <div
+                    className="absolute right-0 top-full mt-1 z-50 py-1 rounded-xl overflow-hidden fade-rise"
+                    style={{ width: 230, background: T.bgSurface, border: `1px solid ${T.border2}`, boxShadow: T.shadowModal }}
+                    onMouseLeave={() => setSwitchOpen(false)}
+                  >
+                    <p className="px-3 pb-1 pt-0.5 text-[9px] font-semibold uppercase tracking-widest" style={{ color: T.text3 }}>
+                      Inspection Mode — trocar usuário
+                    </p>
+                    {MOCK_USERS.map(u => {
+                      const s   = ROLE_CONTEXT_COLOR[u.role_context] ?? { color: T.accent, bg: T.accentDim }
+                      const lbl = ROLE_CONTEXT_LABEL[u.role_context] ?? u.role_context
+                      const active = u.user_id === activeUser.user_id
+                      return (
+                        <button
+                          key={u.user_id}
+                          onClick={() => handleSwitchUser(u.user_id)}
+                          className="w-full flex items-center gap-2.5 px-3 py-1.5 text-left transition-colors"
+                          style={{ background: active ? `${s.color}14` : 'transparent' }}
+                          onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                          onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                        >
+                          <Avatar name={u.name} size="sm" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-medium truncate" style={{ color: active ? s.color : T.text1 }}>{u.name}</p>
+                            <p className="text-[10px]" style={{ color: T.text3 }}>{lbl}</p>
+                          </div>
+                          {active && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="flex-shrink-0">
+                              <path d="M2 5l2.5 2.5L8 2.5" stroke={s.color} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </button>
+                      )
+                    })}
 
-                {/* Separator + profile actions */}
-                <div className="mx-3 my-1" style={{ height: 1, background: T.border }} />
-                <div className="px-3 py-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
-                  <p className="text-[12px] font-semibold truncate" style={{ color: T.text1 }}>{activeUser.name}</p>
-                  <p className="text-[10px] truncate" style={{ color: T.text3 }}>{activeUser.email}</p>
-                  <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-px rounded-full" style={{ color: rcStyle.color, background: rcStyle.bg }}>
+                    {/* Separator + profile actions */}
+                    <div className="mx-3 my-1" style={{ height: 1, background: T.border }} />
+                    <div className="px-3 py-1.5" style={{ borderBottom: `1px solid ${T.border}` }}>
+                      <p className="text-[12px] font-semibold truncate" style={{ color: T.text1 }}>{activeUser.name}</p>
+                      <p className="text-[10px] truncate" style={{ color: T.text3 }}>{activeUser.email}</p>
+                      <span className="inline-block mt-1 text-[9px] font-bold px-1.5 py-px rounded-full" style={{ color: rcStyle.color, background: rcStyle.bg }}>
+                        {rcLabel}
+                      </span>
+                    </div>
+                    {[
+                      { icon: '👤', label: 'Perfil' },
+                      { icon: '⚙️', label: 'Preferências' },
+                      { icon: '🔑', label: 'Segurança' },
+                      { icon: '🚪', label: 'Sair' },
+                    ].map(item => (
+                      <button
+                        key={item.label}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors text-left"
+                        style={{ color: item.label === 'Sair' ? T.crit : T.text2 }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                        onClick={() => {
+                          setSwitchOpen(false)
+                          if (item.label === 'Sair') void signOut()
+                        }}
+                      >
+                        <span>{item.icon}</span>{item.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="w-px h-4" style={{ background: T.border }} />
+            </>
+          ) : (
+            <>
+              {/* Production: read-only role / user badge */}
+              <div className="flex items-center gap-2 mr-2">
+                <Avatar name={activeUser.name} size="sm" />
+                <div className="hidden sm:flex flex-col items-start leading-tight">
+                  <span className="text-[11px] font-semibold" style={{ color: T.text1 }}>{activeUser.name}</span>
+                  <span className="text-[9px] font-medium px-1.5 py-px rounded-full" style={{ color: rcStyle.color, background: rcStyle.bg }}>
                     {rcLabel}
                   </span>
                 </div>
-                {[
-                  { icon: '👤', label: 'Perfil' },
-                  { icon: '⚙️', label: 'Preferências' },
-                  { icon: '🔑', label: 'Segurança' },
-                  { icon: '🚪', label: 'Sair' },
-                ].map(item => (
-                  <button
-                    key={item.label}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors text-left"
-                    style={{ color: item.label === 'Sair' ? T.crit : T.text2 }}
-                    onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-                    onClick={() => {
-                      setSwitchOpen(false)
-                      if (item.label === 'Sair') void signOut()
-                    }}
-                  >
-                    <span>{item.icon}</span>{item.label}
-                  </button>
-                ))}
               </div>
-            )}
-          </div>
 
-          <div className="w-px h-4" style={{ background: T.border }} />
+              <div className="w-px h-4" style={{ background: T.border }} />
+            </>
+          )}
 
           {/* Date */}
           <span className="hidden sm:block text-[11px] px-2" style={{ color: T.text3 }}>{today()}</span>
