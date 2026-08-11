@@ -24,6 +24,9 @@ export interface SeriesPoint { label: string; value: number }
 
 export interface ReportsData {
   empty: boolean
+  /** Projects the aggregates were computed for (null ⇒ todo o tenant). */
+  scopeProjectIds: string[] | null
+
   velocity: { sprints: SeriesPoint[]; avg: number; max: number }
   burndown: {
     sprintName: string | null
