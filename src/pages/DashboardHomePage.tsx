@@ -1,5 +1,6 @@
 import { useState, useEffect, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
+import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { T } from '../components/ds/tokens'
 import { useClientPortal } from '../data/clientPortalStore'
 import {
@@ -1771,7 +1772,9 @@ export default function DashboardHomePage({ onNav, onInvite }: Props) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <InspectionSwitcher onUserChange={() => { setScope(null); setActiveDash(null); setRev(r => r + 1) }} />
+          {INSPECTION_MODE_ENABLED && (
+            <InspectionSwitcher onUserChange={() => { setScope(null); setActiveDash(null); setRev(r => r + 1) }} />
+          )}
         </div>
       </div>
 
