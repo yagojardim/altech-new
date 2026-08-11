@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { takeReportNav } from '@/lib/reportNav'
 import { T } from '../components/ds/tokens'
 import { WorkItemDetail } from '../components/WorkItemDetail'
 import { useSession } from '../data/SessionContext'
@@ -133,6 +134,13 @@ export default function ListPage() {
   const [fAssignee, setFAssignee] = useState('')
   const [fSprint, setFSprint] = useState('')
   const [fEpic, setFEpic] = useState('')
+  // Deep link from a report/KPI card: open the list already filtered.
+  useEffect(() => {
+    const intent = takeReportNav('list')
+    if (!intent) return
+    if (intent.itemType) setFType(intent.itemType)
+    if (intent.itemStatus) setFStatus(intent.itemStatus)
+  }, [])
 
   const [items, setItems] = useState<ListItemRow[]>([])
   const [labels, setLabels] = useState<ListLabelRow[]>([])

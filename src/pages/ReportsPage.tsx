@@ -272,12 +272,14 @@ function ReportCard({ def, canManage, tick, onAssign, children, focused = false 
 
   return (
     <div
+      id={`report-card-${def.id}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         gridColumn: def.span2 ? 'span 2' : 'span 1',
         background: T.bgSurface,
-        border: `1px solid ${hovered ? T.border2 : T.border}`,
+        border: `1px solid ${focused ? T.accent : hovered ? T.border2 : T.border}`,
+        boxShadow: focused ? `0 0 0 3px ${T.accent}33` : undefined,
         borderRadius: px(12),
         padding: px(20),
         display: 'flex',
