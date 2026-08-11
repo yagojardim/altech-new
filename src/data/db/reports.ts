@@ -319,6 +319,8 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
 
   return {
     empty: totalItems === 0,
+    scopeProjectIds: scoped,
+
     velocity: { sprints: velocitySeries, avg: velAvg, max: velMax },
     burndown,
     cfd: { days: cfdDays, layers: cfdLayers, max: cfdMax * 1.1 },
