@@ -8,6 +8,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { T } from '../components/ds/tokens'
 import { fetchReportsData, type ReportsData } from './db/reports'
+import { setReportNav, type ReportNavIntent } from '@/lib/reportNav'
 
 const px = (n: number) => `${n}px`
 
