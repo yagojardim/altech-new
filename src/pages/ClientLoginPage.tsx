@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { T } from '../components/ds/tokens'
 import { useClientPortal } from '../data/clientPortalStore'
-import { getClientAccessByEmail } from '../data/clientAccess'
-import { MOCK_TENANT } from '../data/session'
+import { portalLogin, type PortalLoginUser } from '../data/db/clientPortal'
 
 interface Props {
   onSuccess: (permission: 'viewer' | 'admin', mustChangePassword: boolean) => void
@@ -21,18 +20,28 @@ export default function ClientLoginPage({ onSuccess }: Props) {
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  const [errorMsg, setErrorMsg] = useState('')
+  const [portalUser, setPortalUser] = useState<PortalLoginUser | null>(null)
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoginState('loading')
-    setTimeout(() => {
-      if (email.includes('admin')) {
-        setLoginState('success-admin')
-      } else if (email.includes('@')) {
-        setLoginState('success-viewer')
-      } else {
+    setErrorMsg('')
+    try {
+      const res = await portalLogin(email)
+      if (!res.ok || !res.user) {
+        setErrorMsg(res.error === 'unavailable' || res.error === 'server_error'
+          ? 'Não foi possível validar o acesso agora. Tente novamente em instantes.'
+          : 'Acesso não encontrado. Verifique suas credenciais ou entre em contato com a empresa que lhe concedeu acesso.')
         setLoginState('error')
+        return
       }
-    }, 1200)
+      setPortalUser(res.user)
+      setLoginState(res.user.permission === 'admin' ? 'success-admin' : 'success-viewer')
+    } catch {
+      setErrorMsg('Não foi possível validar o acesso agora. Tente novamente em instantes.')
+      setLoginState('error')
+    }
   }
 
   const isLoading = loginState === 'loading'
@@ -40,9 +49,7 @@ export default function ClientLoginPage({ onSuccess }: Props) {
   const isAdmin = loginState === 'success-admin'
 
   function handleEnterPortal() {
-    const record = getClientAccessByEmail(MOCK_TENANT.tenant_id, email)
-    const mustChange = record?.password_must_change ?? false
-    onSuccess(isAdmin ? 'admin' : 'viewer', mustChange)
+    onSuccess(isAdmin ? 'admin' : 'viewer', portalUser?.mustChangePassword ?? false)
   }
 
   const inputBase: React.CSSProperties = {
@@ -130,7 +137,7 @@ export default function ClientLoginPage({ onSuccess }: Props) {
                 background: 'rgba(240,128,92,0.1)', border: `1px solid ${T.crit}`, borderRadius: 8,
                 padding: '10px 14px', fontSize: 12, color: T.crit, marginTop: 12, lineHeight: 1.5,
               }}>
-                ⚠ Acesso não encontrado. Verifique suas credenciais ou entre em contato com a empresa que lhe concedeu acesso.
+                ⚠ {errorMsg || 'Acesso não encontrado. Verifique suas credenciais ou entre em contato com a empresa que lhe concedeu acesso.'}
               </div>
             )}
 
