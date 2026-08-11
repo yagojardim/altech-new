@@ -1360,8 +1360,8 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
                     {filteredReports.map(r => (
                       <div key={r.id} style={{ background: T.bgPage, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ height: 80, overflow: 'hidden', borderBottom: `1px solid ${T.border}`, padding: '6px 8px', background: T.bgSurface }}>
-                          <r.Component variant="thumbnail" />
+                        <div style={{ minHeight: 62, borderBottom: `1px solid ${T.border}`, padding: '10px 12px', background: T.bgSurface }}>
+                          <ReportKpiPreview entry={r} compact />
                         </div>
                         <div style={{ padding: '10px 12px 12px', display: 'flex', flexDirection: 'column', flex: 1 }}>
                           <div style={{ fontSize: 12, fontWeight: 700, color: T.text1 }}>{r.title}</div>
@@ -1389,17 +1389,19 @@ function AddCardModal({ availableReports, hiddenNative, onAddReport, onRestoreNa
 }
 
 // ─── Report card tile ─────────────────────────────────────────────────────────
-function ReportCardTile({ slot, onOpen, onDismiss }: {
+function ReportCardTile({ slot, onOpen, onDismiss, onNav }: {
   slot: HomeCardSlot
   onOpen: (cardId: string) => void
   onDismiss: (cardId: string) => void
+  onNav?: (view: string) => void
 }) {
   const [hov, setHov] = useState(false)
   const [xHov, setXHov] = useState(false)
   const entry = REPORT_REGISTRY[slot.cardId]
   return (
     <div
-      onClick={() => onOpen(slot.cardId)}
+      onClick={() => { if (entry) navigateToReport(entry, onNav); else onOpen(slot.cardId) }}
+      title={entry ? `Abrir ${entry.title} na tela correspondente` : undefined}
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
@@ -1443,14 +1445,14 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
         {entry && <div style={{ fontSize: 10, color: T.text3, marginTop: 2 }}>{entry.subtitle}</div>}
       </div>
 
-      {/* Thumbnail */}
+      {/* Real value + type-coherent thumbnail */}
       {entry && (
-        <div style={{ height: 90, overflow: 'hidden', borderRadius: 8, background: T.bgPage, marginBottom: 10 }}>
-          <entry.Component variant="thumbnail" />
+        <div style={{ borderRadius: 8, background: T.bgPage, padding: '10px 12px', marginBottom: 10 }}>
+          <ReportKpiPreview entry={entry} />
         </div>
       )}
 
-      {/* Open button */}
+      {/* Open chart modal */}
       <button
         onClick={e => { e.stopPropagation(); onOpen(slot.cardId) }}
         style={{
@@ -1458,7 +1460,7 @@ function ReportCardTile({ slot, onOpen, onDismiss }: {
           border: `1px solid ${T.accentBorder}`, borderRadius: 5,
           padding: '3px 9px', cursor: 'pointer',
         }}
-      >Abrir →</button>
+      >Ver gráfico →</button>
     </div>
   )
 }
@@ -1697,7 +1699,7 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
             <NativeMuralTile key={card.id} card={card} onDismiss={handleDismissNative} />
           ))}
           {reportSlots.map(slot => (
-            <ReportCardTile key={slot.cardId} slot={slot} onOpen={setOpenChartId} onDismiss={handleDismissReport} />
+            <ReportCardTile key={slot.cardId} slot={slot} onOpen={setOpenChartId} onDismiss={handleDismissReport} onNav={onNav} />
           ))}
         </div>
       )}
@@ -1750,7 +1752,16 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 interface Props { onNav?: (view: string) => void; onInvite?: () => void }
 
-export default function DashboardHomePage({ onNav, onInvite }: Props) {
+export default function DashboardHomePage(props: Props) {
+  // Single shared fetch of the real report aggregates for every KPI/thumbnail below.
+  return (
+    <ReportsDataProvider>
+      <DashboardHomeInner {...props} />
+    </ReportsDataProvider>
+  )
+}
+
+function DashboardHomeInner({ onNav, onInvite }: Props) {
   const { activeUser: user } = useSession()
   const [scope, setScope]           = useState<UserScope | null>(null)
   const [activeDashId, setActiveDash] = useState<DashboardType | null>(null)
