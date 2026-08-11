@@ -1829,8 +1829,14 @@ function HomeFilterProvider({ children }: { children: ReactNode }) {
     })
   }, [allowedKey])
 
-  const selIds = [...sel]
-  const projectIds = allowed.length > 0 && selIds.length < allowed.length ? selIds : undefined
+  // Escopo efetivo dos agregados: a seleção ativa; sem seleção ⇒ todos os
+  // projetos permitidos (RBAC). Nunca `undefined` quando há escopo conhecido,
+  // caso contrário os cards do Board de Composição leriam o tenant inteiro.
+  const allowedIds = allowed.map(p => p.id)
+  const selIds = [...sel].filter(id => allowedIds.includes(id))
+  const scopeIds = selIds.length > 0 ? selIds : allowedIds
+  const projectIds = scopeIds.length > 0 ? scopeIds : undefined
+
 
   return (
     <HomeFilterCtx.Provider value={{ allowed, sel, setSel }}>
