@@ -9,7 +9,7 @@ import {
   INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
-import { logger } from '../utils/logger'
+import { logger, safeCall } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
 
@@ -80,29 +80,39 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStatus(nextStatus)
     }
 
-    async function resolve(u: AuthUser | null) {
+    async function hydrateProfile(u: AuthUser) {
+      const profile = await safeCall(
+        'SessionContext.loadProfileByAuthUserId',
+        () => withTimeout(
+          loadProfileByAuthUserId(u.id, u.email),
+          BOOT_READ_TIMEOUT_MS,
+          'loadProfileByAuthUserId',
+        ),
+        null,
+      )
+      if (!alive || !profile) return
+
+      setDbUser(profile)
+      setMustChange(!!profile.password_must_change)
+      void safeCall(
+        'SessionContext.touchAccess',
+        () => touchAccess(profile.user_id, profile.tenant_id, null),
+        undefined,
+      )
+    }
+
+    function resolve(u: AuthUser | null) {
       if (!alive) return
       setAuthUser(u)
-      try {
-        if (u) {
-          const profile = await withTimeout(
-            loadProfileByAuthUserId(u.id, u.email),
-            BOOT_READ_TIMEOUT_MS,
-            'loadProfileByAuthUserId',
-          )
-          if (!alive) return
-          if (profile) {
-            setDbUser(profile)
-            setMustChange(!!profile.password_must_change)
-            settleStatus('authenticated')
-            void touchAccess(profile.user_id, profile.tenant_id, null)
-            return
-          }
-        }
-      } catch (err) {
-        logger.error('SessionContext.resolve', err)
+
+      if (u) {
+        // Session readiness depends only on Supabase Auth. Profile and feature
+        // data hydrate after rendering and can never hold the app in loading.
+        settleStatus('authenticated')
+        void hydrateProfile(u)
+        return
       }
-      if (!alive) return
+
       setDbUser(null)
       setMustChange(false)
       // Fallback de desenvolvimento: Inspection Mode atrás da flag,
@@ -114,7 +124,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       logger.error('SessionContext.getSession', err)
       settleStatus(fallbackStatus())
     })
-    const unsub = onAuthStateChange(u => { void resolve(u) })
+    const unsub = onAuthStateChange(resolve)
     return () => {
       alive = false
       window.clearTimeout(watchdogId)
