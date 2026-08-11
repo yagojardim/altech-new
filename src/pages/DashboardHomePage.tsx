@@ -41,6 +41,8 @@ import {
   type ReportEntry,
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
+import { useVisibleBoards } from '../data/db/boards'
+import { can } from '../data/permissions'
 import { countActiveModules } from '../data/db/modules'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
