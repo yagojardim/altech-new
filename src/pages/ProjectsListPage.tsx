@@ -248,7 +248,7 @@ function buildProjects(
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 interface Props {
-  onNav?: (v: string) => void
+  onNav?: (v: string, targetId?: string) => void
 }
 
 export default function ProjectsListPage({ onNav }: Props) {

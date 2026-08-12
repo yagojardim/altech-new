@@ -214,7 +214,7 @@ function HealthCard({ p, onOpen }: { p: RagProject; onOpen: () => void }) {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function DashboardPage({ onNav }: { onNav?: (v:string)=>void }) {
+export default function DashboardPage({ onNav }: { onNav?: (v: string, targetId?: string) => void }) {
   const [agg, setAgg]         = useState<DashboardAggregates | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)

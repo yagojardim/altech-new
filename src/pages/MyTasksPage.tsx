@@ -382,7 +382,7 @@ function Toolbar({
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
-export default function MyTasksPage({ onNav }: { onNav?: (view: string) => void }) {
+export default function MyTasksPage({ onNav }: { onNav?: (view: string, targetId?: string) => void }) {
   void onNav
   const [drawerItemId, setDrawerItemId] = useState<string | null>(null)
   const [groupBy, setGroupBy]     = useState<GroupBy>('status')

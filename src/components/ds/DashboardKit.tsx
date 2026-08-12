@@ -727,7 +727,7 @@ function workItemToWID(item: WorkItem): WorkItemData {
 
 // ─── WorkItemDetailDrawer ─────────────────────────────────────────────────────
 export function WorkItemDetailDrawer({ item, onClose, onNav }: {
-  item: WorkItem; onClose: () => void; onNav?: (view: string) => void
+  item: WorkItem; onClose: () => void; onNav?: (view: string, targetId?: string) => void
 }) {
   const { activeUser } = useSession()
   const canEdit = can(activeUser.permissions, 'edit:workitem')

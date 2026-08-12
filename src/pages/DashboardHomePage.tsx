@@ -218,7 +218,7 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
 }
 
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
-function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?: () => void }) {
+function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
   const { activeUser } = useSession()
@@ -362,7 +362,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string) => void; onInvite?
 }
 
 // ─── 2. PMO ───────────────────────────────────────────────────────────────────
-function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
+function PmoPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer: openPmoDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -423,7 +423,7 @@ function PmoPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 3. PROJECT MANAGER ───────────────────────────────────────────────────────
-function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
+function ProjectManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -513,7 +513,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 4. PRODUCT MANAGER ──────────────────────────────────────────────────────
-function ProductManagerPanel({ onNav }: { onNav: (v: string) => void }) {
+function ProductManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
 
@@ -804,7 +804,7 @@ function ClientFeedCard({ poId, tenantId }: { poId?: string; tenantId: string })
 }
 
 // ─── 5. PRODUCT OWNER ────────────────────────────────────────────────────────
-function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
+function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -882,7 +882,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 6. SCRUM MASTER ─────────────────────────────────────────────────────────
-function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
+function ScrumMasterPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -980,7 +980,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 7. TECH LEAD ─────────────────────────────────────────────────────────────
-function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
+function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -1063,7 +1063,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 8. DEV ───────────────────────────────────────────────────────────────────
-function DevPanel({ onNav }: { onNav: (v: string) => void }) {
+function DevPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -1124,7 +1124,7 @@ function DevPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 9. UX / UI ──────────────────────────────────────────────────────────────
-function UxPanel({ onNav }: { onNav: (v: string) => void }) {
+function UxPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -1198,7 +1198,7 @@ function UxPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── 10. QA ──────────────────────────────────────────────────────────────────
-function QaPanel({ onNav }: { onNav: (v: string) => void }) {
+function QaPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
   const { drawerItem, openDrawer, closeDrawer } = useDrawer()
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -1277,7 +1277,7 @@ function QaPanel({ onNav }: { onNav: (v: string) => void }) {
 }
 
 // ─── Panel dispatcher ────────────────────────────────────────────────────────
-function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNav: (v: string) => void; onInvite?: () => void }) {
+function DashboardContent({ type, onNav, onInvite }: { type: DashboardType; onNav: (v: string, targetId?: string) => void; onInvite?: () => void }) {
   // Subscribes every panel below to the shared Supabase aggregate store.
   const { data, loading, error, reload } = useLiveDashboard()
 
@@ -1432,7 +1432,7 @@ function ReportCardTile({ slot, onOpen, onDismiss, onNav }: {
   slot: HomeCardSlot
   onOpen: (cardId: string) => void
   onDismiss: (cardId: string) => void
-  onNav?: (view: string) => void
+  onNav?: (view: string, targetId?: string) => void
 }) {
   const [hov, setHov] = useState(false)
   const [xHov, setXHov] = useState(false)
@@ -1679,7 +1679,7 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
   dashId: DashboardType
   tenantId: string
   nativeCards: MuralNativeCard[]
-  onNav: (v: string) => void
+  onNav: (v: string, targetId?: string) => void
 }) {
   const { activeUser } = useSession()
   const [tick, setTick]               = useState(0)
@@ -1813,7 +1813,7 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 }
 
 // ─── Tenant storage card ──────────────────────────────────────────────────────
-function TenantStorageCard({ role, onNav }: { role: string; onNav: (v: string) => void }) {
+function TenantStorageCard({ role, onNav }: { role: string; onNav: (v: string, targetId?: string) => void }) {
   const [data, setData] = useState<TenantStorage | null>(null)
   const allowed = canViewStorage(role)
 
@@ -1845,7 +1845,7 @@ function TenantStorageCard({ role, onNav }: { role: string; onNav: (v: string) =
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-interface Props { onNav?: (view: string) => void; onInvite?: () => void }
+interface Props { onNav?: (view: string, targetId?: string) => void; onInvite?: () => void }
 
 export default function DashboardHomePage(props: Props) {
   return (

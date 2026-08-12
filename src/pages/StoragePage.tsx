@@ -10,7 +10,7 @@ import {
 import { ProjectFilesDrawer } from '@/components/ProjectFilesDrawer'
 import { StoragePlansModal, canRequestStorage } from '@/components/StoragePlansModal'
 
-interface Props { onNav?: (view: string) => void }
+interface Props { onNav?: (view: string, targetId?: string) => void }
 
 export function usageColor(pct: number): string {
   if (pct > 90) return T.crit

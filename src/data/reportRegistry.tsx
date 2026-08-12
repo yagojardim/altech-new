@@ -919,7 +919,7 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
 export const REPORT_CARDS_LIST: ReportEntry[] = Object.values(REPORT_REGISTRY)
 
 /** Navigates to the screen behind a report card, carrying its filter. */
-export function navigateToReport(entry: ReportEntry, onNav?: (view: string) => void): void {
+export function navigateToReport(entry: ReportEntry, onNav?: (view: string, targetId?: string) => void): void {
   setReportNav(entry.nav)
   onNav?.(entry.nav.view)
 }
