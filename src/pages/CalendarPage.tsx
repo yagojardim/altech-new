@@ -643,7 +643,7 @@ function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConn
   function disconnect() {
     GOOGLE_SYNC.connected = false
     GOOGLE_SYNC.email     = ''
-    removeGoogleEvents()
+    
     setPhase('idle')
     onConnected()
     onClose()
