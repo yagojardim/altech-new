@@ -2097,7 +2097,19 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     Sprints: sprints.length,
   }
 
+  if (projectWithoutBoard) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-2" style={{ background: S.bg, padding: 32 }}>
+        <span style={{ fontSize: 15, fontWeight: 600, color: DS.text1 }}>Projeto sem board</span>
+        <span style={{ fontSize: 12, color: DS.text3, textAlign: 'center', maxWidth: 380 }}>
+          Este projeto ainda não possui um board configurado. Crie um board para visualizar as tarefas em Kanban.
+        </span>
+      </div>
+    )
+  }
+
   return (
+
     <>
     {/* Board context bar — shown when opened from boards list */}
     {boardDef && (
