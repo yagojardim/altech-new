@@ -1,12 +1,60 @@
-import { useState, useRef, useEffect, type CSSProperties } from 'react'
-import { T } from '../components/ds/tokens'
-import { listDeadlines, type DeadlineItem } from '../data/db/calendar'
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
+import { T } from '@/components/ds/tokens'
+import { listDeadlines, type DeadlineItem } from '@/data/db/calendar'
 import {
-  getAllEvents, addEvent, updateEvent, removeEvent,
-  addGoogleEvents, removeGoogleEvents, genMeetLink,
+  MOCK_GOOGLE_EVENTS, genMeetLink,
   GOOGLE_SYNC, type CalendarEvent,
-} from '../data/calendarEvents'
-import { MOCK_USERS, MOCK_TENANT } from '../data/session'
+} from '@/data/calendarEvents'
+import {
+  listCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
+  generateSprintCeremonies,
+  EVENT_TYPES, EVENT_TYPE_LABEL, EVENT_TYPE_COLOR, EVENT_TYPE_ICON,
+  DEFAULT_TENANT_ID, type CalendarEventType, type DbCalendarEvent, type CalendarEventInput,
+} from '@/data/db/calendarEvents'
+import { listSprints, normalizeState } from '@/data/db/sprints'
+import { useSession } from '@/data/SessionContext'
+import { can } from '@/data/permissions'
+import { MOCK_USERS, MOCK_TENANT } from '@/data/session'
+
+/** Maps a persisted calendar_events row into the shape the calendar views render. */
+function toViewEvent(e: DbCalendarEvent): CalendarEvent {
+  return {
+    id: e.id,
+    tenant_id: e.tenantId,
+    title: e.title,
+    start: e.startIso,
+    end: e.endIso,
+    allDay: e.allDay,
+    guests: e.guests,
+    meetLink: e.meetLink,
+    location: e.location,
+    description: e.description,
+    color: e.color,
+    workItemId: e.workItemKey,
+    reminder: e.reminder,
+    source: 'altech',
+    created_by: '',
+    eventType: e.eventType,
+  }
+}
+
+/** Maps the composer output back into the data-layer input. */
+function toEventInput(ev: Omit<CalendarEvent, 'id'>): CalendarEventInput {
+  return {
+    title: ev.title,
+    startIso: ev.start,
+    endIso: ev.end,
+    allDay: ev.allDay,
+    eventType: ev.eventType ?? 'other',
+    guests: ev.guests,
+    location: ev.location,
+    description: ev.description,
+    color: ev.color,
+    meetLink: ev.meetLink,
+    workItemKey: ev.workItemId,
+    reminder: ev.reminder,
+  }
+}
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const DOW_PT    = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
@@ -98,6 +146,7 @@ function EventChip({ ev, onClick }: { ev: CalendarEvent; onClick: () => void }) 
       }}
     >
       {isGoogle && <span style={{ fontSize: 8, color: ev.color, fontWeight: 700, flexShrink: 0 }}>G</span>}
+      {ev.eventType && ev.eventType !== 'other' && <span style={{ fontSize: 9, flexShrink: 0 }}>{EVENT_TYPE_ICON[ev.eventType]}</span>}
       {ev.meetLink && <span style={{ fontSize: 9, flexShrink: 0 }}>📹</span>}
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.title}</span>
     </div>
@@ -156,6 +205,7 @@ function WeekEventBlock({ ev, onClick }: { ev: CalendarEvent; onClick: () => voi
     >
       <div style={{ fontSize: 10, fontWeight: 700, color: ev.color, lineHeight: 1.3, display: 'flex', gap: 4 }}>
         {isGoogle && <span style={{ fontSize: 8 }}>G</span>}
+        {ev.eventType && ev.eventType !== 'other' && <span>{EVENT_TYPE_ICON[ev.eventType]}</span>}
         {ev.meetLink && <span>📹</span>}
         {fmtTime(start)}
       </div>
@@ -306,6 +356,7 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
   const [endT,     setEndT]     = useState(editing ? fmtTime(new Date(editing.end))   : initial.endTime)
   const [allDay,   setAllDay]   = useState(editing?.allDay ?? false)
   const [color,    setColor]    = useState(editing?.color ?? '#3B82F6')
+  const [evType,   setEvType]   = useState<CalendarEventType>(editing?.eventType ?? 'other')
   const [location, setLocation] = useState(editing?.location ?? '')
   const [desc,     setDesc]     = useState(editing?.description ?? '')
   const [workItem, setWorkItem] = useState(editing?.workItemId ?? '')
@@ -344,7 +395,7 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
       meetLink: meetLink || undefined,
       location: location || undefined,
       description: desc || undefined,
-      color, workItemId: workItem || undefined,
+      color, workItemId: workItem || undefined, eventType: evType,
       reminder: reminder ?? undefined,
       source: 'altech', created_by: 'u_po',
     })
@@ -381,6 +432,22 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
             placeholder="Título do evento *"
             style={{ ...inpS, fontSize: 15, fontWeight: 600, padding: '10px 12px' }}
           />
+
+          {/* Event type */}
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>Tipo do evento</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {EVENT_TYPES.map(t => (
+                <button key={t} onClick={() => { setEvType(t); setColor(EVENT_TYPE_COLOR[t]) }} style={{
+                  fontSize: 11, borderRadius: 99, padding: '4px 10px', cursor: 'pointer',
+                  background: evType === t ? `${EVENT_TYPE_COLOR[t]}22` : 'transparent',
+                  color: evType === t ? EVENT_TYPE_COLOR[t] : T.text2,
+                  border: `1px solid ${evType === t ? EVENT_TYPE_COLOR[t] : T.border}`,
+                  fontWeight: evType === t ? 700 : 400,
+                }}>{EVENT_TYPE_ICON[t]} {EVENT_TYPE_LABEL[t]}</button>
+              ))}
+            </div>
+          </div>
 
           {/* All-day toggle */}
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
@@ -569,7 +636,6 @@ function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConn
       GOOGLE_SYNC.connected  = true
       GOOGLE_SYNC.email      = email
       GOOGLE_SYNC.lastSync   = 'agora'
-      addGoogleEvents()
       setPhase('connected')
       onConnected()
     }, 2000)
@@ -577,7 +643,7 @@ function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConn
   function disconnect() {
     GOOGLE_SYNC.connected = false
     GOOGLE_SYNC.email     = ''
-    removeGoogleEvents()
+    
     setPhase('idle')
     onConnected()
     onClose()
@@ -928,10 +994,58 @@ export default function CalendarPage() {
   const [showGSync,  setShowGSync]  = useState(false)
   const { msg: toastMsg, toast }    = useLocalToast()
 
-  const events = getAllEvents(MOCK_TENANT.tenant_id)
+  const { activeUser } = useSession()
+  const canManageSprint = can(activeUser.permissions, 'sprint:manage')
+
+  // Real events from calendar_events (merged with the demo Google feed when connected)
+  const [dbEvents, setDbEvents] = useState<CalendarEvent[]>([])
+  const events: CalendarEvent[] = GOOGLE_SYNC.connected ? [...dbEvents, ...MOCK_GOOGLE_EVENTS] : dbEvents
+
+  const reload = useCallback(async () => {
+    const rows = await listCalendarEvents(DEFAULT_TENANT_ID)
+    setDbEvents(rows.map(toViewEvent))
+  }, [])
+
+  useEffect(() => { void reload() }, [reload])
 
   function refresh() { setTick(t => t + 1) }
   void tick
+  void refresh
+
+  // Sprints available for the ceremony generator
+  const [sprintOpts, setSprintOpts] = useState<{ id: string; name: string; projectId: string; start: string | null; end: string | null }[]>([])
+  const [sprintSel, setSprintSel] = useState('')
+  const [generating, setGenerating] = useState(false)
+  useEffect(() => {
+    let alive = true
+    listSprints()
+      .then(rows => {
+        if (!alive) return
+        const open = rows.filter(s => normalizeState(s.state) !== 'completed')
+        setSprintOpts(open.map(s => ({
+          id: s.id, name: s.name, projectId: s.project_id, start: s.start_date, end: s.end_date,
+        })))
+        setSprintSel(prev => prev || (open[0]?.id ?? ''))
+      })
+      .catch(() => { if (alive) setSprintOpts([]) })
+    return () => { alive = false }
+  }, [])
+
+  async function handleGenerateCeremonies() {
+    const sprint = sprintOpts.find(s => s.id === sprintSel)
+    if (!sprint) { toast('Selecione uma sprint.'); return }
+    setGenerating(true)
+    const res = await generateSprintCeremonies({
+      id: sprint.id, name: sprint.name, projectId: sprint.projectId,
+      startDate: sprint.start, endDate: sprint.end,
+    }, DEFAULT_TENANT_ID, activeUser.name)
+    setGenerating(false)
+    if (res.error) { toast(res.error); return }
+    await reload()
+    toast(res.created === 0
+      ? `Cerimônias já existentes (${res.skipped} mantidas).`
+      : `${res.created} cerimônia(s) criada(s)${res.skipped ? ` · ${res.skipped} já existiam` : ''}.`)
+  }
 
   // Real deadlines (work_items.due_date) from Supabase
   const [deadlineError, setDeadlineError] = useState<string | null>(null)
@@ -970,18 +1084,24 @@ export default function CalendarPage() {
     setDetailEv(null)
     setComposer({ date: fmtDate(new Date(ev.start)), startTime: fmtTime(new Date(ev.start)), endTime: fmtTime(new Date(ev.end)), editEvent: ev })
   }
-  function handleDelete(ev: CalendarEvent) {
-    removeEvent(ev.id); setDetailEv(null); refresh(); toast('Evento removido.')
+  async function handleDelete(ev: CalendarEvent) {
+    setDetailEv(null)
+    if (ev.source === 'google') { toast('Eventos do Google não são removidos aqui.'); return }
+    const ok = await deleteCalendarEvent(ev.id, DEFAULT_TENANT_ID)
+    if (!ok) { toast('Falha ao remover o evento.'); return }
+    await reload()
+    toast('Evento removido.')
   }
-  function handleSave(data: Omit<CalendarEvent,'id'>) {
-    if (composer?.editEvent) {
-      updateEvent(composer.editEvent.id, data)
-      toast('Evento atualizado.')
-    } else {
-      addEvent(data)
-      toast('Evento criado.')
-    }
-    setComposer(null); refresh()
+  async function handleSave(data: Omit<CalendarEvent,'id'>) {
+    const input = toEventInput(data)
+    const editing = composer?.editEvent
+    setComposer(null)
+    const saved = editing
+      ? await updateCalendarEvent(editing.id, input, DEFAULT_TENANT_ID)
+      : await createCalendarEvent({ ...input, createdBy: activeUser.name }, DEFAULT_TENANT_ID)
+    if (!saved) { toast('Falha ao salvar o evento.'); return }
+    await reload()
+    toast(editing ? 'Evento atualizado.' : 'Evento criado.')
   }
 
   // Week view data
@@ -1046,6 +1166,32 @@ export default function CalendarPage() {
 
         {/* Hoje */}
         <button onClick={navToday} style={toolBtn}>Hoje</button>
+
+        {/* Gerador de cerimônias (SM/PO) */}
+        {canManageSprint && sprintOpts.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <select
+              value={sprintSel}
+              onChange={e => setSprintSel(e.target.value)}
+              style={{ ...toolBtn, padding: '5px 8px', maxWidth: 180 }}
+            >
+              {sprintOpts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button
+              onClick={() => { void handleGenerateCeremonies() }}
+              disabled={generating}
+              title="Cria daily, planning, pré-review, review e retrospectivas da sprint"
+              style={{
+                ...toolBtn,
+                background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`,
+                fontWeight: 600, opacity: generating ? 0.6 : 1,
+                cursor: generating ? 'progress' : 'pointer',
+              }}
+            >
+              {generating ? 'Gerando…' : 'Gerar cerimônias da sprint'}
+            </button>
+          </div>
+        )}
 
         {/* Navigation */}
         <button onClick={navPrev} style={{ ...toolBtn, padding: '5px 10px', fontSize: 15 }}>‹</button>

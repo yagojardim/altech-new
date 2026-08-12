@@ -16,6 +16,7 @@ import {
   completeSprint as dbCompleteSprint,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
+import { generateSprintCeremonies, DEFAULT_TENANT_ID } from '@/data/db/calendarEvents'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -79,6 +80,9 @@ interface SprintDef {
   state:       'active' | 'planned' | 'completed'
   velocity?:   number
   completedAt?: string
+  startDate?:  string | null
+  endDate?:    string | null
+  projectId?:  string | null
 }
 
 // Module-level audit log (session-persistent mock)
@@ -1698,7 +1702,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 }
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1707,6 +1711,8 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   error: string | null
   onStartSprint: (sprint: SprintDef) => void
   onCompleteSprint: (sprint: SprintDef) => void
+  onGenerateCeremonies: (sprint: SprintDef) => void
+  generatingCeremonies: string | null
 }) {
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
@@ -1805,6 +1811,22 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                     )}
                     {sprint.state !== 'completed' && (
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                        {canManageSprint && (
+                          <button
+                            onClick={() => onGenerateCeremonies(sprint)}
+                            disabled={generatingCeremonies === sprint.id}
+                            title="Gerar daily, planning, pré-review, review e retrospectivas no Calendário"
+                            className="h-7 px-3 text-[11px] font-medium rounded-lg transition-colors"
+                            style={{
+                              border: `1px solid ${S.border}`,
+                              color: S.t2,
+                              cursor: generatingCeremonies === sprint.id ? 'progress' : 'pointer',
+                              opacity: generatingCeremonies === sprint.id ? 0.6 : 1,
+                            }}
+                          >
+                            {generatingCeremonies === sprint.id ? 'Gerando…' : 'Gerar cerimônias'}
+                          </button>
+                        )}
                         {sprint.state === 'planned' ? (
                           <button
                             onClick={canManageSprint ? () => onStartSprint(sprint) : undefined}
@@ -2015,6 +2037,9 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     end: fmtDay(s.end_date),
     state: (s.state === 'active' || s.state === 'completed' ? s.state : 'planned') as SprintDef['state'],
     velocity: s.velocity != null ? Number(s.velocity) : undefined,
+    startDate: s.start_date,
+    endDate: s.end_date,
+    projectId: s.project_id,
   })), [boardData])
 
   function patchDbIssue(key: string, patch: Partial<Issue>) {
@@ -2050,6 +2075,26 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   const { activeUser }    = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
+
+  // ── Cerimônias da sprint (calendar_events) ──────────────────────────────────
+  const [ceremonySprintId, setCeremonySprintId] = useState<string | null>(null)
+  async function handleGenerateCeremonies(sprint: SprintDef) {
+    setCeremonySprintId(sprint.id)
+    const res = await generateSprintCeremonies({
+      id: sprint.id,
+      name: sprint.name,
+      projectId: sprint.projectId ?? null,
+      startDate: sprint.startDate ?? null,
+      endDate: sprint.endDate ?? null,
+    }, DEFAULT_TENANT_ID, activeUser.name)
+    setCeremonySprintId(null)
+    setToast(res.error
+      ? res.error
+      : res.created === 0
+        ? `Cerimônias de ${sprint.name} já estavam criadas.`
+        : `${res.created} cerimônia(s) de ${sprint.name} criada(s) no Calendário.`)
+    setTimeout(() => setToast(null), 4000)
+  }
 
   const boardDef          = boardId ? getBoardById(boardId) : undefined
   const isArchivedBoard   = boardDef?.status === 'archived'
@@ -2221,6 +2266,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           error={boardError}
           onStartSprint={s=>setStartingSprint(s)}
           onCompleteSprint={s=>setCompletingSprint(s)}
+          onGenerateCeremonies={s=>{ void handleGenerateCeremonies(s) }}
+          generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
         />
       )}
