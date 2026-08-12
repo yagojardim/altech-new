@@ -1950,10 +1950,12 @@ type Tab = 'Board' | 'Backlog' | 'Sprints'
 
 interface ProjectPageProps {
   boardId?: string
+  /** projects.id — usado quando a navegação aponta para um projeto específico. */
+  projectId?: string
   onBackToBoards?: () => void
 }
 
-export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProps = {}) {
+export default function ProjectPage({ boardId, projectId, onBackToBoards }: ProjectPageProps = {}) {
   const [tab, setTab]     = useState<Tab>('Board')
   const [issues, setIssues]   = useState<Issue[]>(INIT_ISSUES)
   const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
@@ -1968,6 +1970,9 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const [boardError, setBoardError] = useState<string|null>(null)
   const [dbIssues, setDbIssues]     = useState<Issue[]>([])
 
+  // Board explícito tem precedência sobre projectId.
+  const scopedProjectId = boardId ? undefined : projectId
+
   const applyBoardData = useCallback((data: BoardData) => {
     const profileById = new Map(data.profiles.map(p => [p.id, p]))
     const epicById    = new Map(data.epics.map(e => [e.id, e]))
@@ -1977,7 +1982,7 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
   const loadBoard = useCallback(async () => {
     setBoardLoading(true); setBoardError(null)
     try {
-      const data = await fetchBoardData(undefined, undefined, boardDef?.name)
+      const data = await fetchBoardData(scopedProjectId, undefined, boardId ? getBoardById(boardId)?.name : undefined)
       setBoardData(data)
       applyBoardData(data)
     } catch (err) {
@@ -1985,9 +1990,13 @@ export default function ProjectPage({ boardId, onBackToBoards }: ProjectPageProp
     } finally {
       setBoardLoading(false)
     }
-  }, [applyBoardData])
+  }, [applyBoardData, scopedProjectId, boardId])
 
   useEffect(() => { void loadBoard() }, [loadBoard])
+
+  /** Projeto alvo sem nenhum board configurado. */
+  const projectWithoutBoard = !!scopedProjectId && !boardLoading && !boardError && !!boardData && !boardData.board
+
 
 
   const dbCols = useMemo<ColState[]>(() => (boardData?.columns ?? []).map(c => ({
