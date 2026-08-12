@@ -448,7 +448,7 @@ function ModulePortfolioCard({ mod, canRequest, trial, busy, onAction, onTrial }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 interface Props {
-  onNav?: (v: string) => void
+  onNav?: (v: string, targetId?: string) => void
 }
 
 type ModalState =

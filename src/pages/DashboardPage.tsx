@@ -214,7 +214,7 @@ function HealthCard({ p, onOpen }: { p: RagProject; onOpen: () => void }) {
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function DashboardPage({ onNav }: { onNav?: (v:string)=>void }) {
+export default function DashboardPage({ onNav }: { onNav?: (v: string, targetId?: string) => void }) {
   const [agg, setAgg]         = useState<DashboardAggregates | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -302,7 +302,7 @@ export default function DashboardPage({ onNav }: { onNav?: (v:string)=>void }) {
               Saúde dos projetos
             </p>
             <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(visProjects.length,3)},1fr)`, gap:12 }}>
-              {visProjects.map(p => <HealthCard key={p.id} p={p} onOpen={() => onNav?.('project')} />)}
+              {visProjects.map(p => <HealthCard key={p.id} p={p} onOpen={() => onNav?.('project', p.id)} />)}
             </div>
           </div>
 
