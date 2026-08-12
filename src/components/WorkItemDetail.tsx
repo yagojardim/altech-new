@@ -10,6 +10,10 @@ import {
   STATUS_TO_DB, PRIORITY_FROM_DB, PRIORITY_TO_DB,
   type WorkItemDetailData, type EditableField,
 } from '../data/db/workItem'
+import {
+  listAttachments, uploadAttachment, getDownloadUrl, bytesToHuman, ACCEPT_ATTR,
+  type AttachmentRow,
+} from '@/data/db/attachments'
 
 // ─── Exported data interfaces ──────────────────────────────────────────────────
 export interface WIComment      { author: string; authorName?: string; body: string; time: string }
