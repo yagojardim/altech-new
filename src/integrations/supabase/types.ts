@@ -182,6 +182,7 @@ export type Database = {
       attachments: {
         Row: {
           archived_at: string | null
+          checksum_sha256: string | null
           created_at: string
           created_by: string | null
           id: string
@@ -189,7 +190,9 @@ export type Database = {
           metadata: Json
           mime_type: string | null
           name: string
+          scan_status: string
           size_bytes: number | null
+          storage_path: string | null
           tenant_id: string
           url: string
           visibility: string
@@ -197,6 +200,7 @@ export type Database = {
         }
         Insert: {
           archived_at?: string | null
+          checksum_sha256?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -204,7 +208,9 @@ export type Database = {
           metadata?: Json
           mime_type?: string | null
           name: string
+          scan_status?: string
           size_bytes?: number | null
+          storage_path?: string | null
           tenant_id: string
           url: string
           visibility?: string
@@ -212,6 +218,7 @@ export type Database = {
         }
         Update: {
           archived_at?: string | null
+          checksum_sha256?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -219,7 +226,9 @@ export type Database = {
           metadata?: Json
           mime_type?: string | null
           name?: string
+          scan_status?: string
           size_bytes?: number | null
+          storage_path?: string | null
           tenant_id?: string
           url?: string
           visibility?: string
@@ -2741,13 +2750,18 @@ export type Database = {
           created_at: string
           created_by: string | null
           display_name: string | null
+          extra_storage_bytes: number
           id: string
           locale: string
           logo_url: string | null
+          max_file_bytes: number
+          max_files_per_project: number
           metadata: Json
           primary_color: string | null
           registrant_profile_id: string | null
           row_version: number
+          storage_plan: string
+          storage_quota_bytes: number
           tenant_id: string
           timezone: string
           updated_at: string
@@ -2764,13 +2778,18 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           display_name?: string | null
+          extra_storage_bytes?: number
           id?: string
           locale?: string
           logo_url?: string | null
+          max_file_bytes?: number
+          max_files_per_project?: number
           metadata?: Json
           primary_color?: string | null
           registrant_profile_id?: string | null
           row_version?: number
+          storage_plan?: string
+          storage_quota_bytes?: number
           tenant_id: string
           timezone?: string
           updated_at?: string
@@ -2787,13 +2806,18 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           display_name?: string | null
+          extra_storage_bytes?: number
           id?: string
           locale?: string
           logo_url?: string | null
+          max_file_bytes?: number
+          max_files_per_project?: number
           metadata?: Json
           primary_color?: string | null
           registrant_profile_id?: string | null
           row_version?: number
+          storage_plan?: string
+          storage_quota_bytes?: number
           tenant_id?: string
           timezone?: string
           updated_at?: string
@@ -3517,7 +3541,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_project_storage: {
+        Row: {
+          file_count: number | null
+          project_id: string | null
+          tenant_id: string | null
+          used_bytes: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_tenant_storage: {
+        Row: {
+          file_count: number | null
+          tenant_id: string | null
+          used_bytes: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       __act_add_tenant_fk: {
@@ -3531,6 +3587,7 @@ export type Database = {
         Returns: undefined
       }
       check_slug: { Args: { p_slug: string }; Returns: string }
+      current_tenant_id: { Args: never; Returns: string }
       ensure_fk: {
         Args: {
           p_columns: string[]
