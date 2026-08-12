@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type CSSProperties } from 'react'
+import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
 import { T } from '@/components/ds/tokens'
 import { listDeadlines, type DeadlineItem } from '@/data/db/calendar'
 import {
@@ -1166,6 +1166,32 @@ export default function CalendarPage() {
 
         {/* Hoje */}
         <button onClick={navToday} style={toolBtn}>Hoje</button>
+
+        {/* Gerador de cerimônias (SM/PO) */}
+        {canManageSprint && sprintOpts.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <select
+              value={sprintSel}
+              onChange={e => setSprintSel(e.target.value)}
+              style={{ ...toolBtn, padding: '5px 8px', maxWidth: 180 }}
+            >
+              {sprintOpts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <button
+              onClick={() => { void handleGenerateCeremonies() }}
+              disabled={generating}
+              title="Cria daily, planning, pré-review, review e retrospectivas da sprint"
+              style={{
+                ...toolBtn,
+                background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`,
+                fontWeight: 600, opacity: generating ? 0.6 : 1,
+                cursor: generating ? 'progress' : 'pointer',
+              }}
+            >
+              {generating ? 'Gerando…' : 'Gerar cerimônias da sprint'}
+            </button>
+          </div>
+        )}
 
         {/* Navigation */}
         <button onClick={navPrev} style={{ ...toolBtn, padding: '5px 10px', fontSize: 15 }}>‹</button>
