@@ -3,6 +3,8 @@ import { WorkItemDetail, type WorkItemData, type WIAcItem, type WILinkedIssue, t
 
 // IssueDetailPage — unified work item detail in page mode
 // Uses WorkItemDetail component shared with the card drawer.
+// When an issueId is provided, the real Supabase row is loaded (loading/erro
+// são tratados dentro do WorkItemDetail); sem id, mantém o mock de referência.
 
 const INITIAL_DATA: WorkItemData = {
   key:              'PM-102',
@@ -70,8 +72,24 @@ const INITIAL_DATA: WorkItemData = {
   ],
 }
 
-export default function IssueDetailPage() {
+interface IssueDetailPageProps {
+  /** work_items.id — quando presente, carrega o item real do Supabase. */
+  issueId?: string
+}
+
+export default function IssueDetailPage({ issueId }: IssueDetailPageProps = {}) {
   const [data, setData] = useState<WorkItemData>(INITIAL_DATA)
+
+  if (issueId) {
+    return (
+      <WorkItemDetail
+        key={issueId}
+        mode="page"
+        itemId={issueId}
+        onUpdate={setData}
+      />
+    )
+  }
 
   return (
     <WorkItemDetail
