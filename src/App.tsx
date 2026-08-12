@@ -255,7 +255,19 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
   const [createOpen, setCreate] = useState(false)
   const [inviteOpen, setInvite] = useState(false)
   const [selectedBoardId, setSelectedBoardId] = useState<string | undefined>()
+  const [selectedProjectId, setSelectedProjectId] = useState<string | undefined>()
+  const [selectedIssueId, setSelectedIssueId] = useState<string | undefined>()
   const [teamInitialTab, setTeamInitialTab] = useState<'membros'|'convites'|'permissoes'|'dashboards'>('membros')
+
+  /** Navegação vinda das páginas — aceita um id de alvo opcional. */
+  function navTo(v: string, targetId?: string) {
+    if (v === 'team:convites') { setTeamInitialTab('convites'); setView('team'); return }
+    if (v === 'team:membros')  { setTeamInitialTab('membros');  setView('team'); return }
+    if (v === 'project' && targetId) { setSelectedProjectId(targetId); setSelectedBoardId(undefined) }
+    if (v === 'issue'   && targetId) { setSelectedIssueId(targetId) }
+    if (ALL_VIEWS.includes(v as View)) setView(v as View)
+  }
+
 
   return (
     <>
