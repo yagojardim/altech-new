@@ -470,7 +470,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) 
       <Grid cols="1fr 1fr">
         {mainRag
           ? <RagCard name={mainRag.name} squad={`${mainRag.squad}${sprintName ? ` · ${sprintName}` : ''}`} rag={mainRag.rag}
-              pct={mainRag.pct} daysLabel={mainRag.daysLabel} reason={mainRag.reason} onClick={() => onNav('project')} />
+              pct={mainRag.pct} daysLabel={mainRag.daysLabel} reason={mainRag.reason} onClick={() => onNav('project', mainRag.id)} />
           : <EmptyState message="Nenhum projeto no escopo selecionado." />}
 
         <ProgressCard pct={agg?.consolidatedPct ?? 0} label="Planejado × Concluído"
