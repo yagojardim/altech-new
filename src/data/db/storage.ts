@@ -88,10 +88,10 @@ export async function fetchProjectStorageRows(tenantId: string): Promise<Project
     const nameById = new Map<string, string>()
     if (creatorIds.length > 0) {
       const { data: profiles } = await supabase.from('profiles')
-        .select('id, full_name')
+        .select('id, name')
         .eq('tenant_id', tenantId)
         .in('id', creatorIds)
-      for (const p of profiles ?? []) nameById.set(p.id, p.full_name ?? '')
+      for (const p of profiles ?? []) nameById.set(p.id, p.name ?? '')
     }
 
     return projects.map<ProjectStorageRow>(p => {
