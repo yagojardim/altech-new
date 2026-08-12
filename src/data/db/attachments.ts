@@ -215,3 +215,146 @@ export async function getDownloadUrl(storagePath: string): Promise<string | null
     return res.data?.signedUrl ?? null
   }, null, { storagePath })
 }
+
+// ─── Project repository (Gestão de Armazenamento) ────────────────────────────
+export interface ProjectAttachmentRow extends AttachmentRow {
+  work_item_id: string
+  work_item_key: string
+  work_item_title: string
+  board_id: string | null
+  board_name: string | null
+}
+
+export interface ProjectBoardOption { id: string; name: string }
+
+/** All non-archived attachments of a project's work items, newest first. */
+export async function listProjectAttachments(
+  tenantId: string,
+  projectId: string,
+  boardId?: string,
+): Promise<ProjectAttachmentRow[]> {
+  return safeCall('attachments.listProjectAttachments', async () => {
+    let itemsQuery = supabase
+      .from('work_items')
+      .select('id, key, title, board_id')
+      .eq('tenant_id', tenantId)
+      .eq('project_id', projectId)
+    if (boardId) itemsQuery = itemsQuery.eq('board_id', boardId)
+
+    const itemsRes = await itemsQuery
+    if (itemsRes.error) throw new Error(itemsRes.error.message)
+    const items = itemsRes.data ?? []
+    if (items.length === 0) return []
+
+    const itemById = new Map(items.map(i => [i.id, i]))
+
+    const attRes = await supabase
+      .from('attachments')
+      .select('id, name, size_bytes, mime_type, storage_path, scan_status, created_by, created_at, work_item_id')
+      .eq('tenant_id', tenantId)
+      .in('work_item_id', items.map(i => i.id))
+      .is('archived_at', null)
+      .order('created_at', { ascending: false })
+    if (attRes.error) throw new Error(attRes.error.message)
+    const rows = attRes.data ?? []
+    if (rows.length === 0) return []
+
+    const boardIds = Array.from(new Set(items.map(i => i.board_id).filter((v): v is string => !!v)))
+    const authorIds = Array.from(new Set(rows.map(r => r.created_by).filter((v): v is string => !!v)))
+
+    const [boardsRes, profRes] = await Promise.all([
+      boardIds.length
+        ? supabase.from('boards').select('id, name').eq('tenant_id', tenantId).in('id', boardIds)
+        : Promise.resolve({ data: [], error: null }),
+      authorIds.length
+        ? supabase.from('profiles').select('id, name').eq('tenant_id', tenantId).in('id', authorIds)
+        : Promise.resolve({ data: [], error: null }),
+    ])
+
+    const boardName = new Map((boardsRes.data ?? []).map(b => [b.id, b.name]))
+    const authorName = new Map((profRes.data ?? []).map(p => [p.id, p.name]))
+
+    return rows.map(r => {
+      const item = itemById.get(r.work_item_id)
+      return {
+        id: r.id,
+        name: r.name,
+        size_bytes: r.size_bytes === null ? null : Number(r.size_bytes),
+        mime_type: r.mime_type,
+        storage_path: r.storage_path,
+        scan_status: r.scan_status,
+        created_by: r.created_by,
+        created_at: r.created_at,
+        uploaded_by_name: r.created_by ? (authorName.get(r.created_by) ?? null) : null,
+        work_item_id: r.work_item_id,
+        work_item_key: item?.key ?? '—',
+        work_item_title: item?.title ?? '—',
+        board_id: item?.board_id ?? null,
+        board_name: item?.board_id ? (boardName.get(item.board_id) ?? null) : null,
+      }
+    })
+  }, [], { tenantId, projectId, boardId })
+}
+
+/** Boards used by a project (for the repository filter). */
+export async function listProjectBoards(tenantId: string, projectId: string): Promise<ProjectBoardOption[]> {
+  return safeCall('attachments.listProjectBoards', async () => {
+    const res = await supabase
+      .from('boards')
+      .select('id, name')
+      .eq('tenant_id', tenantId)
+      .eq('project_id', projectId)
+      .order('name')
+    if (res.error) throw new Error(res.error.message)
+    return (res.data ?? []).map(b => ({ id: b.id, name: b.name }))
+  }, [], { tenantId, projectId })
+}
+
+export interface DeleteAttachmentInput {
+  attachment: ProjectAttachmentRow
+  tenantId: string
+  actorId: string | null
+  actorName: string
+  projectName?: string
+}
+
+export interface DeleteResult { ok: boolean; error?: string }
+
+/** Removes the storage object, records the audit entry and deletes the row. */
+export async function deleteAttachment(input: DeleteAttachmentInput): Promise<DeleteResult> {
+  const { attachment, tenantId, actorId, actorName, projectName } = input
+  return safeCall('attachments.deleteAttachment', async (): Promise<DeleteResult> => {
+    if (attachment.storage_path) {
+      const rm = await supabase.storage.from(BUCKET).remove([attachment.storage_path])
+      if (rm.error) throw new Error(rm.error.message)
+    }
+
+    await supabase.from('audit_logs').insert({
+      tenant_id: tenantId,
+      entity_type: 'attachment',
+      entity_id: attachment.id,
+      action: 'attachment_deleted',
+      actor_id: actorId,
+      actor_name: actorName,
+      before: {
+        name: attachment.name,
+        size_bytes: attachment.size_bytes,
+        project: projectName ?? null,
+        work_item: attachment.work_item_key,
+      },
+    })
+
+    const del = await supabase
+      .from('attachments').delete().eq('id', attachment.id).eq('tenant_id', tenantId)
+    if (del.error) throw new Error(del.error.message)
+
+    return { ok: true }
+  }, { ok: false, error: 'Não foi possível excluir o arquivo' }, { attachmentId: attachment.id })
+}
+
+const DELETE_ROLES = ['Admin', 'ProjectManager', 'ProductOwner', 'TechLead'] as const
+
+/** Dev can view/download but not delete. */
+export function canDeleteAttachments(roleContext: string): boolean {
+  return (DELETE_ROLES as readonly string[]).includes(roleContext)
+}
