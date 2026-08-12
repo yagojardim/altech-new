@@ -3,6 +3,7 @@
  * Tenant-scoped. Never cross-tenant. Events relative to real today.
  */
 import { MOCK_TENANT } from './session'
+import type { CalendarEventType } from './db/calendarEvents'
 
 export interface CalendarEvent {
   id:           string
@@ -19,6 +20,7 @@ export interface CalendarEvent {
   workItemId?:  string   // e.g. 'ALT-139'
   reminder?:    number   // minutes before
   source:       'altech' | 'google'
+  eventType?:   CalendarEventType
   created_by:   string
 }
 
