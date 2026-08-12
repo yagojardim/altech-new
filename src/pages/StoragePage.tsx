@@ -4,10 +4,11 @@ import { useSession } from '@/data/SessionContext'
 import { DEFAULT_TENANT_ID } from '@/data/db/timeline'
 import {
   fetchTenantStorage, fetchProjectStorageRows, bytesToHuman, bucketOf, usagePct,
-  STORAGE_BUCKET_LABEL, EMPTY_TENANT_STORAGE,
+  STORAGE_BUCKET_LABEL, EMPTY_TENANT_STORAGE, canViewStorage,
   type TenantStorage, type ProjectStorageRow, type StorageBucketId,
 } from '@/data/db/storage'
 import { ProjectFilesDrawer } from '@/components/ProjectFilesDrawer'
+import { StoragePlansModal, canRequestStorage } from '@/components/StoragePlansModal'
 
 interface Props { onNav?: (view: string) => void }
 
@@ -42,6 +43,11 @@ export default function StoragePage({ onNav }: Props) {
   const [toast, setToast]     = useState<string | null>(null)
   const [filesFor, setFilesFor] = useState<ProjectStorageRow | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  const [plansOpen, setPlansOpen] = useState(false)
+
+  const role = activeUser.role_context
+  const canView = canViewStorage(role)
+  const canRequest = canRequestStorage(role)
 
   useEffect(() => {
     let alive = true
@@ -102,10 +108,10 @@ export default function StoragePage({ onNav }: Props) {
                 <span style={{ fontSize: 11, color: T.text2, background: `${T.accent}14`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '4px 10px' }}>
                   Plano: <strong style={{ color: T.text1 }}>{tenant.plan}</strong>
                 </span>
-                <button onClick={() => setToast('Em breve')} style={{
+                {canView && <button onClick={() => setPlansOpen(true)} style={{
                   fontSize: 12, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`,
                   borderRadius: 6, padding: '6px 12px', cursor: 'pointer',
-                }}>Fazer upgrade</button>
+                }}>Fazer upgrade</button>}
               </div>
             </div>
             <UsageBar pct={pct} height={12} />
@@ -183,6 +189,17 @@ export default function StoragePage({ onNav }: Props) {
           </div>
         </>
       )}
+
+      <StoragePlansModal
+        open={plansOpen}
+        onClose={() => setPlansOpen(false)}
+        currentPlan={tenant.plan}
+        effectiveBytes={tenant.effectiveBytes}
+        canRequest={canRequest}
+        profileId={activeUser.user_id}
+        actorName={activeUser.name}
+        onToast={setToast}
+      />
 
       {filesFor && (
         <ProjectFilesDrawer

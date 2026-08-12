@@ -272,6 +272,7 @@ export interface ActivationInput {
   notes?: string
   requested_by?: string | null
   actor_name?: string
+  metadata?: Record<string, unknown>
 }
 
 async function requestActivation__raw(
@@ -286,6 +287,7 @@ async function requestActivation__raw(
     expected_use: input.expected_use,
     priority: input.priority,
     notes: input.notes ?? null,
+    metadata: (input.metadata ?? {}) as Record<string, unknown>,
   }
 
   const { data, error } = await tbl('module_activation_requests')
@@ -321,6 +323,15 @@ async function requestActivation__raw(
   })
 
   return row
+}
+
+/** Resolve a catalog module id from its stable key (e.g. 'STORAGE_MANAGER'). */
+export async function findModuleIdByKey(key: string): Promise<string | null> {
+  return safeCall('modules.findModuleIdByKey', async () => {
+    const { data, error } = await tbl('modules').select('id').eq('key', key).maybeSingle()
+    if (error) throw moduleError('modules', error.message)
+    return (data?.id as string | undefined) ?? null
+  }, null, { key })
 }
 
 export function requestActivation(
