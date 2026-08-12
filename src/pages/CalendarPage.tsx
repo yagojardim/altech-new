@@ -994,10 +994,58 @@ export default function CalendarPage() {
   const [showGSync,  setShowGSync]  = useState(false)
   const { msg: toastMsg, toast }    = useLocalToast()
 
-  const events = getAllEvents(MOCK_TENANT.tenant_id)
+  const { activeUser } = useSession()
+  const canManageSprint = can(activeUser.permissions, 'sprint:manage')
+
+  // Real events from calendar_events (merged with the demo Google feed when connected)
+  const [dbEvents, setDbEvents] = useState<CalendarEvent[]>([])
+  const events: CalendarEvent[] = GOOGLE_SYNC.connected ? [...dbEvents, ...MOCK_GOOGLE_EVENTS] : dbEvents
+
+  const reload = useCallback(async () => {
+    const rows = await listCalendarEvents(DEFAULT_TENANT_ID)
+    setDbEvents(rows.map(toViewEvent))
+  }, [])
+
+  useEffect(() => { void reload() }, [reload])
 
   function refresh() { setTick(t => t + 1) }
   void tick
+  void refresh
+
+  // Sprints available for the ceremony generator
+  const [sprintOpts, setSprintOpts] = useState<{ id: string; name: string; projectId: string; start: string | null; end: string | null }[]>([])
+  const [sprintSel, setSprintSel] = useState('')
+  const [generating, setGenerating] = useState(false)
+  useEffect(() => {
+    let alive = true
+    listSprints()
+      .then(rows => {
+        if (!alive) return
+        const open = rows.filter(s => normalizeState(s.state) !== 'completed')
+        setSprintOpts(open.map(s => ({
+          id: s.id, name: s.name, projectId: s.project_id, start: s.start_date, end: s.end_date,
+        })))
+        setSprintSel(prev => prev || (open[0]?.id ?? ''))
+      })
+      .catch(() => { if (alive) setSprintOpts([]) })
+    return () => { alive = false }
+  }, [])
+
+  async function handleGenerateCeremonies() {
+    const sprint = sprintOpts.find(s => s.id === sprintSel)
+    if (!sprint) { toast('Selecione uma sprint.'); return }
+    setGenerating(true)
+    const res = await generateSprintCeremonies({
+      id: sprint.id, name: sprint.name, projectId: sprint.projectId,
+      startDate: sprint.start, endDate: sprint.end,
+    }, DEFAULT_TENANT_ID, activeUser.name)
+    setGenerating(false)
+    if (res.error) { toast(res.error); return }
+    await reload()
+    toast(res.created === 0
+      ? `Cerimônias já existentes (${res.skipped} mantidas).`
+      : `${res.created} cerimônia(s) criada(s)${res.skipped ? ` · ${res.skipped} já existiam` : ''}.`)
+  }
 
   // Real deadlines (work_items.due_date) from Supabase
   const [deadlineError, setDeadlineError] = useState<string | null>(null)
@@ -1036,18 +1084,24 @@ export default function CalendarPage() {
     setDetailEv(null)
     setComposer({ date: fmtDate(new Date(ev.start)), startTime: fmtTime(new Date(ev.start)), endTime: fmtTime(new Date(ev.end)), editEvent: ev })
   }
-  function handleDelete(ev: CalendarEvent) {
-    removeEvent(ev.id); setDetailEv(null); refresh(); toast('Evento removido.')
+  async function handleDelete(ev: CalendarEvent) {
+    setDetailEv(null)
+    if (ev.source === 'google') { toast('Eventos do Google não são removidos aqui.'); return }
+    const ok = await deleteCalendarEvent(ev.id, DEFAULT_TENANT_ID)
+    if (!ok) { toast('Falha ao remover o evento.'); return }
+    await reload()
+    toast('Evento removido.')
   }
-  function handleSave(data: Omit<CalendarEvent,'id'>) {
-    if (composer?.editEvent) {
-      updateEvent(composer.editEvent.id, data)
-      toast('Evento atualizado.')
-    } else {
-      addEvent(data)
-      toast('Evento criado.')
-    }
-    setComposer(null); refresh()
+  async function handleSave(data: Omit<CalendarEvent,'id'>) {
+    const input = toEventInput(data)
+    const editing = composer?.editEvent
+    setComposer(null)
+    const saved = editing
+      ? await updateCalendarEvent(editing.id, input, DEFAULT_TENANT_ID)
+      : await createCalendarEvent({ ...input, createdBy: activeUser.name }, DEFAULT_TENANT_ID)
+    if (!saved) { toast('Falha ao salvar o evento.'); return }
+    await reload()
+    toast(editing ? 'Evento atualizado.' : 'Evento criado.')
   }
 
   // Week view data
