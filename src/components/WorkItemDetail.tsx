@@ -867,7 +867,8 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   onClose?:  () => void
   mode?:     'drawer' | 'page'
 }) {
-  const { activeUser } = useSession()
+  const { activeUser, status: sessionStatus } = useSession()
+  const isAuthenticated = sessionStatus === 'authenticated'
   const canEdit = can(activeUser.permissions, 'edit:workitem')
   const data = dataProp ?? EMPTY_WORK_ITEM
 
