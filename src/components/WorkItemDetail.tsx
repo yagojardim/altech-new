@@ -1275,6 +1275,16 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                 </section>
               )}
 
+              {/* Attachments */}
+              <AttachmentsSection
+                tenantId={dbRef.current?.item.tenant_id ?? null}
+                workItemId={itemId ?? null}
+                profileId={actorProfileId}
+                canUpload={isAuthenticated}
+                onCountChange={n => setLocal(prev => ({ ...prev, attachmentCount: n }))}
+                onError={msg => setToast(msg)}
+              />
+
               {/* Activity: history + comments */}
               <section style={{ marginBottom:22 }}>
                 <SecHeader title="Atividade" />
