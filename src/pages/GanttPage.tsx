@@ -250,9 +250,174 @@ function ProjectDropdown({ projects, selected, onChange }: ProjectDropdownProps)
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
+type LoadState = 'loading' | 'ready' | 'error'
+
+const EMPTY_DATA: TimelineData = {
+  projects: [], epics: [], sprints: [], workItems: [], dependencies: [], profiles: [],
+}
+
 export default function GanttPage() {
+  const { activeUser } = useSession()
+  const tenantId  = activeUser.tenant_id
+  const profileId = activeUser.user_id
+  const permKey   = useMemo(
+    () => (Array.isArray(activeUser.permissions) ? activeUser.permissions : []).join(','),
+    [activeUser.permissions],
+  )
+
+  const [data, setData]       = useState<TimelineData>(EMPTY_DATA)
+  const [state, setState]     = useState<LoadState>('loading')
+  const [allowedIds, setAllowedIds] = useState<string[] | null>(null)
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set())
-  const [selectedProjects,  setSelectedProjects]  = useState<Set<string>>(new Set(PROJECTS.map(p => p.id)))
+  const [selectedProjects,  setSelectedProjects]  = useState<Set<string> | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setState('loading')
+    async function load() {
+      try {
+        const [timeline, assigned] = await Promise.all([
+          fetchTimelineData(),
+          fetchAssignedProjects({
+            tenantId, profileId,
+            permissions: permKey ? permKey.split(',') : [],
+          }),
+        ])
+        if (!alive) return
+        setData(timeline)
+        setAllowedIds(assigned.map(p => p.id))
+        setState('ready')
+      } catch {
+        if (!alive) return
+        setData(EMPTY_DATA)
+        setAllowedIds([])
+        setState('error')
+      }
+    }
+    void load()
+    return () => { alive = false }
+  }, [tenantId, profileId, permKey])
+
+  // Projects the profile may see, in the same order returned by the timeline read.
+  const projects: GProject[] = useMemo(() => {
+    const allow = new Set(allowedIds ?? [])
+    return data.projects
+      .filter(p => allow.has(p.id))
+      .map((p, i) => ({
+        id: p.id,
+        name: p.name,
+        short: shortName(p.name),
+        color: projectColor(p as ProjectRow, i),
+      }))
+  }, [data.projects, allowedIds])
+
+  // Default selection = every allowed project.
+  useEffect(() => {
+    setSelectedProjects(prev => {
+      if (prev && [...prev].every(id => projects.some(p => p.id === id)) && prev.size > 0) return prev
+      return new Set(projects.map(p => p.id))
+    })
+  }, [projects])
+
+  const selected = selectedProjects ?? new Set(projects.map(p => p.id))
+
+  // ── Build ruler + rows ──────────────────────────────────────────────────────
+  const { months, rows, todayOffset } = useMemo(() => {
+    const visibleProjects = projects.filter(p => selected.has(p.id))
+    const byProject = new Map<string, WorkItemRow[]>()
+    for (const item of data.workItems) {
+      if (!item.project_id || !selected.has(item.project_id)) continue
+      const list = byProject.get(item.project_id) ?? []
+      list.push(item)
+      byProject.set(item.project_id, list)
+    }
+
+    interface Span { start: Date | null; end: Date | null }
+    const projectSpan = new Map<string, Span>()
+    const itemSpan    = new Map<string, Span>()
+    const dates: Date[] = []
+
+    for (const p of visibleProjects) {
+      const raw = data.projects.find(x => x.id === p.id)
+      let start = parseDate(raw?.period_start)
+      let end   = parseDate(raw?.period_end)
+      const items = byProject.get(p.id) ?? []
+
+      for (const it of items) {
+        const s = parseDate(it.start_date)
+        const e = parseDate(it.due_date)
+        const from = s ?? e
+        const to   = e ?? s
+        if (from && to) itemSpan.set(it.id, { start: from, end: to })
+        else itemSpan.set(it.id, { start: null, end: null })
+        if (from) dates.push(from)
+        if (to) dates.push(to)
+      }
+
+      if (!start || !end) {
+        const spans = items.map(it => itemSpan.get(it.id)).filter((s): s is Span => !!s && !!s.start && !!s.end)
+        if (spans.length > 0) {
+          const min = spans.reduce((a, b) => (b.start! < a ? b.start! : a), spans[0].start!)
+          const max = spans.reduce((a, b) => (b.end! > a ? b.end! : a), spans[0].end!)
+          start = start ?? min
+          end   = end ?? max
+        }
+      }
+      projectSpan.set(p.id, { start, end })
+      if (start) dates.push(start)
+      if (end) dates.push(end)
+    }
+
+    const today = new Date()
+    dates.push(today)
+
+    if (dates.length === 0) {
+      return { months: [] as MonthCell[], rows: [] as GRow[], todayOffset: 0 }
+    }
+
+    const minDate = dates.reduce((a, b) => (b < a ? b : a), dates[0])
+    const maxDate = dates.reduce((a, b) => (b > a ? b : a), dates[0])
+    const originAbs = minDate.getFullYear() * 12 + minDate.getMonth()
+    const lastAbs   = maxDate.getFullYear() * 12 + maxDate.getMonth()
+    const count     = Math.max(1, lastAbs - originAbs + 1)
+
+    const monthCells: MonthCell[] = Array.from({ length: count }, (_, i) => {
+      const abs   = originAbs + i
+      const year  = Math.floor(abs / 12)
+      const month = abs % 12
+      return { key: `${year}-${month}`, label: MONTH_ABBR[month], year, month }
+    })
+
+    const offset = (d: Date | null): number | null => (d ? absMonth(d) - originAbs : null)
+
+    const built: GRow[] = []
+    for (const p of visibleProjects) {
+      const span  = projectSpan.get(p.id)
+      const items = byProject.get(p.id) ?? []
+      const done  = items.filter(it => it.status === 'done').length
+      built.push({
+        id: p.id, projectId: p.id, name: p.name, isProject: true, color: p.color,
+        start: offset(span?.start ?? null),
+        end: offset(span?.end ?? null),
+        pct: items.length > 0 ? Math.round((done / items.length) * 100) : undefined,
+      })
+      if (collapsedProjects.has(p.id)) continue
+      for (const it of items) {
+        const s = itemSpan.get(it.id)
+        const startOff = offset(s?.start ?? null)
+        const endOff   = offset(s?.end ?? null)
+        built.push({
+          id: it.id, projectId: p.id,
+          name: it.key ? `${it.key} · ${it.title}` : it.title,
+          color: DB_STATUS_CFG[it.status]?.color ?? p.color,
+          start: startOff,
+          end: endOff === null ? null : Math.max(endOff, (startOff ?? endOff) + 0.08),
+        })
+      }
+    }
+
+    return { months: monthCells, rows: built, todayOffset: absMonth(today) - originAbs }
+  }, [projects, selected, data.projects, data.workItems, collapsedProjects])
 
   function toggleProject(id: string) {
     setCollapsedProjects(prev => {
@@ -262,14 +427,10 @@ export default function GanttPage() {
     })
   }
 
-  // Filter rows by selected projects, then by collapse state
-  const visibleRows = ALL_ROWS.filter(r =>
-    selectedProjects.has(r.projectId) &&
-    (r.isProject || !collapsedProjects.has(r.projectId))
-  )
-
-  const visibleProjects = PROJECTS.filter(p => selectedProjects.has(p.id))
-  const totalW = MONTHS.length * MONTH_W
+  const visibleProjects = projects.filter(p => selected.has(p.id))
+  const totalW = Math.max(months.length, 1) * MONTH_W
+  const todayMonthIdx = months.findIndex(m => m.year === new Date().getFullYear() && m.month === new Date().getMonth())
+  const todayLabel = `${MONTH_ABBR[new Date().getMonth()].charAt(0)}${MONTH_ABBR[new Date().getMonth()].slice(1).toLowerCase()} ${new Date().getFullYear()}`
 
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#080f1c' }}>
@@ -290,14 +451,16 @@ export default function GanttPage() {
 
         {/* Right: controls */}
         <div className="flex items-center gap-4 flex-shrink-0">
-          <ProjectDropdown
-            projects={PROJECTS}
-            selected={selectedProjects}
-            onChange={setSelectedProjects}
-          />
+          {projects.length > 0 && (
+            <ProjectDropdown
+              projects={projects}
+              selected={selected}
+              onChange={setSelectedProjects}
+            />
+          )}
           <div className="flex items-center gap-1.5 text-[11px]" style={{ color: '#546278' }}>
             <span style={{ display: 'inline-block', width: 20, borderTop: '1px dashed #F0455A', opacity: 0.7 }} />
-            Hoje (Jun 2025)
+            Hoje ({todayLabel})
           </div>
         </div>
       </div>
@@ -316,27 +479,37 @@ export default function GanttPage() {
               </span>
             </div>
             <div className="flex relative" style={{ width: totalW }}>
-              {MONTHS.map((m, i) => (
+              {months.map((m, i) => (
                 <div
-                  key={m}
+                  key={m.key}
                   className="flex-shrink-0 text-center py-2.5 text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ width: MONTH_W, color: i === 5 ? '#4d82ff' : '#3a4d65', borderRight: '1px solid #162032' }}
+                  style={{ width: MONTH_W, color: i === todayMonthIdx ? '#4d82ff' : '#3a4d65', borderRight: '1px solid #162032' }}
                 >
-                  {m}
+                  {m.label}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Empty state */}
-          {visibleRows.length === 0 && (
+          {/* States */}
+          {state === 'loading' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#3a4d65', fontSize: 13 }}>
-              Nenhum projeto selecionado
+              Carregando dados do Gantt…
+            </div>
+          )}
+          {state === 'error' && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#F0455A', fontSize: 13 }}>
+              Não foi possível carregar o Gantt agora.
+            </div>
+          )}
+          {state === 'ready' && rows.length === 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: '#3a4d65', fontSize: 13 }}>
+              Nenhum projeto disponível para exibir
             </div>
           )}
 
           {/* Rows */}
-          {visibleRows.map((row, i) => {
+          {rows.map((row, i) => {
             const isProj = row.isProject
             const isCollapsed = isProj && collapsedProjects.has(row.id)
 
@@ -383,20 +556,20 @@ export default function GanttPage() {
 
                 {/* Bar area */}
                 <div className="relative flex-1" style={{ height: '100%', width: totalW }}>
-                  {MONTHS.map((_, mi) => (
+                  {months.map((m, mi) => (
                     <div
-                      key={mi}
+                      key={m.key}
                       className="absolute top-0 bottom-0"
                       style={{
                         left: mi * MONTH_W, width: MONTH_W,
                         borderRight: '1px solid #0d1a2d',
-                        background: mi === 5 ? 'rgba(77,130,255,0.03)' : 'transparent',
+                        background: mi === todayMonthIdx ? 'rgba(77,130,255,0.03)' : 'transparent',
                       }}
                     />
                   ))}
                   <div
                     className="absolute top-0 bottom-0 z-10"
-                    style={{ left: TODAY_MONTH * MONTH_W, width: 1, background: '#F0455A', opacity: 0.8 }}
+                    style={{ left: todayOffset * MONTH_W, width: 1, background: '#F0455A', opacity: 0.8 }}
                   />
                   <GanttBar row={row} />
                 </div>
@@ -408,3 +581,4 @@ export default function GanttPage() {
     </div>
   )
 }
+
