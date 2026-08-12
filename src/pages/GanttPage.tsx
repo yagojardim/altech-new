@@ -1,17 +1,23 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
+import { useSession } from '@/data/SessionContext'
+import {
+  fetchTimelineData, projectColor, DB_STATUS_CFG,
+  type TimelineData, type ProjectRow, type WorkItemRow,
+} from '@/data/db/timeline'
+import { fetchAssignedProjects } from '@/data/db/projects'
 
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const MONTHS = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET']
+// ─── Constants ────────────────────────────────────────────────────────────────
+const MONTH_ABBR = ['JAN', 'FEV', 'MAR', 'ABR', 'MAI', 'JUN', 'JUL', 'AGO', 'SET', 'OUT', 'NOV', 'DEZ']
 const MONTH_W = 60
-const TODAY_MONTH = 5.5 // mid-June
 
 interface GRow {
   id:         string
   name:       string
   isProject?: boolean
   color:      string
-  start:      number
-  end:        number
+  /** Fractional month offset from the ruler origin. Null when the row has no dates. */
+  start:      number | null
+  end:        number | null
   pct?:       number
   projectId:  string
 }
@@ -23,34 +29,31 @@ interface GProject {
   color: string
 }
 
-const PROJECTS: GProject[] = [
-  { id: 'galpao',  name: 'Construção do Galpão Industrial', short: 'Galpão Industrial', color: '#4d82ff' },
-  { id: 'erp',     name: 'Sistema ERP Corporativo',         short: 'ERP Corporativo',   color: '#7C3AED' },
-  { id: 'reforma', name: 'Reforma da Sede Corporativa',     short: 'Reforma da Sede',   color: '#06C18A' },
-]
+interface MonthCell { key: string; label: string; year: number; month: number }
 
-const ALL_ROWS: GRow[] = [
-  // ── Galpão Industrial ─────────────────────────────────────────────────────
-  { id: 'galpao',  projectId: 'galpao',  name: 'Construção do Galpão Industrial', isProject: true,  color: '#4d82ff', start: 0,   end: 4.5, pct: 9  },
-  { id: 'g1',      projectId: 'galpao',  name: 'Fundação e Estrutura',                               color: '#4d82ff', start: 0,   end: 3               },
-  { id: 'g2',      projectId: 'galpao',  name: 'Instalações Elétricas',                              color: '#5a8eff', start: 0.1, end: 3.2             },
-  { id: 'g3',      projectId: 'galpao',  name: 'Cobertura e Vedação',                                color: '#4d82ff', start: 3.8, end: 5.2             },
-  { id: 'g4',      projectId: 'galpao',  name: 'Instalações Hidráulicas',                            color: '#6a9eff', start: 4,   end: 6               },
-  { id: 'g5',      projectId: 'galpao',  name: 'Acabamentos e Entrega',                              color: '#324060', start: 5.5, end: 8               },
-  // ── ERP Corporativo ───────────────────────────────────────────────────────
-  { id: 'erp',     projectId: 'erp',     name: 'Sistema ERP Corporativo',         isProject: true,  color: '#7C3AED', start: 1,   end: 6.5, pct: 48 },
-  { id: 'e1',      projectId: 'erp',     name: 'Levantamento de Requisitos',                         color: '#06C18A', start: 1,   end: 3               },
-  { id: 'e2',      projectId: 'erp',     name: 'Desenvolvimento do Sistema',                         color: '#4d82ff', start: 2.5, end: 7               },
-  { id: 'e3',      projectId: 'erp',     name: 'Testes e Homologação',                               color: '#324060', start: 5.5, end: 9               },
-  // ── Reforma da Sede ───────────────────────────────────────────────────────
-  { id: 'reforma', projectId: 'reforma', name: 'Reforma da Sede Corporativa',     isProject: true,  color: '#06C18A', start: 5,   end: 8.5, pct: 5  },
-  { id: 'r1',      projectId: 'reforma', name: 'Projeto Arquitetônico',                              color: '#06C18A', start: 5,   end: 8               },
-  { id: 'r2',      projectId: 'reforma', name: 'Obras Civis',                                        color: '#324060', start: 7,   end: 9               },
-  { id: 'r3',      projectId: 'reforma', name: 'Mobiliário e Acabamentos',                           color: '#2a3550', start: 8,   end: 9               },
-]
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) return null
+  const d = new Date(`${value.slice(0, 10)}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function daysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate()
+}
+
+/** Absolute fractional month index (year*12 + month + day fraction). */
+function absMonth(d: Date): number {
+  return d.getFullYear() * 12 + d.getMonth() + (d.getDate() - 1) / daysInMonth(d.getFullYear(), d.getMonth())
+}
+
+function shortName(name: string): string {
+  return name.length > 22 ? `${name.slice(0, 21)}…` : name
+}
 
 // ─── Gantt bar ────────────────────────────────────────────────────────────────
 function GanttBar({ row }: { row: GRow }) {
+  if (row.start === null || row.end === null) return null
   const left  = row.start * MONTH_W
   const width = Math.max((row.end - row.start) * MONTH_W, 4)
   return (
@@ -60,7 +63,6 @@ function GanttBar({ row }: { row: GRow }) {
         left, width,
         height: row.isProject ? 24 : 16,
         background: row.color,
-        opacity: row.color === '#324060' || row.color === '#2a3550' ? 0.6 : 1,
       }}
     >
       {row.pct !== undefined && width > 50 && (
@@ -69,6 +71,7 @@ function GanttBar({ row }: { row: GRow }) {
     </div>
   )
 }
+
 
 // ─── Multi-select dropdown ────────────────────────────────────────────────────
 interface ProjectDropdownProps {
