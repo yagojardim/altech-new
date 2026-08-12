@@ -16,6 +16,7 @@ import {
   completeSprint as dbCompleteSprint,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
+import { generateSprintCeremonies, DEFAULT_TENANT_ID } from '@/data/db/calendarEvents'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
