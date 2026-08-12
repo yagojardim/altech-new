@@ -10,6 +10,10 @@ import {
   STATUS_TO_DB, PRIORITY_FROM_DB, PRIORITY_TO_DB,
   type WorkItemDetailData, type EditableField,
 } from '../data/db/workItem'
+import {
+  listAttachments, uploadAttachment, getDownloadUrl, bytesToHuman, ACCEPT_ATTR,
+  type AttachmentRow,
+} from '@/data/db/attachments'
 
 // ─── Exported data interfaces ──────────────────────────────────────────────────
 export interface WIComment      { author: string; authorName?: string; body: string; time: string }
@@ -743,6 +747,110 @@ function toWorkItemData(d: WorkItemDetailData): WorkItemData {
   }
 }
 
+// ─── Attachments ──────────────────────────────────────────────────────────────
+function AttachmentsSection({ tenantId, workItemId, profileId, canUpload, onCountChange, onError }: {
+  tenantId:  string | null
+  workItemId: string | null
+  profileId: string | null
+  canUpload: boolean
+  onCountChange: (n: number) => void
+  onError: (msg: string) => void
+}) {
+  const [rows,    setRows]    = useState<AttachmentRow[]>([])
+  const [loading, setLoading] = useState(false)
+  const [busy,    setBusy]    = useState(false)
+  const [error,   setError]   = useState<string | null>(null)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+
+  const reload = useCallback(async () => {
+    if (!tenantId || !workItemId) return
+    setLoading(true); setError(null)
+    const list = await listAttachments(tenantId, workItemId)
+    setRows(list)
+    onCountChange(list.length)
+    setLoading(false)
+  }, [tenantId, workItemId, onCountChange])
+
+  useEffect(() => { void reload() }, [reload])
+
+  async function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !tenantId || !workItemId) return
+    setBusy(true); setError(null)
+    try {
+      await uploadAttachment({ tenantId, workItemId, file, profileId })
+      await reload()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(msg); onError(msg)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleDownload(row: AttachmentRow) {
+    if (!row.storage_path) { onError('Arquivo sem caminho de armazenamento'); return }
+    const url = await getDownloadUrl(row.storage_path)
+    if (!url) { onError('Não foi possível gerar o link de download'); return }
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
+  const uploadDisabled = !canUpload || busy || !tenantId || !workItemId
+
+  return (
+    <section style={{ marginBottom:22 }}>
+      <SecHeader title="Anexos" count={rows.length}
+        action={
+          <button
+            onClick={() => inputRef.current?.click()}
+            disabled={uploadDisabled}
+            title={canUpload ? 'Enviar arquivo' : 'Disponível após login'}
+            style={{
+              fontSize:11, border:'none', background:'transparent', padding:'2px 8px', borderRadius:6,
+              color: uploadDisabled ? T.text3 : T.accent,
+              cursor: uploadDisabled ? 'not-allowed' : 'pointer',
+              opacity: uploadDisabled ? 0.6 : 1,
+            }}>
+            {busy ? 'Enviando…' : '+ Enviar arquivo'}
+          </button>
+        }
+      />
+      <input ref={inputRef} type="file" accept={ACCEPT_ATTR} onChange={handlePick} style={{ display:'none' }} />
+
+      {loading ? (
+        <div style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Carregando anexos…</div>
+      ) : rows.length === 0 ? (
+        <div style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhum anexo neste item.</div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+          {rows.map(r => (
+            <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 8px', borderRadius:8 }}
+              onMouseEnter={e=>{(e.currentTarget as HTMLDivElement).style.background=T.bgSurface2}}
+              onMouseLeave={e=>{(e.currentTarget as HTMLDivElement).style.background='transparent'}}>
+              <span style={{ flex:1, minWidth:0, fontSize:12, color:T.text1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
+              <span style={{ fontSize:10, color:T.text3, flexShrink:0 }}>{bytesToHuman(r.size_bytes)}</span>
+              <span style={{ fontSize:10, color:T.text3, flexShrink:0, maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.uploaded_by_name ?? '—'}</span>
+              <span style={{ fontSize:10, color:T.text3, flexShrink:0 }}>{fmtTime(r.created_at)}</span>
+              <button onClick={() => { void handleDownload(r) }}
+                style={{ fontSize:11, border:`1px solid ${T.border}`, background:'transparent', color:T.accent, cursor:'pointer', padding:'2px 8px', borderRadius:6, flexShrink:0 }}>
+                Baixar
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ marginTop:8, fontSize:11, color:T.crit }}>{error}</div>
+      )}
+      {!canUpload && (
+        <div style={{ marginTop:8, fontSize:10, color:T.text3, fontStyle:'italic' }}>Envio de arquivos disponível após login.</div>
+      )}
+    </section>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 /** Placeholder used while an itemId-driven panel loads its real row. */
 const EMPTY_WORK_ITEM: WorkItemData = {
@@ -759,7 +867,8 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   onClose?:  () => void
   mode?:     'drawer' | 'page'
 }) {
-  const { activeUser } = useSession()
+  const { activeUser, status: sessionStatus } = useSession()
+  const isAuthenticated = sessionStatus === 'authenticated'
   const canEdit = can(activeUser.permissions, 'edit:workitem')
   const data = dataProp ?? EMPTY_WORK_ITEM
 
@@ -1274,6 +1383,16 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                   </div>
                 </section>
               )}
+
+              {/* Attachments */}
+              <AttachmentsSection
+                tenantId={dbRef.current?.item.tenant_id ?? null}
+                workItemId={itemId ?? null}
+                profileId={actorProfileId}
+                canUpload={isAuthenticated}
+                onCountChange={n => setLocal(prev => ({ ...prev, attachmentCount: n }))}
+                onError={msg => setToast(msg)}
+              />
 
               {/* Activity: history + comments */}
               <section style={{ marginBottom:22 }}>
