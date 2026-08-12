@@ -785,7 +785,7 @@ export function WorkItemDetailDrawer({ item, onClose, onNav }: {
           }}>{statusLabel}</span>
           <div style={{ flex: 1 }} />
           {onNav && (
-            <button onClick={() => onNav('project')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
+            <button onClick={() => onNav('issue', item.id)} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
               Abrir no projeto →
             </button>
           )}

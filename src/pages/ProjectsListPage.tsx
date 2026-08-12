@@ -291,8 +291,8 @@ export default function ProjectsListPage({ onNav }: Props) {
   const inProgress = projects.filter(p => p.status === 'em progresso').length
   const done       = projects.reduce((s, p) => s + p.tasks.filter(t => t.status === 'concluído').length, 0)
 
-  function handleOpenProject(_p: Project) {
-    onNav?.('project')
+  function handleOpenProject(p: Project) {
+    onNav?.('project', p.id)
   }
 
   function handleOpenTask(task: SubTask) {

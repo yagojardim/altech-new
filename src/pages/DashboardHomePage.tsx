@@ -397,7 +397,7 @@ function PmoPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rags.length === 0 && <EmptyState message="Nenhum projeto no escopo selecionado." />}
             {rags.map(r => (
-              <RagCard key={r.id} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.daysLabel} reason={r.reason} onClick={() => onNav('project')} />
+              <RagCard key={r.id} name={r.name} squad={r.squad} rag={r.rag} pct={r.pct} daysLabel={r.daysLabel} reason={r.reason} onClick={() => onNav('project', r.id)} />
             ))}
           </div>
         </SCard>

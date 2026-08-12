@@ -174,7 +174,7 @@ export default function StoragePage({ onNav }: Props) {
                               fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accentBorder}`,
                               borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
                             }}>Arquivos</button>
-                            <button onClick={() => onNav?.('project')} style={{
+                            <button onClick={() => onNav?.('project', r.projectId)} style={{
                               fontSize: 11, color: T.accent, background: 'none', border: `1px solid ${T.accentBorder}`,
                               borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
                             }}>Abrir</button>

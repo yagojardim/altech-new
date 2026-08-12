@@ -302,7 +302,7 @@ export default function DashboardPage({ onNav }: { onNav?: (v: string, targetId?
               Saúde dos projetos
             </p>
             <div style={{ display:'grid', gridTemplateColumns:`repeat(${Math.min(visProjects.length,3)},1fr)`, gap:12 }}>
-              {visProjects.map(p => <HealthCard key={p.id} p={p} onOpen={() => onNav?.('project')} />)}
+              {visProjects.map(p => <HealthCard key={p.id} p={p} onOpen={() => onNav?.('project', p.id)} />)}
             </div>
           </div>
 
