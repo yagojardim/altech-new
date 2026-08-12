@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, createContext, useContext, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
+import { fetchTenantStorage, usagePct, bytesToHuman, canViewStorage, type TenantStorage } from '@/data/db/storage'
+import { DEFAULT_TENANT_ID } from '@/data/db/timeline'
+import { UsageBar } from '@/pages/StoragePage'
 import { T } from '../components/ds/tokens'
 import { useClientPortal } from '../data/clientPortalStore'
 import {
@@ -1806,6 +1809,38 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Tenant storage card ──────────────────────────────────────────────────────
+function TenantStorageCard({ role, onNav }: { role: string; onNav: (v: string) => void }) {
+  const [data, setData] = useState<TenantStorage | null>(null)
+  const allowed = canViewStorage(role)
+
+  useEffect(() => {
+    if (!allowed) return
+    let alive = true
+    fetchTenantStorage(DEFAULT_TENANT_ID).then(d => { if (alive) setData(d) })
+    return () => { alive = false }
+  }, [allowed])
+
+  if (!allowed || !data) return null
+  const pct = usagePct(data.usedBytes, data.effectiveBytes)
+
+  return (
+    <button onClick={() => onNav('storage')} style={{
+      display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
+      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10,
+      padding: 14, marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: T.text3 }}>Armazenamento do Tenant</span>
+        <span style={{ fontSize: 12, color: T.text1 }}>
+          {bytesToHuman(data.usedBytes)} de {bytesToHuman(data.effectiveBytes)} ({pct}%)
+        </span>
+      </div>
+      <UsageBar pct={pct} height={8} />
+    </button>
   )
 }
 
