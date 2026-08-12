@@ -1957,6 +1957,9 @@ function DashboardHomeInner({ onNav, onInvite }: Props) {
         ))}
       </div>
 
+      {/* ── Tenant storage card ─────────────────────────────────── */}
+      <TenantStorageCard role={String(scope.role_context)} onNav={navigate} />
+
       {/* ── Dashboard content (includes unified mural at top of each panel) ── */}
       <DashboardContent type={activeDashId} onNav={navigate} onInvite={onInvite} />
     </div>
