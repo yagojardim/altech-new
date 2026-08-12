@@ -7,6 +7,7 @@ import {
   STORAGE_BUCKET_LABEL, EMPTY_TENANT_STORAGE,
   type TenantStorage, type ProjectStorageRow, type StorageBucketId,
 } from '@/data/db/storage'
+import { ProjectFilesDrawer } from '@/components/ProjectFilesDrawer'
 
 interface Props { onNav?: (view: string) => void }
 
@@ -39,6 +40,8 @@ export default function StoragePage({ onNav }: Props) {
   const [rows, setRows]       = useState<ProjectStorageRow[]>([])
   const [bucket, setBucket]   = useState<StorageBucketId>('active')
   const [toast, setToast]     = useState<string | null>(null)
+  const [filesFor, setFilesFor] = useState<ProjectStorageRow | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let alive = true
@@ -55,7 +58,7 @@ export default function StoragePage({ onNav }: Props) {
       }
     })()
     return () => { alive = false }
-  }, [tenantId, activeUser.user_id])
+  }, [tenantId, activeUser.user_id, reloadKey])
 
   useEffect(() => {
     if (!toast) return
@@ -160,10 +163,16 @@ export default function StoragePage({ onNav }: Props) {
                         <td style={{ padding: '10px 16px', color: T.text1 }}>{bytesToHuman(r.usedBytes)} <span style={{ color: T.text3 }}>({r.fileCount})</span></td>
                         <td style={{ padding: '10px 16px', minWidth: 120 }}><UsageBar pct={share} height={6} color={T.accent} /></td>
                         <td style={{ padding: '10px 16px' }}>
-                          <button onClick={() => onNav?.('project')} style={{
-                            fontSize: 11, color: T.accent, background: 'none', border: `1px solid ${T.accentBorder}`,
-                            borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
-                          }}>Abrir</button>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            <button onClick={() => setFilesFor(r)} style={{
+                              fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accentBorder}`,
+                              borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                            }}>Arquivos</button>
+                            <button onClick={() => onNav?.('project')} style={{
+                              fontSize: 11, color: T.accent, background: 'none', border: `1px solid ${T.accentBorder}`,
+                              borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+                            }}>Abrir</button>
+                          </div>
                         </td>
                       </tr>
                     )
@@ -173,6 +182,19 @@ export default function StoragePage({ onNav }: Props) {
             )}
           </div>
         </>
+      )}
+
+      {filesFor && (
+        <ProjectFilesDrawer
+          open
+          onClose={() => setFilesFor(null)}
+          tenantId={tenantId}
+          projectId={filesFor.projectId}
+          projectKey={filesFor.key}
+          projectName={filesFor.name}
+          onToast={setToast}
+          onChanged={() => setReloadKey(k => k + 1)}
+        />
       )}
 
       {toast && (
