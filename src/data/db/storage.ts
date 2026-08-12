@@ -137,3 +137,10 @@ export function usagePct(used: number, effective: number): number {
   if (!effective || effective <= 0) return 0
   return Math.min(100, Math.round((used / effective) * 100))
 }
+
+// ─── Role allowlist (temporary gate until a module capability exists) ────────
+export const STORAGE_ROLES = ['Admin', 'ProjectManager', 'ProductOwner', 'TechLead', 'Dev'] as const
+
+export function canViewStorage(role: string): boolean {
+  return (STORAGE_ROLES as readonly string[]).includes(role)
+}

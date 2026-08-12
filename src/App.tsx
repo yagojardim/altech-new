@@ -43,6 +43,7 @@ import ActivatePage from './pages/ActivatePage'
 import ResetPasswordPage from './pages/ResetPasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PreferencesPage from './pages/PreferencesPage'
+import StoragePage from './pages/StoragePage'
 import { initAppPrefs } from './lib/appPrefs'
 import { RESET_PATH } from './lib/passwordReset'
 
@@ -54,7 +55,7 @@ const ALL_VIEWS: View[] = [
   'issue','client','task-drawer',
   'login','role-dashboard','client-access','client-login','client-messages',
   'timesheet','hours-approval','boards-list','modules','tenant-settings',
-  'profile','preferences',
+  'profile','preferences','storage',
 ]
 
 export const VIEW_LABELS: Record<View, string> = {
@@ -72,7 +73,7 @@ export const VIEW_LABELS: Record<View, string> = {
   'boards-list':'Boards',
   modules:'Módulos',
   'tenant-settings':'Config. do Tenant',
-  profile:'Meu perfil', preferences:'Preferências',
+  profile:'Meu perfil', preferences:'Preferências', storage:'Armazenamento',
 }
 
 initAppPrefs()
@@ -297,6 +298,7 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
         {view==='boards-list'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setView('project') }} /></div>}
         {view==='profile'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProfilePage /></div>}
         {view==='preferences'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><PreferencesPage /></div>}
+        {view==='storage'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><StoragePage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         {view==='modules'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={v => { if (ALL_VIEWS.includes(v as View)) setView(v as View) }} /></div>}
         </ErrorBoundary>
       </Shell>
