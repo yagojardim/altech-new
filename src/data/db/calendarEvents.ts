@@ -290,8 +290,59 @@ interface PlannedCeremony {
   endHour: number;   endMin: number
 }
 
+/** Which matching weekdays of the sprint window the ceremony lands on. */
+export type CeremonyOccurrence = 'every' | 'first' | 'last'
+
+/** One configurable ceremony slot (a sprint can have two retrospectives, etc.). */
+export interface CeremonySlot {
+  id: string
+  type: CalendarEventType
+  /** Label used in the event title, e.g. 'Retrospectiva (manhã)'. */
+  label: string
+  enabled: boolean
+  /** ISO weekdays: 1 = Monday … 5 = Friday. */
+  days: number[]
+  occurrence: CeremonyOccurrence
+  /** 'HH:MM' */
+  start: string
+  end: string
+}
+
+export const WEEKDAY_LABELS: { day: number; label: string }[] = [
+  { day: 1, label: 'Seg' },
+  { day: 2, label: 'Ter' },
+  { day: 3, label: 'Qua' },
+  { day: 4, label: 'Qui' },
+  { day: 5, label: 'Sex' },
+]
+
+/** Cadência padrão do Altech (equivalente ao gerador original). */
+export const DEFAULT_CEREMONY_SLOTS: CeremonySlot[] = [
+  { id: 'daily',      type: 'daily',         label: 'Daily',                   enabled: true, days: [1, 3, 5], occurrence: 'every', start: '09:00', end: '09:15' },
+  { id: 'planning',   type: 'planning',      label: 'Planning',                enabled: true, days: [1],       occurrence: 'first', start: '10:00', end: '12:00' },
+  { id: 'pre_review', type: 'pre_review',    label: 'Pré-review',              enabled: true, days: [4],       occurrence: 'last',  start: '15:00', end: '16:00' },
+  { id: 'review',     type: 'review',        label: 'Review',                  enabled: true, days: [5],       occurrence: 'last',  start: '09:00', end: '10:00' },
+  { id: 'retro_am',   type: 'retrospective', label: 'Retrospectiva (manhã)',   enabled: true, days: [5],       occurrence: 'last',  start: '10:30', end: '11:30' },
+  { id: 'retro_pm',   type: 'retrospective', label: 'Retrospectiva (tarde)',   enabled: true, days: [5],       occurrence: 'last',  start: '14:00', end: '15:00' },
+]
+
+export function cloneDefaultCeremonySlots(): CeremonySlot[] {
+  return DEFAULT_CEREMONY_SLOTS.map(s => ({ ...s, days: [...s.days] }))
+}
+
+function parseTime(value: string): { hour: number; minute: number } | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(value.trim())
+  if (!m) return null
+  const hour = Number(m[1]); const minute = Number(m[2])
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null
+  return { hour, minute }
+}
+
 /** Pure planner: derives the ceremony agenda of a sprint from its date range. */
-export function planSprintCeremonies(sprint: SprintCeremonyInput): PlannedCeremony[] {
+export function planSprintCeremonies(
+  sprint: SprintCeremonyInput,
+  slots: CeremonySlot[] = DEFAULT_CEREMONY_SLOTS,
+): PlannedCeremony[] {
   if (!sprint.startDate || !sprint.endDate) return []
   const start = parseDay(sprint.startDate)
   const end = parseDay(sprint.endDate)
@@ -300,29 +351,30 @@ export function planSprintCeremonies(sprint: SprintCeremonyInput): PlannedCeremo
   const days: Date[] = []
   for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) days.push(new Date(d))
 
-  const mondays   = days.filter(d => d.getDay() === 1)
-  const thursdays = days.filter(d => d.getDay() === 4)
-  const fridays   = days.filter(d => d.getDay() === 5)
-
   const out: PlannedCeremony[] = []
 
-  for (const d of days) {
-    if (d.getDay() === 1 || d.getDay() === 3 || d.getDay() === 5) {
-      out.push({ day: d, type: 'daily', title: `Daily — ${sprint.name}`, startHour: 9, startMin: 0, endHour: 9, endMin: 15 })
+  for (const slot of slots) {
+    if (!slot.enabled || slot.days.length === 0) continue
+    const from = parseTime(slot.start)
+    const to = parseTime(slot.end)
+    if (!from || !to) continue
+
+    const matching = days.filter(d => slot.days.includes(d.getDay()))
+    if (matching.length === 0) continue
+    const picked =
+      slot.occurrence === 'every' ? matching
+      : slot.occurrence === 'first' ? [matching[0]]
+      : [matching[matching.length - 1]]
+
+    for (const day of picked) {
+      out.push({
+        day,
+        type: slot.type,
+        title: `${slot.label} — ${sprint.name}`,
+        startHour: from.hour, startMin: from.minute,
+        endHour: to.hour,     endMin: to.minute,
+      })
     }
-  }
-  if (mondays[0]) {
-    out.push({ day: mondays[0], type: 'planning', title: `Planning — ${sprint.name}`, startHour: 10, startMin: 0, endHour: 12, endMin: 0 })
-  }
-  const lastThursday = thursdays[thursdays.length - 1]
-  if (lastThursday) {
-    out.push({ day: lastThursday, type: 'pre_review', title: `Pré-review — ${sprint.name}`, startHour: 15, startMin: 0, endHour: 16, endMin: 0 })
-  }
-  const lastFriday = fridays[fridays.length - 1]
-  if (lastFriday) {
-    out.push({ day: lastFriday, type: 'review', title: `Review — ${sprint.name}`, startHour: 9, startMin: 0, endHour: 10, endMin: 0 })
-    out.push({ day: lastFriday, type: 'retrospective', title: `Retrospectiva (manhã) — ${sprint.name}`, startHour: 10, startMin: 30, endHour: 11, endMin: 30 })
-    out.push({ day: lastFriday, type: 'retrospective', title: `Retrospectiva (tarde) — ${sprint.name}`, startHour: 14, startMin: 0, endHour: 15, endMin: 0 })
   }
   return out
 }
@@ -336,8 +388,9 @@ export async function generateSprintCeremonies(
   sprint: SprintCeremonyInput,
   tenantId: string = DEFAULT_TENANT_ID,
   createdBy: string | null = null,
+  slots: CeremonySlot[] = DEFAULT_CEREMONY_SLOTS,
 ): Promise<CeremonyResult> {
-  const planned = planSprintCeremonies(sprint)
+  const planned = planSprintCeremonies(sprint, slots)
   if (planned.length === 0) {
     return { created: 0, skipped: 0, error: 'Sprint sem datas válidas de início/fim.' }
   }
