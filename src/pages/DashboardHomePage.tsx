@@ -35,6 +35,7 @@ import {
   dismissNativeCard, restoreNativeCard, getDismissedNative, useDashboardAssignments,
   type AssignmentTarget, type HomeCardSlot,
 } from '../data/dashboardAssignments'
+import { listSquads, type SquadOption } from '../data/db/timesheets'
 import { safeCall } from '../utils/logger'
 import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
 import {
@@ -153,11 +154,9 @@ function byProjects<T extends { project_id?: string }>(items: T[], sel: Set<stri
 
 
 
-const SQUADS = [
-  { id: 'squad_growth',   name: 'Growth' },
-  { id: 'squad_platform', name: 'Platform' },
-  { id: 'squad_design',   name: 'Design' },
-]
+/** Squads reais do tenant, hidratados pelo HomeFilterProvider. */
+let SQUAD_LIST: SquadOption[] = []
+const SQUADS = () => SQUAD_LIST
 /** Sprint filter options come from the sprints in scope. */
 const SPRINTS = () => {
   const names = new Set<string>()
@@ -430,7 +429,7 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string)
       <UnifiedMural dashId="admin" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -476,7 +475,7 @@ function PmoPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) 
       <UnifiedMural dashId="pmo" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -551,7 +550,7 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) 
       <UnifiedMural dashId="project-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -636,7 +635,7 @@ function ProductManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) 
       <UnifiedMural dashId="product-manager" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -934,7 +933,7 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) =>
       <UnifiedMural dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1007,7 +1006,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string, targetId?: string) => 
       <UnifiedMural dashId="scrum-master" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1106,7 +1105,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => voi
       <UnifiedMural dashId="tech-lead" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1186,7 +1185,7 @@ function DevPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) 
       <UnifiedMural dashId="dev" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="2fr 1fr">
@@ -1244,7 +1243,7 @@ function UxPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
       <UnifiedMural dashId="ux" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1315,7 +1314,7 @@ function QaPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
       <UnifiedMural dashId="qa" tenantId={MOCK_TENANT.tenant_id} nativeCards={nativeCards} onNav={onNav} />
 
       <div style={{ marginTop: 4 }}>
-        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS} sprints={SPRINTS()} />
+        <FilterBar filters={filters} onChange={setFilters} projects={PROJECTS()} squads={SQUADS()} sprints={SPRINTS()} />
       </div>
 
       <Grid cols="1fr 1fr">
@@ -1972,6 +1971,15 @@ function HomeFilterProvider({ children }: { children: ReactNode }) {
       .finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [tenantId, profileId, permKey])
+
+  const [squads, setSquads] = useState<SquadOption[]>([])
+  useEffect(() => {
+    let alive = true
+    void safeCall('home.squads', () => listSquads(), [] as SquadOption[])
+      .then(rows => { if (alive) setSquads(rows) })
+    return () => { alive = false }
+  }, [tenantId])
+  SQUAD_LIST = squads
 
   ALLOWED_LIST = allowed
   ALLOWED_IDS = allowed.length > 0 ? new Set(allowed.map(p => p.id)) : null
