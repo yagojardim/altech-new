@@ -436,7 +436,7 @@ export async function generateSprintCeremonies(
       attendees: [] as unknown as Json,
       project_id: sprint.projectId ?? null,
       sprint_id: sprint.id,
-      created_by: createdBy,
+      created_by: normalizeCreatedBy(createdBy),
       metadata: { color: EVENT_TYPE_COLOR[p.type] } as Json,
     })
   }
