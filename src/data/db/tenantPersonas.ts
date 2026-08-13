@@ -15,7 +15,7 @@ interface ProfileLite {
 }
 
 interface UserRoleLite { profile_id: string | null; role_id: string | null }
-interface RoleLite { id: string; key: string | null; name: string | null }
+interface RoleLite { id: string; key: string | null; label: string | null }
 
 const ROLE_ALIASES: Record<string, RoleContext> = {
   admin: 'Admin', admin_master: 'Admin', administrador: 'Admin',
@@ -70,9 +70,9 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
     const userRoles = (urRows ?? []) as unknown as UserRoleLite[]
     const roleIds = [...new Set(userRoles.map(r => r.role_id).filter((v): v is string => !!v))]
     if (roleIds.length) {
-      const { data: roleRows } = await supabase.from('roles').select('id, key, name').in('id', roleIds)
+      const { data: roleRows } = await supabase.from('roles').select('id, key, label').in('id', roleIds)
       const roles = (roleRows ?? []) as unknown as RoleLite[]
-      const byId = new Map(roles.map(r => [r.id, normalizeRole(r.key ?? r.name)]))
+      const byId = new Map(roles.map(r => [r.id, normalizeRole(r.key ?? r.label)]))
       for (const ur of userRoles) {
         if (!ur.profile_id || !ur.role_id) continue
         const rc = byId.get(ur.role_id)

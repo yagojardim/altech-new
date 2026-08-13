@@ -57,9 +57,9 @@ async function resolveRole(profileId: string, tenantId: string, fallback: string
       .select('role_id').eq('profile_id', profileId).eq('tenant_id', tenantId)
     const roleIds = (urs ?? []).map((r: any) => r.role_id).filter(Boolean)
     if (roleIds.length) {
-      const { data: roles } = await tbl('roles').select('id, key, name').in('id', roleIds)
+      const { data: roles } = await tbl('roles').select('id, key, label').in('id', roleIds)
       const first = (roles ?? [])[0]
-      if (first) return normalizeRole(first.key ?? first.name)
+      if (first) return normalizeRole(first.key ?? first.label)
     }
   } catch (err) {
     logger.error('authProfile.resolveRole', err, { profileId })
