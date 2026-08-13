@@ -1,3 +1,4 @@
+import { SprintCeremoniesModal } from '@/components/SprintCeremoniesModal'
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
 import { T } from '@/components/ds/tokens'
 import { listDeadlines, type DeadlineItem } from '@/data/db/calendar'
