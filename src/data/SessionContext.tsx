@@ -85,6 +85,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   function setActiveUser(id: string) {
     _setActiveUser(id)   // keep module var in sync (for non-hook callers)
     setUserId(id)        // trigger React re-render
+    setPersonaOverride(id) // Inspection: persona escolhida vence o profile autenticado
   }
 
   useEffect(() => {
