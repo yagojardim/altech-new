@@ -3,12 +3,14 @@ import {
   MOCK_USERS, type MockUser,
   ACTIVE_USER_ID,
   setActiveUser as _setActiveUser,
+  hydratePersonas,
 } from './session'
 import {
   getSession, onAuthStateChange, signOut as authSignOut,
   INSPECTION_MODE_ENABLED, hasManualLogout, clearManualLogout, type AuthUser,
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
+import { fetchTenantPersonas } from './db/tenantPersonas'
 import { logger, safeCall } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
@@ -49,6 +51,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
   const [mustChangePassword, setMustChange] = useState(false)
+  const [, setPersonasVersion] = useState(0)
+
+  // Personas de Inspection vêm dos profiles reais do tenant (user_id === profiles.id).
+  useEffect(() => {
+    let alive = true
+    void fetchTenantPersonas().then(list => {
+      if (!alive || !list.length) return
+      hydratePersonas(list)
+      setUserId(prev => (list.some(u => u.user_id === prev) ? prev : list[0].user_id))
+      _setActiveUser(list.some(u => u.user_id === ACTIVE_USER_ID) ? ACTIVE_USER_ID : list[0].user_id)
+      setPersonasVersion(v => v + 1)
+    })
+    return () => { alive = false }
+  }, [])
 
   /** Inspection só vale quando NÃO houve logout manual nesta aba. */
   function fallbackStatus(): Exclude<SessionStatus, 'loading'> {
