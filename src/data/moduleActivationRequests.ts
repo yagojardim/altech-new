@@ -40,13 +40,6 @@ let AUDIT:    ModuleAuditEvent[]        = [
     at: '2025-01-15T10:00:00Z',
     detail: 'Implementação inicial do Client Portal.',
   },
-  {
-    id: 'ae_002', tenant_id: MOCK_TENANT.tenant_id,
-    module_id: 'mod_calendar',
-    event: 'Preview habilitado', by: 'Altech Team',
-    at: '2025-03-01T09:00:00Z',
-    detail: 'Agenda Integrada disponível em acesso antecipado.',
-  },
 ]
 
 let _counter = 10

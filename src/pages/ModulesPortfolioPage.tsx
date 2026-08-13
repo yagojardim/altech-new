@@ -517,10 +517,8 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
     switch (mod.cta.action) {
       case 'open':
         if (mod.key === 'CLIENT_PORTAL') { onNav?.('client'); return }
-        if (mod.key === 'AGENDA_INTEGRADA') { onNav?.('calendar'); return }
         onNav?.('config'); return
       case 'preview':
-        if (mod.key === 'AGENDA_INTEGRADA') { onNav?.('calendar'); return }
         setModal({ type: 'detail', mod }); return
       case 'request':
         if (canRequest) setModal({ type: 'activate', mod })
