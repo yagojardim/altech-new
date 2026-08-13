@@ -12,7 +12,7 @@ import {
   SCard, ProgressBar, StatusBadge, ConditionalTag, Av,
   AuditFeed, ActivityTimeline, EmptyState, LoadingState,
   MiniBarChart, MiniSparkline,
-  type WorkItem, type FilterState, type RagStatus,
+  type WorkItem, type FilterState, type RagStatus, type AuditEntry,
 } from '../components/ds/DashboardKit'
 import {
   MOCK_TENANT, MOCK_USERS,
@@ -46,7 +46,9 @@ import {
 import { getBoardsForScope } from '../data/boards'
 import { fetchAssignedProjects } from '../data/db/projects'
 import { can } from '../data/permissions'
-import { countActiveModules } from '../data/db/modules'
+import { countActiveModules, listModules, type ModuleView } from '../data/db/modules'
+import { getMembers, setMemberStatus, type MemberRow, type MemberStatus } from '@/data/db/members'
+import { fetchRecentAdminActivity, relativeTime, type AdminActivityRow } from '@/data/db/adminActivity'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
