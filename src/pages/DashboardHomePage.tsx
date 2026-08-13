@@ -261,17 +261,20 @@ function AdminUsersCard({ onNav, onInvite, actorName }: {
     setBusy(null)
   }
 
+  const activeUsers = rows?.filter(u => u.status === 'active') ?? []
+  const displayedUsers = activeUsers.slice(0, 5)
+
   return (
     <SCard title="Gestão de Usuários" action={
       <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
     }>
       {rows === null
         ? <LoadingState />
-        : rows.length === 0
+        : activeUsers.length === 0
           ? <EmptyState message={failed ? 'Não foi possível carregar os usuários.' : 'Nenhum usuário ativo no tenant.'} />
           : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {rows.map(u => {
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 320, overflowY: 'auto', paddingRight: 6 }}>
+              {displayedUsers.map(u => {
                 const c = STATUS_COLOR[u.status] ?? T.neutral
                 return (
                   <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
