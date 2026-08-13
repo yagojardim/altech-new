@@ -2276,6 +2276,14 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       )}
 
     </div>
+    <SprintCeremoniesModal
+      open={ceremonyTarget !== null}
+      sprintName={ceremonyTarget?.name ?? 'Sprint'}
+      busy={ceremonySprintId !== null}
+      onClose={() => setCeremonyTarget(null)}
+      onConfirm={slots => { if (ceremonyTarget) void handleGenerateCeremonies(ceremonyTarget, slots) }}
+    />
+
     {quickCreate !== null && (
       <CreateIssueModal
         onClose={()=>setQuickCreate(null)}
