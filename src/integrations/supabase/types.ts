@@ -486,6 +486,8 @@ export type Database = {
           description: string | null
           ends_at: string | null
           event_type: string
+          external_id: string | null
+          external_provider: string | null
           id: string
           location: string | null
           metadata: Json
@@ -505,6 +507,8 @@ export type Database = {
           description?: string | null
           ends_at?: string | null
           event_type?: string
+          external_id?: string | null
+          external_provider?: string | null
           id?: string
           location?: string | null
           metadata?: Json
@@ -524,6 +528,8 @@ export type Database = {
           description?: string | null
           ends_at?: string | null
           event_type?: string
+          external_id?: string | null
+          external_provider?: string | null
           id?: string
           location?: string | null
           metadata?: Json
