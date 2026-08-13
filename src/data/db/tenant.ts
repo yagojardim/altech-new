@@ -91,6 +91,16 @@ export function getTenantIdentity(): Promise<TenantIdentity | null> {
   }, null)
 }
 
+/** Nome do tenant real (tenants.name), usado no seletor de workspace. */
+export function getTenantName(): Promise<string> {
+  return safeCall('tenant.getTenantName', async () => {
+    const { data, error } = await tbl('tenants')
+      .select('name').eq('id', DEFAULT_TENANT_ID).maybeSingle()
+    if (error) throw error
+    return (data?.name as string | null) ?? ''
+  }, '')
+}
+
 // ─── Writes ───────────────────────────────────────────────────────────────────
 export function updateTenantSettings(
   patch: Partial<Omit<TenantSettings, 'id' | 'tenant_id'>>,
