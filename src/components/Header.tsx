@@ -106,7 +106,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
   const [rows,       setRows]       = useState<NotificationRow[]>([])
   const [profileId,  setProfileId]  = useState<string | null>(null)
 
-  const { activeUser, setActiveUser, signOut } = useSession()
+  const { activeUser, setActiveUser, signOut, tenantName } = useSession()
   const rc         = activeUser.role_context
   const rcStyle    = ROLE_CONTEXT_COLOR[rc] ?? { color: T.accent, bg: T.accentDim }
   const rcLabel    = ROLE_CONTEXT_LABEL[rc] ?? rc
@@ -175,7 +175,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
       >
         {/* Left: breadcrumb */}
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px]" style={{ color: T.text3 }}>Altech Agency</span>
+          <span className="text-[11px]" style={{ color: T.text3 }}>{tenantName || '—'}</span>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ color: T.text3 }}>
             <path d="M3 2.5L5.5 4.5L3 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
