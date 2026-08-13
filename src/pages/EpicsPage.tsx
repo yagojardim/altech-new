@@ -346,6 +346,9 @@ export default function EpicsPage() {
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [newEpicOpen, setNewEpicOpen] = useState(false)
+  const [newEpicError, setNewEpicError] = useState<string | null>(null)
+  const [suggestedKey, setSuggestedKey] = useState('')
 
   const activeUser = getActiveUser()
 
@@ -376,6 +379,33 @@ export default function EpicsPage() {
     finally { setBusy(false) }
   }
 
+  const refreshSuggestedKey = useCallback(async (projectId: string) => {
+    if (!projectId) { setSuggestedKey(''); return }
+    try { setSuggestedKey(await nextEpicKey(projectId)) }
+    catch { setSuggestedKey('') }
+  }, [])
+
+  function openNewEpic() {
+    setNewEpicError(null)
+    setNewEpicOpen(true)
+    const projects = data?.projects ?? []
+    if (projects.length === 1) void refreshSuggestedKey(projects[0].id)
+    else setSuggestedKey('')
+  }
+
+  async function handleCreateEpic(input: {
+    projectId: string; name: string; key?: string
+    description?: string | null; quarter?: string | null; ownerId?: string | null
+  }) {
+    setBusy(true); setNewEpicError(null)
+    try {
+      await createEpic({ ...input, actorName: activeUser?.name })
+      setNewEpicOpen(false)
+      await load()
+    } catch (err) { setNewEpicError(err instanceof Error ? err.message : String(err)) }
+    finally { setBusy(false) }
+  }
+
   const epics = data?.epics ?? []
   const items = data?.items ?? []
   const profileById = new Map((data?.profiles ?? []).map(p => [p.id, p]))
@@ -389,7 +419,15 @@ export default function EpicsPage() {
         <span style={{ fontSize: 13, color: T.text3, background: T.neutralDim, borderRadius: 20, padding: '2px 10px' }}>
           {epics.length} épicos
         </span>
+        <button
+          onClick={openNewEpic}
+          style={{
+            marginLeft: 'auto', fontSize: 12, fontWeight: 600, padding: '7px 14px',
+            borderRadius: 8, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer',
+          }}
+        >+ Novo épico</button>
       </div>
+
 
       {loading && <StateBox>Carregando épicos…</StateBox>}
       {!loading && error && (
