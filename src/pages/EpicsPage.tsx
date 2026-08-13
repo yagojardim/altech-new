@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { WorkItemDetail } from '../components/WorkItemDetail'
 import { T } from '../components/ds/tokens'
 import {
-  listEpics, createEpicIssue, linkItemToEpic, epicColor as epicColorOf,
+  listEpics, createEpicIssue, linkItemToEpic, createEpic, nextEpicKey, epicColor as epicColorOf,
   type EpicsData, type EpicItemRow, type EpicRow,
 } from '../data/db/epics'
 import { DB_STATUS_CFG } from '../data/db/timeline'
