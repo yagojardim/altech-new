@@ -54,7 +54,7 @@ export async function setMemberStatus(
   id: string, status: MemberStatus, actorName?: string,
 ): Promise<boolean> {
   return safeCall<boolean>('members.setMemberStatus', async () => {
-    const t = (supabase as unknown as { from: (n: string) => any })
+    const t = (n: string) => (supabase as unknown as { from: (x: string) => any }).from(n)
     const { data: before } = await t('profiles')
       .select('status').eq('id', id).eq('tenant_id', DEFAULT_TENANT_ID).maybeSingle()
     const { error } = await t('profiles')
