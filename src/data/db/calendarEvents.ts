@@ -392,7 +392,7 @@ export async function generateSprintCeremonies(
 ): Promise<CeremonyResult> {
   const planned = planSprintCeremonies(sprint, slots)
   if (planned.length === 0) {
-    return { created: 0, skipped: 0, error: 'Sprint sem datas válidas de início/fim.' }
+    return { created: 0, skipped: 0, error: 'Nenhuma cerimônia a gerar — verifique as datas da sprint e a configuração escolhida.' }
   }
 
   const existingRes = await safeCall('calendarEvents.ceremonies.existing', async () => {
