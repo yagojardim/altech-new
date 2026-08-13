@@ -217,7 +217,149 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
   )
 }
 
+// ─── Admin cards (dados reais do tenant) ─────────────────────────────────────
+const AVATAR_COLORS = ['#35c9ae', '#f5a524', '#a78bfa', '#60a5fa', '#EF4444', '#22d3ee', '#f472b6']
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
+}
+function colorOf(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+const STATUS_COLOR: Record<string, string> = { active: T.success, blocked: T.crit, inactive: T.neutral }
+const STATUS_LABEL: Record<string, string> = { active: 'Ativo', blocked: 'Bloqueado', inactive: 'Inativo' }
+
+function AdminUsersCard({ onNav, onInvite, actorName }: {
+  onNav: (v: string, targetId?: string) => void
+  onInvite?: () => void
+  actorName?: string
+}) {
+  const [rows, setRows] = useState<MemberRow[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void getMembers().then(list => {
+      if (!alive) return
+      setRows(list)
+      setFailed(list.length === 0)
+    })
+    return () => { alive = false }
+  }, [])
+
+  async function change(m: MemberRow, next: MemberStatus) {
+    setBusy(m.id)
+    const ok = await setMemberStatus(m.id, next, actorName)
+    if (ok) setRows(prev => (prev ?? []).map(r => r.id === m.id ? { ...r, status: next } : r))
+    setBusy(null)
+  }
+
+  return (
+    <SCard title="Gestão de Usuários" action={
+      <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
+    }>
+      {rows === null
+        ? <LoadingState />
+        : rows.length === 0
+          ? <EmptyState message={failed ? 'Não foi possível carregar os usuários.' : 'Nenhum usuário ativo no tenant.'} />
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(u => {
+                const c = STATUS_COLOR[u.status] ?? T.neutral
+                return (
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Av initials={initialsOf(u.name || u.email)} color={colorOf(u.id)} size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: T.text1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name || u.email}</div>
+                      <div style={{ fontSize: 10, color: T.text3 }}>{u.primary_role ?? '—'}</div>
+                    </div>
+                    <span style={{ fontSize: 10, color: c, background: `${c}18`, border: `1px solid ${c}33`, borderRadius: 4, padding: '2px 7px' }}>
+                      {STATUS_LABEL[u.status] ?? u.status}
+                    </span>
+                    {u.status === 'blocked'
+                      ? <button disabled={busy === u.id} onClick={() => void change(u, 'active')} style={{ fontSize: 10, color: T.success, background: `${T.success}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Desbloquear</button>
+                      : u.status === 'active'
+                        ? <button disabled={busy === u.id} onClick={() => void change(u, 'blocked')} style={{ fontSize: 10, color: T.warn, background: `${T.warn}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Bloquear</button>
+                        : <button disabled={busy === u.id} onClick={() => void change(u, 'active')} style={{ fontSize: 10, color: T.accent, background: `${T.accent}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Reativar</button>
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          )}
+      <button onClick={() => onInvite ? onInvite() : onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
+        + Convidar usuário
+      </button>
+    </SCard>
+  )
+}
+
+const ACTIVE_MODULE_STATUS = new Set<string>(['operational', 'implemented', 'contracted', 'deploying', 'preview'])
+
+function AdminModulesCard({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
+  const [mods, setMods] = useState<ModuleView[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void listModules().then(list => { if (alive) setMods(list) })
+    return () => { alive = false }
+  }, [])
+
+  return (
+    <SCard title="Módulos">
+      {mods === null
+        ? <LoadingState />
+        : mods.length === 0
+          ? <EmptyState message="Nenhum módulo disponível." />
+          : mods.map(m => {
+            const active = ACTIVE_MODULE_STATUS.has(m.status)
+            return (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: 99, background: active ? T.success : T.border, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: active ? T.text1 : T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                </div>
+                {active
+                  ? <span style={{ fontSize: 10, color: T.text3, flexShrink: 0 }}>Ativo</span>
+                  : <button onClick={() => onNav('modules')} style={{ fontSize: 10, color: T.indigo, background: `${T.indigo}14`, border: `1px solid ${T.indigo}33`, borderRadius: 4, padding: '1px 7px', cursor: 'pointer', flexShrink: 0 }}>
+                      {m.status === 'pending' ? 'Pendente' : 'Solicitar'}
+                    </button>
+                }
+              </div>
+            )
+          })}
+    </SCard>
+  )
+}
+
+function AdminAuditCard() {
+  const [rows, setRows] = useState<AdminActivityRow[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void fetchRecentAdminActivity(8).then(list => { if (alive) setRows(list) })
+    return () => { alive = false }
+  }, [])
+
+  const entries: AuditEntry[] = (rows ?? []).map(r => ({
+    action: r.action,
+    user: r.entityType,
+    by: r.actorName ?? 'sistema',
+    when: relativeTime(r.createdAt),
+  }))
+
+  return (
+    <SCard title="Auditoria — Atividade Administrativa Recente">
+      {rows === null ? <LoadingState /> : <AuditFeed entries={entries} />}
+    </SCard>
+  )
+}
+
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
+
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
