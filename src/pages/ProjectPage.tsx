@@ -16,7 +16,8 @@ import {
   completeSprint as dbCompleteSprint,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
-import { generateSprintCeremonies, DEFAULT_TENANT_ID } from '@/data/db/calendarEvents'
+import { generateSprintCeremonies, DEFAULT_TENANT_ID, type CeremonySlot } from '@/data/db/calendarEvents'
+import { SprintCeremoniesModal } from '@/components/SprintCeremoniesModal'
 
 
 // ─── RULE annotations ────────────────────────────────────────────────────────
@@ -2078,7 +2079,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   // ── Cerimônias da sprint (calendar_events) ──────────────────────────────────
   const [ceremonySprintId, setCeremonySprintId] = useState<string | null>(null)
-  async function handleGenerateCeremonies(sprint: SprintDef) {
+  const [ceremonyTarget, setCeremonyTarget] = useState<SprintDef | null>(null)
+  async function handleGenerateCeremonies(sprint: SprintDef, slots: CeremonySlot[]) {
     setCeremonySprintId(sprint.id)
     const res = await generateSprintCeremonies({
       id: sprint.id,
@@ -2086,8 +2088,9 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       projectId: sprint.projectId ?? null,
       startDate: sprint.startDate ?? null,
       endDate: sprint.endDate ?? null,
-    }, DEFAULT_TENANT_ID, activeUser.name)
+    }, DEFAULT_TENANT_ID, activeUser.name, slots)
     setCeremonySprintId(null)
+    setCeremonyTarget(null)
     setToast(res.error
       ? res.error
       : res.created === 0
