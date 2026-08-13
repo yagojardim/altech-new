@@ -95,24 +95,6 @@ export const MODULE_CATALOG: ModuleDef[] = [
     ],
     icon: '🧠',
   },
-  // ── Integration ──────────────────────────────────────────────────────────────
-  {
-    id: 'mod_calendar',
-    key: 'AGENDA_INTEGRADA',
-    name: 'Agenda Integrada',
-    tagline: 'Calendário unificado: sprints, entregas, reuniões e marcos',
-    description: 'Visão calendário dos eventos do projeto — sprints, datas de entrega, reuniões e marcos — sincronizada com Google Calendar / Outlook. Já disponível em Preview com o calendário nativo.',
-    category: 'integration',
-    is_premium: false, is_future: false, is_preview: true,
-    features: [
-      'Calendário visual de sprints e marcos',
-      'Sincronização Google Calendar / Outlook (em breve)',
-      'Eventos vinculados a issues e épicos',
-      'Lembretes automáticos de deadlines',
-      'Visão pessoal e por projeto',
-    ],
-    icon: '📅',
-  },
   // ── External ─────────────────────────────────────────────────────────────────
   {
     id: 'mod_client_portal',

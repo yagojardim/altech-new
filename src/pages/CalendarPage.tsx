@@ -1,16 +1,18 @@
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
 import { T } from '@/components/ds/tokens'
 import { listDeadlines, type DeadlineItem } from '@/data/db/calendar'
-import {
-  MOCK_GOOGLE_EVENTS, genMeetLink,
-  GOOGLE_SYNC, type CalendarEvent,
-} from '@/data/calendarEvents'
+import { type CalendarEvent } from '@/data/calendarEvents'
 import {
   listCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   generateSprintCeremonies,
   EVENT_TYPES, EVENT_TYPE_LABEL, EVENT_TYPE_COLOR, EVENT_TYPE_ICON,
+  upsertExternalEvents, setExternalId, GOOGLE_PROVIDER,
   DEFAULT_TENANT_ID, type CalendarEventType, type DbCalendarEvent, type CalendarEventInput,
 } from '@/data/db/calendarEvents'
+import {
+  getGoogleStatus, connectGoogle, disconnectGoogle, fetchGoogleEvents, pushEventToGoogle,
+  type GoogleStatus,
+} from '@/lib/googleCalendar'
 import { listSprints, normalizeState } from '@/data/db/sprints'
 import { useSession } from '@/data/SessionContext'
 import { can } from '@/data/permissions'
@@ -32,7 +34,8 @@ function toViewEvent(e: DbCalendarEvent): CalendarEvent {
     color: e.color,
     workItemId: e.workItemKey,
     reminder: e.reminder,
-    source: 'altech',
+    source: e.externalProvider === GOOGLE_PROVIDER ? 'google' : 'altech',
+    externalId: e.externalId ?? undefined,
     created_by: '',
     eventType: e.eventType,
   }
@@ -380,10 +383,7 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
     setGuests(gs => [...gs, { name: u.name, email: u.email }]); setGuestQ('')
   }
   function removeGuest(email: string) { setGuests(gs => gs.filter(g => g.email !== email)) }
-  function toggleMeet() {
-    if (meetLink) setMeetLink('')
-    else setMeetLink(genMeetLink())
-  }
+  function clearMeet() { setMeetLink('') }
 
   function handleSave() {
     if (!title.trim()) return
@@ -526,21 +526,20 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
           </div>
 
           {/* Video call */}
-          <button onClick={toggleMeet} style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-            borderRadius: 7, fontSize: 12, cursor: 'pointer',
-            background: meetLink ? T.accentDim : `${T.text3}10`,
-            color: meetLink ? T.accent : T.text2,
-            border: `1px solid ${meetLink ? T.accentBorder : T.border}`,
-            width: '100%', fontWeight: meetLink ? 600 : 400,
-          }}>
-            <span>📹</span>
-            {meetLink ? (
-              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
-                {meetLink} · Remover
-              </span>
-            ) : 'Adicionar videochamada Altech Meet'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>📹</span>
+            <input
+              value={meetLink}
+              onChange={e => setMeetLink(e.target.value)}
+              placeholder="Link da videochamada (opcional)"
+              style={inpS}
+            />
+            {meetLink && (
+              <button onClick={clearMeet} style={{
+                background: 'none', border: 'none', color: T.text3, cursor: 'pointer', fontSize: 15, lineHeight: 1,
+              }}>×</button>
+            )}
+          </div>
 
           {/* Expanded fields */}
           {!expanded && (
@@ -623,121 +622,95 @@ function EventComposer({ initial, onSave, onClose }: ComposerProps) {
   )
 }
 
-// ─── Google Sync Panel ────────────────────────────────────────────────────────
-function GoogleSyncPanel({ onClose, onConnected }: { onClose: () => void; onConnected: () => void }) {
-  const [phase, setPhase] = useState<'idle'|'connecting'|'connected'>(
-    GOOGLE_SYNC.connected ? 'connected' : 'idle'
-  )
-  const [email] = useState(GOOGLE_SYNC.email || 'usuario@gmail.com')
+// ─── Painel de integrações de agenda ─────────────────────────────────────────
+interface IntegrationsPanelProps {
+  status: GoogleStatus
+  busy: boolean
+  onClose: () => void
+  onConnect: () => void
+  onSync: () => void
+  onDisconnect: () => void
+}
 
-  function connect() {
-    setPhase('connecting')
-    setTimeout(() => {
-      GOOGLE_SYNC.connected  = true
-      GOOGLE_SYNC.email      = email
-      GOOGLE_SYNC.lastSync   = 'agora'
-      setPhase('connected')
-      onConnected()
-    }, 2000)
+function IntegrationsPanel({ status, busy, onClose, onConnect, onSync, onDisconnect }: IntegrationsPanelProps) {
+  const rowBtn: CSSProperties = {
+    padding: '7px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: busy ? 'progress' : 'pointer',
+    background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`, opacity: busy ? 0.6 : 1,
   }
-  function disconnect() {
-    GOOGLE_SYNC.connected = false
-    GOOGLE_SYNC.email     = ''
-    
-    setPhase('idle')
-    onConnected()
-    onClose()
-  }
+  const soon = (label: string, icon: string) => (
+    <div key={label} style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+      borderRadius: 10, border: `1px solid ${T.border}`, background: T.bgSurface2, opacity: 0.6,
+    }}>
+      <span style={{ fontSize: 18 }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.text2 }}>{label}</div>
+        <div style={{ fontSize: 11, color: T.text3 }}>Em construção</div>
+      </div>
+      <span style={{ fontSize: 11, color: T.text3, border: `1px solid ${T.border}`, borderRadius: 5, padding: '2px 8px' }}>
+        Indisponível
+      </span>
+    </div>
+  )
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 850, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.5)' }}
          onClick={onClose}>
       <div onClick={e => e.stopPropagation()} style={{
         background: T.bgSurface, border: `1px solid ${T.border}`,
-        borderRadius: 16, boxShadow: T.shadowModal, width: 420, padding: '28px 28px 24px',
+        borderRadius: 16, boxShadow: T.shadowModal, width: 440, padding: '24px 24px 20px',
+        display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 8, background: `${T.warn}20`,
-            border: `1px solid ${T.warn}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-          }}>📅</div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.text1 }}>Sincronizar com Google Calendar</div>
-            <div style={{ fontSize: 11, color: T.text3 }}>Demonstrativo — sem acesso real à sua conta</div>
-          </div>
-          <button onClick={onClose} style={{ marginLeft: 'auto', width: 28, height: 28, borderRadius: 6, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 16 }}>×</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text1, flex: 1 }}>Integrar agenda</div>
+          <button onClick={onClose} style={{ width: 28, height: 28, borderRadius: 6, background: `${T.text3}14`, border: 'none', color: T.text2, cursor: 'pointer', fontSize: 16 }}>×</button>
         </div>
 
-        {/* Demo disclaimer */}
+        {/* Google */}
         <div style={{
-          background: T.warnDim, border: `1px solid ${T.warn}44`, borderRadius: 8,
-          padding: '10px 14px', marginBottom: 20, fontSize: 11, color: T.warn, lineHeight: 1.5,
+          display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
+          borderRadius: 10, border: `1px solid ${status.connected ? T.success + '44' : T.border}`,
+          background: status.connected ? T.successDim : T.bgSurface2,
         }}>
-          ⚠️ Esta sincronização é <strong>demonstrativa</strong>. Nenhuma OAuth real é realizada nem dados
-          da sua conta Google são acessados. Os eventos importados são mockados para fins de visualização.
+          <span style={{ fontSize: 18 }}>📅</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: T.text1 }}>Google Agenda</div>
+            <div style={{ fontSize: 11, color: status.connected ? T.success : T.text3, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {status.connected ? `Conectado${status.email ? ` · ${status.email}` : ''}` : 'Desconectado'}
+            </div>
+          </div>
+          {!status.connected && (
+            <button disabled={busy} onClick={onConnect} style={rowBtn}>
+              {busy ? 'Conectando…' : 'Conectar'}
+            </button>
+          )}
         </div>
 
-        {phase === 'idle' && (
-          <>
-            <div style={{ fontSize: 12, color: T.text2, marginBottom: 16, lineHeight: 1.5 }}>
-              Conecte sua conta Google para importar eventos do Google Calendar e manter o Altech sincronizado.
-              Em produção, OAuth 2.0 seria utilizado.
-            </div>
-            <button onClick={connect} style={{
-              width: '100%', padding: '12px', borderRadius: 10, fontSize: 14, fontWeight: 700,
-              background: '#4285F4', color: '#fff', border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-            }}>
-              <span>🔗</span>
-              Conectar conta Google (simulado)
+        {status.connected && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button disabled={busy} onClick={onSync} style={{ ...rowBtn, flex: 2 }}>
+              {busy ? 'Sincronizando…' : 'Sincronizar agora'}
             </button>
-          </>
-        )}
-
-        {phase === 'connecting' && (
-          <div style={{ textAlign: 'center', padding: '20px 0' }}>
-            <div style={{
-              width: 36, height: 36, borderRadius: '50%',
-              border: `3px solid ${T.accent}`, borderTopColor: 'transparent',
-              margin: '0 auto 14px', animation: 'spin 0.8s linear infinite',
-            }} />
-            <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-            <div style={{ fontSize: 13, color: T.text2 }}>Simulando conexão com Google…</div>
+            <button disabled={busy} onClick={onDisconnect} style={{
+              flex: 1, padding: '7px 0', borderRadius: 7, fontSize: 12,
+              background: 'transparent', color: T.text3, border: `1px solid ${T.border}`,
+              cursor: busy ? 'progress' : 'pointer',
+            }}>Desconectar</button>
           </div>
         )}
 
-        {phase === 'connected' && (
-          <>
-            <div style={{
-              background: T.successDim, border: `1px solid ${T.success}44`,
-              borderRadius: 10, padding: '14px 16px', marginBottom: 16,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <span style={{ fontSize: 16 }}>✅</span>
-                <span style={{ fontSize: 13, fontWeight: 700, color: T.success }}>Conectado</span>
-              </div>
-              <div style={{ fontSize: 12, color: T.text2 }}>{email}</div>
-              <div style={{ fontSize: 11, color: T.text3, marginTop: 4 }}>Última sincronização: {GOOGLE_SYNC.lastSync}</div>
-            </div>
-
-            <div style={{ fontSize: 11, color: T.text2, marginBottom: 16, lineHeight: 1.5 }}>
-              Eventos importados do Google aparecem marcados com <strong style={{ color: T.warn }}>G</strong> na grade.
-              Eventos criados no Altech serão sincronizados automaticamente (demonstrativo).
-            </div>
-
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={onClose} style={{
-                flex: 2, padding: '9px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
-                background: T.accentDim, color: T.accent, border: `1px solid ${T.accentBorder}`, cursor: 'pointer',
-              }}>Fechar</button>
-              <button onClick={disconnect} style={{
-                flex: 1, padding: '9px 0', borderRadius: 8, fontSize: 12,
-                background: 'transparent', color: T.text3, border: `1px solid ${T.border}`, cursor: 'pointer',
-              }}>Desconectar</button>
-            </div>
-          </>
+        {status.error && !status.connected && (
+          <div style={{ fontSize: 11, color: T.warn, background: T.warnDim, border: `1px solid ${T.warn}44`, borderRadius: 8, padding: '8px 12px' }}>
+            {status.error}
+          </div>
         )}
+
+        {soon('Microsoft Teams', '🟦')}
+        {soon('Outlook', '📨')}
+
+        <div style={{ fontSize: 11, color: T.text3, lineHeight: 1.5 }}>
+          Eventos importados do Google aparecem com o selo <strong>G</strong> e são somente leitura aqui.
+        </div>
       </div>
     </div>
   )
@@ -997,9 +970,9 @@ export default function CalendarPage() {
   const { activeUser } = useSession()
   const canManageSprint = can(activeUser.permissions, 'sprint:manage')
 
-  // Real events from calendar_events (merged with the demo Google feed when connected)
+  // Real events from calendar_events (Google events are imported into the same table)
   const [dbEvents, setDbEvents] = useState<CalendarEvent[]>([])
-  const events: CalendarEvent[] = GOOGLE_SYNC.connected ? [...dbEvents, ...MOCK_GOOGLE_EVENTS] : dbEvents
+  const events: CalendarEvent[] = dbEvents
 
   const reload = useCallback(async () => {
     const rows = await listCalendarEvents(DEFAULT_TENANT_ID)
@@ -1007,6 +980,59 @@ export default function CalendarPage() {
   }, [])
 
   useEffect(() => { void reload() }, [reload])
+
+  // ── Integração Google Agenda (App User Connector, por usuário) ──────────────
+  const [gStatus, setGStatus] = useState<GoogleStatus>({ connected: false })
+  const [gBusy, setGBusy] = useState(false)
+
+  const refreshGoogleStatus = useCallback(async () => {
+    setGStatus(await getGoogleStatus())
+  }, [])
+  useEffect(() => { void refreshGoogleStatus() }, [refreshGoogleStatus])
+
+  const syncGoogle = useCallback(async () => {
+    setGBusy(true)
+    try {
+      const from = new Date(); from.setMonth(from.getMonth() - 1)
+      const to = new Date(); to.setMonth(to.getMonth() + 3)
+      const remote = await fetchGoogleEvents(from.toISOString(), to.toISOString())
+      const res = await upsertExternalEvents(remote, DEFAULT_TENANT_ID)
+      if (res.error) { toast(res.error); return }
+      await reload()
+      toast(`Google Agenda sincronizada · ${res.imported} novo(s), ${res.updated} atualizado(s).`)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Falha ao sincronizar com o Google.')
+    } finally {
+      setGBusy(false)
+    }
+  }, [reload, toast])
+
+  async function handleGoogleConnect() {
+    setGBusy(true)
+    try {
+      await connectGoogle()
+      await refreshGoogleStatus()
+      setGBusy(false)
+      await syncGoogle()
+    } catch (err) {
+      setGBusy(false)
+      toast(err instanceof Error ? err.message : 'Não foi possível conectar ao Google Agenda.')
+    }
+  }
+
+  async function handleGoogleDisconnect() {
+    setGBusy(true)
+    try {
+      await disconnectGoogle()
+      await refreshGoogleStatus()
+      toast('Google Agenda desconectada.')
+      setShowGSync(false)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Não foi possível desconectar.')
+    } finally {
+      setGBusy(false)
+    }
+  }
 
   function refresh() { setTick(t => t + 1) }
   void tick
@@ -1100,6 +1126,19 @@ export default function CalendarPage() {
       ? await updateCalendarEvent(editing.id, input, DEFAULT_TENANT_ID)
       : await createCalendarEvent({ ...input, createdBy: activeUser.name }, DEFAULT_TENANT_ID)
     if (!saved) { toast('Falha ao salvar o evento.'); return }
+    if (gStatus.connected) {
+      const externalId = await pushEventToGoogle({
+        externalId: editing?.externalId,
+        title: input.title,
+        startIso: input.startIso,
+        endIso: input.endIso,
+        allDay: input.allDay ?? false,
+        description: input.description,
+        location: input.location,
+        guests: input.guests,
+      })
+      if (externalId) await setExternalId(saved.id, externalId, DEFAULT_TENANT_ID)
+    }
     await reload()
     toast(editing ? 'Evento atualizado.' : 'Evento criado.')
   }
@@ -1123,7 +1162,7 @@ export default function CalendarPage() {
         return `${s.getDate()} ${MONTHS_SHORT[s.getMonth()]} – ${e.getDate()} ${MONTHS_SHORT[e.getMonth()]} ${e.getFullYear()}`
       })()
 
-  const isGoogleConnected = GOOGLE_SYNC.connected
+  const isGoogleConnected = gStatus.connected
 
   const toolBtn: CSSProperties = {
     padding: '5px 11px', borderRadius: 6, fontSize: 12, cursor: 'pointer',
@@ -1200,7 +1239,7 @@ export default function CalendarPage() {
         </span>
         <button onClick={navNext} style={{ ...toolBtn, padding: '5px 10px', fontSize: 15 }}>›</button>
 
-        {/* Google sync */}
+        {/* Integrações de agenda */}
         <button
           onClick={() => setShowGSync(true)}
           style={{
@@ -1212,7 +1251,7 @@ export default function CalendarPage() {
           }}
         >
           <span>📅</span>
-          {isGoogleConnected ? `Sincronizado · ${GOOGLE_SYNC.email}` : 'Sincronizar com Google'}
+          {isGoogleConnected ? `Google Agenda · ${gStatus.email ?? 'conectado'}` : 'Integrar agenda'}
         </button>
       </div>
 
@@ -1370,9 +1409,13 @@ export default function CalendarPage() {
         />
       )}
       {showGSync && (
-        <GoogleSyncPanel
+        <IntegrationsPanel
+          status={gStatus}
+          busy={gBusy}
           onClose={() => setShowGSync(false)}
-          onConnected={refresh}
+          onConnect={() => { void handleGoogleConnect() }}
+          onSync={() => { void syncGoogle() }}
+          onDisconnect={() => { void handleGoogleDisconnect() }}
         />
       )}
 

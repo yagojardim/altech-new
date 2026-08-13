@@ -25,12 +25,6 @@ let TENANT_MODULES: TenantModuleRecord[] = [
     status: 'implemented',
     approved_by: 'Altech Team', approved_at: '2025-01-15T10:00:00Z',
   },
-  // Agenda → Preview
-  {
-    id: 'tm_002', tenant_id: T, module_id: 'mod_calendar',
-    status: 'preview',
-    notes: 'Acesso antecipado ao calendário nativo.',
-  },
   // Meeting Intelligence → not contracted
   {
     id: 'tm_003', tenant_id: T, module_id: 'mod_meeting_intel',

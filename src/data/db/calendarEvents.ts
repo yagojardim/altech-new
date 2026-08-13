@@ -64,6 +64,8 @@ export interface DbCalendarEvent {
   reminder?: number
   projectId: string | null
   sprintId: string | null
+  externalProvider: string | null
+  externalId: string | null
 }
 
 export interface CalendarEventInput {
@@ -82,7 +84,10 @@ export interface CalendarEventInput {
   projectId?: string | null
   sprintId?: string | null
   createdBy?: string | null
+  externalProvider?: string | null
+  externalId?: string | null
 }
+
 
 interface EventMeta {
   color?: string
@@ -135,8 +140,11 @@ function mapRow(row: Row): DbCalendarEvent {
     reminder: meta.reminder,
     projectId: row.project_id,
     sprintId: row.sprint_id,
+    externalProvider: row.external_provider,
+    externalId: row.external_id,
   }
 }
+
 
 function toMetadata(input: Pick<CalendarEventInput, 'color' | 'meetLink' | 'workItemKey' | 'reminder'>): Json {
   const meta: Record<string, Json> = {}
@@ -186,7 +194,10 @@ export async function createCalendarEvent(
       project_id: input.projectId ?? null,
       sprint_id: input.sprintId ?? null,
       created_by: input.createdBy ?? null,
+      external_provider: input.externalProvider ?? null,
+      external_id: input.externalId ?? null,
       metadata: toMetadata(input),
+
     }
     const { data, error } = await supabase.from('calendar_events').insert(payload).select('*').single()
     if (error) throw new Error(error.message)
@@ -212,6 +223,9 @@ export async function updateCalendarEvent(
     if (patch.location !== undefined)    update.location = patch.location ?? null
     if (patch.projectId !== undefined)   update.project_id = patch.projectId ?? null
     if (patch.sprintId !== undefined)    update.sprint_id = patch.sprintId ?? null
+    if (patch.externalProvider !== undefined) update.external_provider = patch.externalProvider ?? null
+    if (patch.externalId !== undefined)  update.external_id = patch.externalId ?? null
+
     if (patch.color !== undefined || patch.meetLink !== undefined
         || patch.workItemKey !== undefined || patch.reminder !== undefined) {
       update.metadata = toMetadata(patch)
@@ -379,4 +393,92 @@ export async function generateSprintCeremonies(
     return { created: 0, skipped, error: 'Falha ao gravar as cerimônias.' }
   }
   return { created: rows.length, skipped }
+}
+
+// ─── Import de eventos externos (Google Calendar via conector) ────────────────
+
+export interface ExternalEventInput {
+  externalId: string
+  title: string
+  startIso: string
+  endIso: string
+  allDay: boolean
+  description?: string | null
+  location?: string | null
+  meetLink?: string | null
+  guests?: EventGuest[]
+}
+
+export const GOOGLE_PROVIDER = 'google'
+export const GOOGLE_EVENT_COLOR = '#4285F4'
+
+export interface ExternalImportResult {
+  imported: number
+  updated: number
+  error?: string
+}
+
+/**
+ * Faz upsert dos eventos do Google em `calendar_events` (tenant-safe),
+ * deduplicando por (tenant_id, external_provider, external_id).
+ */
+export async function upsertExternalEvents(
+  events: ExternalEventInput[],
+  tenantId: string = DEFAULT_TENANT_ID,
+  provider: string = GOOGLE_PROVIDER,
+): Promise<ExternalImportResult> {
+  if (events.length === 0) return { imported: 0, updated: 0 }
+
+  const existing = await safeCall('calendarEvents.external.existing', async () => {
+    const { data, error } = await supabase.from('calendar_events')
+      .select('id, external_id')
+      .eq('tenant_id', tenantId)
+      .eq('external_provider', provider)
+      .is('archived_at', null)
+    if (error) throw new Error(error.message)
+    return data ?? []
+  }, null as { id: string; external_id: string | null }[] | null, { provider })
+
+  if (existing === null) return { imported: 0, updated: 0, error: 'Não foi possível verificar os eventos já importados.' }
+
+  const byExternal = new Map(existing.filter(r => r.external_id).map(r => [r.external_id as string, r.id]))
+  let imported = 0
+  let updated = 0
+
+  for (const ev of events) {
+    const input: CalendarEventInput = {
+      title: ev.title,
+      startIso: ev.startIso,
+      endIso: ev.endIso,
+      allDay: ev.allDay,
+      eventType: 'other',
+      guests: ev.guests ?? [],
+      description: ev.description ?? undefined,
+      location: ev.location ?? undefined,
+      meetLink: ev.meetLink ?? undefined,
+      color: GOOGLE_EVENT_COLOR,
+      externalProvider: provider,
+      externalId: ev.externalId,
+    }
+    const current = byExternal.get(ev.externalId)
+    if (current) {
+      const ok = await updateCalendarEvent(current, input, tenantId)
+      if (ok) updated++
+    } else {
+      const ok = await createCalendarEvent(input, tenantId)
+      if (ok) imported++
+    }
+  }
+
+  return { imported, updated }
+}
+
+/** Guarda o external_id devolvido pelo Google num evento nativo. */
+export async function setExternalId(
+  id: string,
+  externalId: string,
+  tenantId: string = DEFAULT_TENANT_ID,
+  provider: string = GOOGLE_PROVIDER,
+): Promise<void> {
+  await updateCalendarEvent(id, { externalProvider: provider, externalId }, tenantId)
 }

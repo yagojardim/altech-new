@@ -44,8 +44,11 @@ import ResetPasswordPage from './pages/ResetPasswordPage'
 import ProfilePage from './pages/ProfilePage'
 import PreferencesPage from './pages/PreferencesPage'
 import StoragePage from './pages/StoragePage'
+import OAuthGoogleReturn from './pages/OAuthGoogleReturn'
 import { initAppPrefs } from './lib/appPrefs'
 import { RESET_PATH } from './lib/passwordReset'
+import { GOOGLE_RETURN_PATH } from './lib/googleCalendar'
+
 
 
 const ALL_VIEWS: View[] = [
@@ -79,6 +82,14 @@ export const VIEW_LABELS: Record<View, string> = {
 initAppPrefs()
 
 export default function App() {
+  // Rota de retorno do OAuth do conector Google Calendar (abre em popup).
+  if (typeof window !== 'undefined' && window.location.pathname === GOOGLE_RETURN_PATH) {
+    return (
+      <ErrorBoundary scope="OAuthGoogleReturn">
+        <OAuthGoogleReturn />
+      </ErrorBoundary>
+    )
+  }
   return (
     <ErrorBoundary scope="AppShell">
       <SessionProvider>
@@ -87,6 +98,7 @@ export default function App() {
     </ErrorBoundary>
   )
 }
+
 
 function AppInner() {
   const { setActiveUser, status, enterInspection, mustChangePassword } = useSession()
