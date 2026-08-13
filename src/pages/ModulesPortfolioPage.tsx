@@ -311,6 +311,9 @@ type CardAction = 'trial' | 'open' | 'details' | 'reason' | 'none'
  * é responsabilidade do Altech Control.
  */
 function planFor(mod: ModuleView, trial: ModuleTrialRow | null): { label: string; action: CardAction } {
+  if (mod.is_future) {
+    return { label: 'Em breve', action: 'none' }
+  }
   switch (mod.contract_status) {
     case 'included':
     case 'active':           return { label: 'Abrir módulo', action: 'open' }
