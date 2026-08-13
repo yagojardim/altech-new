@@ -2269,7 +2269,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           error={boardError}
           onStartSprint={s=>setStartingSprint(s)}
           onCompleteSprint={s=>setCompletingSprint(s)}
-          onGenerateCeremonies={s=>{ void handleGenerateCeremonies(s) }}
+          onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
         />
