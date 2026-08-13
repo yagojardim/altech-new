@@ -75,9 +75,10 @@ export const DASHBOARD_CATALOG: Record<DashboardType, DashboardDef> = {
 }
 
 // ─── Tenant ───────────────────────────────────────────────────────────────────
+/** Mesmo tenant real do banco (DEFAULT_TENANT_ID) — Rautaki. */
 export const MOCK_TENANT: Tenant = {
-  tenant_id: 'ten_altech_001',
-  name: 'Altech Agency',
+  tenant_id: '00000000-0000-0000-0000-000000000001',
+  name: 'Rautaki',
 }
 
 function ud(user_id: string, dashboard_id: DashboardType, is_default: boolean): UserDashboard {
@@ -95,159 +96,87 @@ function ud(user_id: string, dashboard_id: DashboardType, is_default: boolean): 
   }
 }
 
-// ─── Users — one per role, plus multi-dashboard examples ─────────────────────
-export const MOCK_USERS: MockUser[] = [
-  {
-    user_id: 'u_admin',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Diana Costa',
-    email: 'diana@altech.io',
-    avatar_initials: 'DC',
-    avatar_color: '#7d92ff',
-    role_context: 'Admin',
+export const DEFAULT_DASHBOARD_BY_ROLE: Record<RoleContext, DashboardType> = {
+  Admin: 'admin', PMO: 'pmo', ProjectManager: 'project-manager',
+  ProductManager: 'product-manager', ProductOwner: 'product-owner',
+  ScrumMaster: 'scrum-master', TechLead: 'tech-lead', Dev: 'dev',
+  UX: 'ux', QA: 'qa',
+}
+
+const AVATAR_COLORS = ['#7d92ff', '#35c9ae', '#f5a524', '#a78bfa', '#f0455a', '#60a5fa', '#34d399', '#fb923c', '#e879f9', '#fbbf24']
+
+export function personaAvatarColor(seed: string): string {
+  let hash = 0
+  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length]
+}
+
+export function personaInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '??'
+  return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase()
+}
+
+const BASE_MODULES = ['board', 'reports', 'roadmap']
+
+/** Monta uma persona de Inspection a partir de um profile real do tenant. */
+export function buildPersona(input: {
+  user_id: string
+  tenant_id?: string
+  name: string
+  email: string
+  role_context: RoleContext
+  tenant_owner?: boolean
+}): MockUser {
+  const tenantId = input.tenant_id ?? MOCK_TENANT.tenant_id
+  const isMaster = !!input.tenant_owner
+  const dash = DEFAULT_DASHBOARD_BY_ROLE[input.role_context]
+  const dashboards = [ud(input.user_id, dash, true)]
+  if (isMaster && dash !== 'admin') dashboards.push(ud(input.user_id, 'admin', false))
+
+  return {
+    user_id: input.user_id,
+    tenant_id: tenantId,
+    name: input.name,
+    email: input.email.toLowerCase(),
+    avatar_initials: personaInitials(input.name),
+    avatar_color: personaAvatarColor(input.email || input.name),
+    role_context: input.role_context,
     project_id: '*',
     squad_id: '*',
-    modules_enabled: ['board','reports','portfolio','roadmap','config','team','modules','audit'],
-    permissions: ['*'],
-    assigned_dashboards: [ud('u_admin', 'admin', true)],
-    approved_squads: ['squad_growth', 'squad_platform', 'squad_design'],
-  },
-  {
-    user_id: 'u_pmo',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Carlos Drummond',
-    email: 'carlos@altech.io',
-    avatar_initials: 'CD',
-    avatar_color: '#35c9ae',
-    role_context: 'PMO',
-    project_id: 'proj_001',
-    squad_id: 'squad_platform',
-    modules_enabled: ['board','reports','portfolio','roadmap'],
-    permissions: derivePermissions('PMO'),
-    assigned_dashboards: [ud('u_pmo', 'pmo', true), ud('u_pmo', 'admin', false)],
-  },
-  {
-    user_id: 'u_pm',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Mariana Souza',
-    email: 'mariana@altech.io',
-    avatar_initials: 'MS',
-    avatar_color: '#f5a524',
-    role_context: 'ProjectManager',
-    project_id: 'proj_001',
-    squad_id: 'squad_growth',
-    modules_enabled: ['board','reports','roadmap','releases'],
-    permissions: derivePermissions('ProjectManager', ['approve:hours']),
-    assigned_dashboards: [ud('u_pm', 'project-manager', true)],
-    approved_squads: ['squad_growth'],
-  },
-  {
-    user_id: 'u_prodmgr',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Felipe Nunes',
-    email: 'felipe@altech.io',
-    avatar_initials: 'FN',
-    avatar_color: '#a78bfa',
-    role_context: 'ProductManager',
-    project_id: 'proj_001',
-    squad_id: 'squad_growth',
-    modules_enabled: ['board','reports','roadmap','analytics'],
-    permissions: derivePermissions('ProductManager'),
-    assigned_dashboards: [ud('u_prodmgr', 'product-manager', true), ud('u_prodmgr', 'pmo', false)],
-  },
-  {
-    user_id: 'u_po',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Beatriz Alves',
-    email: 'beatriz@altech.io',
-    avatar_initials: 'BA',
-    avatar_color: '#f0455a',
-    role_context: 'ProductOwner',
-    project_id: 'proj_001',
-    squad_id: 'squad_growth',
-    modules_enabled: ['board','reports','roadmap'],
-    permissions: derivePermissions('ProductOwner'),
-    assigned_dashboards: [ud('u_po', 'product-owner', true), ud('u_po', 'project-manager', false)],
-  },
-  {
-    user_id: 'u_sm',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Rafael Mendes',
-    email: 'rafael.sm@altech.io',
-    avatar_initials: 'RM',
-    avatar_color: '#60a5fa',
-    role_context: 'ScrumMaster',
-    project_id: 'proj_001',
-    squad_id: 'squad_growth',
-    modules_enabled: ['board','reports'],
-    permissions: derivePermissions('ScrumMaster'),
-    assigned_dashboards: [ud('u_sm', 'scrum-master', true)],
-  },
-  {
-    user_id: 'u_tl',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Lucas Ferreira',
-    email: 'lucas.tl@altech.io',
-    avatar_initials: 'LF',
-    avatar_color: '#34d399',
-    role_context: 'TechLead',
-    project_id: 'proj_002',
-    squad_id: 'squad_platform',
-    modules_enabled: ['board','reports','integrations','deployments'],
-    // TechLead with opt-ins for epic/dashview (granted at invite time)
-    permissions: derivePermissions('TechLead', ['create:epic', 'create:feature', 'access:dashview']),
-    assigned_dashboards: [ud('u_tl', 'tech-lead', true), ud('u_tl', 'dev', false)],
-  },
-  {
-    user_id: 'u_dev',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Ana Lima',
-    email: 'ana@altech.io',
-    avatar_initials: 'AL',
-    avatar_color: '#fb923c',
-    role_context: 'Dev',
-    project_id: 'proj_002',
-    squad_id: 'squad_platform',
-    modules_enabled: ['board','reports'],
-    permissions: derivePermissions('Dev'),
-    assigned_dashboards: [ud('u_dev', 'dev', true)],
-  },
-  {
-    user_id: 'u_ux',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Camila Torres',
-    email: 'camila@altech.io',
-    avatar_initials: 'CT',
-    avatar_color: '#e879f9',
-    role_context: 'UX',
-    project_id: 'proj_001',
-    squad_id: 'squad_design',
-    modules_enabled: ['board','reports'],
-    permissions: derivePermissions('UX'),
-    assigned_dashboards: [ud('u_ux', 'ux', true)],
-  },
-  {
-    user_id: 'u_qa',
-    tenant_id: MOCK_TENANT.tenant_id,
-    name: 'Bruno Saraiva',
-    email: 'bruno@altech.io',
-    avatar_initials: 'BS',
-    avatar_color: '#fbbf24',
-    role_context: 'QA',
-    project_id: 'proj_002',
-    squad_id: 'squad_platform',
-    modules_enabled: ['board','reports'],
-    permissions: derivePermissions('QA'),
-    assigned_dashboards: [ud('u_qa', 'qa', true), ud('u_qa', 'tech-lead', false)],
-  },
+    modules_enabled: isMaster
+      ? ['board', 'reports', 'portfolio', 'roadmap', 'config', 'team', 'modules', 'audit']
+      : BASE_MODULES,
+    permissions: isMaster ? ['*'] : derivePermissions(input.role_context),
+    assigned_dashboards: dashboards,
+  }
+}
+
+// ─── Personas do tenant Rautaki ───────────────────────────────────────────────
+// Seed mínimo (substituído na inicialização pelos profiles reais do banco, para
+// que user_id === profiles.id — RBAC, assignee e fetchAssignedProjects dependem disso).
+export const MOCK_USERS: MockUser[] = [
+  buildPersona({ user_id: 'seed_pedro',  name: 'Pedro Zomer', email: 'pedro@rautaki.com', role_context: 'TechLead',     tenant_owner: true }),
+  buildPersona({ user_id: 'seed_yago',   name: 'Yago Jardim', email: 'yago@rautaki.com',  role_context: 'ProductOwner' }),
+  buildPersona({ user_id: 'seed_paulo',  name: 'Paulo',       email: 'paulo@rautaki.com', role_context: 'ScrumMaster' }),
 ]
 
+/** Substitui as personas de Inspection pelos profiles reais do tenant. */
+export function hydratePersonas(users: MockUser[]): void {
+  if (!users.length) return
+  MOCK_USERS.splice(0, MOCK_USERS.length, ...users)
+  if (!MOCK_USERS.some(u => u.user_id === ACTIVE_USER_ID)) {
+    ACTIVE_USER_ID = MOCK_USERS[0].user_id
+  }
+}
+
 // ─── Active inspection-mode session ──────────────────────────────────────────
-export let ACTIVE_USER_ID = 'u_po'
+export let ACTIVE_USER_ID = MOCK_USERS[0].user_id
 
 export function setActiveUser(user_id: string) {
   ACTIVE_USER_ID = user_id
 }
+
 
 // ─── Scope model ──────────────────────────────────────────────────────────────
 export interface UserScope {
