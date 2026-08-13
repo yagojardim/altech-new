@@ -3,7 +3,7 @@
 // Admin Master (dono do tenant). Admin Master ≠ SUPER_ADMIN da Altech.
 import { supabase } from '../../integrations/supabase/client'
 import { DEFAULT_TENANT_ID } from './timeline'
-import { safeCall } from '../../utils/logger'
+import { safeCall, logger } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID }
 
@@ -45,4 +45,36 @@ export function getTenantOwnerEmails(): Promise<Set<string>> {
     const members = await getMembers()
     return new Set(members.filter(m => m.tenant_owner).map(m => m.email.toLowerCase()))
   }, new Set<string>())
+}
+
+export type MemberStatus = 'active' | 'blocked' | 'inactive'
+
+/** Atualiza profiles.status e registra o evento em audit_logs (tenant-scoped). */
+export async function setMemberStatus(
+  id: string, status: MemberStatus, actorName?: string,
+): Promise<boolean> {
+  return safeCall<boolean>('members.setMemberStatus', async () => {
+    const t = (supabase as unknown as { from: (n: string) => any })
+    const { data: before } = await t('profiles')
+      .select('status').eq('id', id).eq('tenant_id', DEFAULT_TENANT_ID).maybeSingle()
+    const { error } = await t('profiles')
+      .update({ status })
+      .eq('id', id).eq('tenant_id', DEFAULT_TENANT_ID)
+    if (error) throw error
+    try {
+      await t('audit_logs').insert({
+        tenant_id: DEFAULT_TENANT_ID,
+        entity_type: 'profile',
+        entity_id: id,
+        action: status === 'blocked' ? 'profile.blocked'
+          : status === 'active' ? 'profile.unblocked' : 'profile.deactivated',
+        actor_name: actorName ?? null,
+        before: before ? { status: before.status } : null,
+        after: { status },
+      })
+    } catch (err) {
+      logger.error('members.setMemberStatus.audit', err, { id, status })
+    }
+    return true
+  }, false)
 }
