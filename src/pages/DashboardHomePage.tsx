@@ -912,12 +912,20 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) =>
   const funcProgress    = sprint14Items.length > 0 ? Math.round((doneSprint / sprint14Items.length) * 100) : 0
   const poPtDone        = sprint14Items.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
-  const team = [
-    { name: 'Ana Lima',  i: 'AL', c: '#fb923c', items: 4, status: 'saudável' as const },
-    { name: 'Lucas F.',  i: 'LF', c: '#34d399', items: 6, status: 'crítico'  as const },
-    { name: 'Bruno S.',  i: 'BS', c: '#fbbf24', items: 3, status: 'atenção'  as const },
-    { name: '—',         i: '?',  c: '#555',    items: 2, status: 'sem-resp' as const },
-  ]
+  const workload = liveAggregates()?.workload ?? []
+  const team = workload.map(w => ({
+    name: w.name,
+    initials: w.initials,
+    color: w.color,
+    active: w.active,
+  }))
+
+  function workloadSeverity(active: number): { label: string; severity: 'neutral' | 'warn' | 'crit' } {
+    if (active === 0) return { label: 'sem demanda', severity: 'neutral' }
+    if (active <= 4) return { label: 'saudável', severity: 'neutral' }
+    if (active === 5) return { label: 'atenção', severity: 'warn' }
+    return { label: 'sobrecarga', severity: 'crit' }
+  }
   const nativeCards: MuralNativeCard[] = [
     { id: 'po:ready', value: `${coverageReady}%`, label: 'Cobertura Ready', sub: 'pts prontos ÷ velocity', disclaimer: 'pontos prontos ÷ velocidade média da sprint', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />, onClick: () => onNav('list') },
     { id: 'po:backlog', value: `${backlogHealth}%`, label: 'Saúde do Backlog', sub: 'itens saudáveis ÷ avaliáveis', disclaimer: 'itens saudáveis ÷ total de itens avaliáveis', color: backlogHealth < 60 ? T.warn : T.success, alert: backlogHealth < 60, miniViz: <MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />, onClick: () => onNav('list') },
@@ -949,16 +957,23 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) =>
           <ClientFeedCard poId="u_po" tenantId={MOCK_TENANT.tenant_id} />
 
           <SCard title="Time Atuando no Projeto">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {team.map(m => (
-                <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Av initials={m.i} color={m.c} size={22} />
-                  <span style={{ flex: 1, fontSize: 12, color: T.text1 }}>{m.name}</span>
-                  <span style={{ fontSize: 10, color: T.text3 }}>{m.items}</span>
-                  <ConditionalTag label={m.status} severity={m.status === 'crítico' ? 'crit' : m.status === 'atenção' ? 'warn' : m.status === 'sem-resp' ? 'crit' : 'neutral'} />
-                </div>
-              ))}
-            </div>
+            {team.length === 0 ? (
+              <EmptyState message="Nenhuma demanda atribuída ainda." />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {team.map(m => {
+                  const tag = workloadSeverity(m.active)
+                  return (
+                    <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Av initials={m.initials} color={m.color} size={22} />
+                      <span style={{ flex: 1, fontSize: 12, color: T.text1 }}>{m.name}</span>
+                      <span style={{ fontSize: 10, color: T.text3 }}>{m.active}</span>
+                      <ConditionalTag label={tag.label} severity={tag.severity} />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </SCard>
         </div>
         <CompositionGrid dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
