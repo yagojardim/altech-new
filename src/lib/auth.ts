@@ -6,8 +6,10 @@ import { logger } from '../utils/logger'
 import { clearRememberMe } from './authStorage'
 
 
+// Inspection Mode (temporário, será removido na virada de produção):
+// habilitado por padrão; desligue com VITE_INSPECTION_MODE=false.
 export const INSPECTION_MODE_ENABLED =
-  String(import.meta.env.VITE_INSPECTION_MODE ?? '') === 'true'
+  String(import.meta.env.VITE_INSPECTION_MODE ?? 'true').toLowerCase() !== 'false'
 
 export interface AuthUser {
   id: string
