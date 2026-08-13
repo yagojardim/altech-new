@@ -307,6 +307,26 @@ interface CardProps {
 type CardAction = 'trial' | 'open' | 'details' | 'reason' | 'none'
 
 /**
+ * Modules that are always rendered as active/operational, bypassing the
+ * tenant-state commercial status (e.g. Client Portal, Storage Manager).
+ */
+const ALWAYS_ACTIVE_KEYS = new Set(['CLIENT_PORTAL', 'STORAGE_MANAGER'])
+
+function normalizeActiveModule(mod: ModuleView): ModuleView {
+  if (!ALWAYS_ACTIVE_KEYS.has(mod.key)) return mod
+  return {
+    ...mod,
+    status: 'operational',
+    contract_status: 'included',
+    technical_health: 'operational',
+    cta: {
+      label: mod.key === 'STORAGE_MANAGER' ? 'Gerenciar / Contratar pacotes' : 'Abrir módulo',
+      action: 'open',
+    },
+  }
+}
+
+/**
  * CTA por estado COMERCIAL. "Contratar" fica escondido nesta fase — contratação
  * é responsabilidade do Altech Control.
  */
@@ -332,7 +352,8 @@ function planFor(mod: ModuleView, trial: ModuleTrialRow | null): { label: string
   }
 }
 
-function ModulePortfolioCard({ mod, canRequest, trial, busy, onAction, onTrial }: CardProps) {
+function ModulePortfolioCard({ mod: rawMod, canRequest, trial, busy, onAction, onTrial }: CardProps) {
+  const mod = normalizeActiveModule(rawMod)
   const [hovered, setHovered] = useState(false)
   const status = mod.status
   const plan = planFor(mod, trial)
