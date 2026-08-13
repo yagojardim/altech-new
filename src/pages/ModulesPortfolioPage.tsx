@@ -314,6 +314,9 @@ function planFor(mod: ModuleView, trial: ModuleTrialRow | null): { label: string
   if (mod.is_future) {
     return { label: 'Em breve', action: 'none' }
   }
+  if (mod.key === 'STORAGE_MANAGER') {
+    return { label: 'Gerenciar / Contratar pacotes', action: 'open' }
+  }
   switch (mod.contract_status) {
     case 'included':
     case 'active':           return { label: 'Abrir módulo', action: 'open' }
@@ -521,6 +524,7 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
     switch (mod.cta.action) {
       case 'open':
         if (mod.key === 'CLIENT_PORTAL') { onNav?.('client'); return }
+        if (mod.key === 'STORAGE_MANAGER') { onNav?.('storage'); return }
         onNav?.('config'); return
       case 'preview':
         setModal({ type: 'detail', mod }); return
