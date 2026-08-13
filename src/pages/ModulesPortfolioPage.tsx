@@ -440,7 +440,7 @@ function ModulePortfolioCard({ mod: rawMod, canRequest, trial, busy, onAction, o
           <div style={{ fontSize: 11, color: D.text3 }}>{mod.tagline}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
-          <ContractBadge status={mod.contract_status} />
+          {!isComingSoon && <ContractBadge status={mod.contract_status} />}
           <HealthBadge health={mod.technical_health} />
         </div>
       </div>
