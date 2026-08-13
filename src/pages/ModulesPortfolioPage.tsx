@@ -335,10 +335,11 @@ function ModulePortfolioCard({ mod, canRequest, trial, busy, onAction, onTrial }
   const plan = planFor(mod, trial)
   const label = busy ? 'Ativando…' : plan.label
   const action = plan.action
+  const isComingSoon = mod.is_future
   const { style, color } = plan.action === 'trial'
     ? { style: 'primary' as const, color: D.blue }
     : ctaStyle(status)
-  const isDisabled = busy || style === 'disabled' || (!canRequest && action === 'trial')
+  const isDisabled = busy || style === 'disabled' || isComingSoon || (!canRequest && action === 'trial')
 
   const btnSt: React.CSSProperties = (() => {
     const base: React.CSSProperties = {
