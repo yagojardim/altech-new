@@ -16,8 +16,8 @@ import { logger, safeCall } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
 
-const BOOT_READ_TIMEOUT_MS = 3500
-const BOOT_WATCHDOG_MS = 4000
+const BOOT_READ_TIMEOUT_MS = 2500
+const BOOT_WATCHDOG_MS = 1500
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, scope: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
