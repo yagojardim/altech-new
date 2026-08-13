@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { WorkItemDetail } from '../components/WorkItemDetail'
 import { T } from '../components/ds/tokens'
 import {
-  listEpics, createEpicIssue, linkItemToEpic, epicColor as epicColorOf,
+  listEpics, createEpicIssue, linkItemToEpic, createEpic, nextEpicKey, epicColor as epicColorOf,
   type EpicsData, type EpicItemRow, type EpicRow,
 } from '../data/db/epics'
 import { DB_STATUS_CFG } from '../data/db/timeline'
@@ -219,6 +219,125 @@ function StateBox({ children }: { children: React.ReactNode }) {
   )
 }
 
+const fieldStyle: React.CSSProperties = {
+  width: '100%', background: T.bgSurface2, border: `1px solid ${T.border2}`,
+  borderRadius: 8, padding: '8px 10px', fontSize: 12, color: T.text1, outline: 'none',
+}
+const labelStyle: React.CSSProperties = { fontSize: 11, color: T.text3, display: 'block', marginBottom: 4 }
+
+// ─── "New epic" modal ─────────────────────────────────────────────────────────
+function NewEpicModal({
+  projects, profiles, busy, error, suggestedKey, onKeyRefresh, onClose, onCreate,
+}: {
+  projects: EpicsData['projects']
+  profiles: EpicsData['profiles']
+  busy: boolean
+  error: string | null
+  suggestedKey: string
+  onKeyRefresh: (projectId: string) => void
+  onClose: () => void
+  onCreate: (input: {
+    projectId: string; name: string; key?: string
+    description?: string | null; quarter?: string | null; ownerId?: string | null
+  }) => void
+}) {
+  const [name, setName] = useState('')
+  const [key, setKey] = useState('')
+  const [projectId, setProjectId] = useState(projects.length === 1 ? projects[0].id : '')
+  const [ownerId, setOwnerId] = useState('')
+  const [quarter, setQuarter] = useState('')
+  const [description, setDescription] = useState('')
+
+  const canSave = name.trim().length > 0 && projectId.length > 0 && !busy
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(8,10,14,0.72)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div style={{
+        width: '100%', maxWidth: 480, background: T.bgSurface,
+        border: `1px solid ${T.border2}`, borderRadius: 12, boxShadow: T.shadowModal,
+        padding: 20, display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Novo épico</div>
+
+        <div>
+          <label style={labelStyle}>Nome *</label>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Ex.: Autenticação e Perfis" style={fieldStyle} />
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Projeto *</label>
+            <select
+              value={projectId}
+              onChange={e => { setProjectId(e.target.value); onKeyRefresh(e.target.value) }}
+              style={fieldStyle}
+            >
+              <option value="">Selecionar…</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 130 }}>
+            <label style={labelStyle}>Key</label>
+            <input value={key} onChange={e => setKey(e.target.value)} placeholder={suggestedKey || 'EP-01'} style={fieldStyle} />
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}>
+            <label style={labelStyle}>Owner</label>
+            <select value={ownerId} onChange={e => setOwnerId(e.target.value)} style={fieldStyle}>
+              <option value="">Sem owner</option>
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          <div style={{ width: 130 }}>
+            <label style={labelStyle}>Quarter</label>
+            <input value={quarter} onChange={e => setQuarter(e.target.value)} placeholder="Q3 2026" style={fieldStyle} />
+          </div>
+        </div>
+
+        <div>
+          <label style={labelStyle}>Descrição</label>
+          <textarea
+            value={description} onChange={e => setDescription(e.target.value)} rows={3}
+            style={{ ...fieldStyle, resize: 'vertical' }}
+          />
+        </div>
+
+        {error && <div style={{ fontSize: 12, color: T.crit }}>{error}</div>}
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 4 }}>
+          <button
+            onClick={onClose}
+            style={{ fontSize: 12, padding: '7px 14px', borderRadius: 8, background: 'transparent', border: `1px solid ${T.border2}`, color: T.text2, cursor: 'pointer' }}
+          >Cancelar</button>
+          <button
+            disabled={!canSave}
+            onClick={() => onCreate({
+              projectId, name: name.trim(), key: key.trim() || undefined,
+              description: description.trim() || null,
+              quarter: quarter.trim() || null,
+              ownerId: ownerId || null,
+            })}
+            style={{
+              fontSize: 12, padding: '7px 14px', borderRadius: 8, border: 'none',
+              background: canSave ? T.accent : T.neutralDim, color: canSave ? '#fff' : T.text3,
+              cursor: canSave ? 'pointer' : 'not-allowed',
+            }}
+          >{busy ? 'Criando…' : 'Criar épico'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function EpicsPage() {
   const [data, setData] = useState<EpicsData | null>(null)
@@ -227,6 +346,9 @@ export default function EpicsPage() {
   const [busy, setBusy] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [detailId, setDetailId] = useState<string | null>(null)
+  const [newEpicOpen, setNewEpicOpen] = useState(false)
+  const [newEpicError, setNewEpicError] = useState<string | null>(null)
+  const [suggestedKey, setSuggestedKey] = useState('')
 
   const activeUser = getActiveUser()
 
@@ -257,6 +379,33 @@ export default function EpicsPage() {
     finally { setBusy(false) }
   }
 
+  const refreshSuggestedKey = useCallback(async (projectId: string) => {
+    if (!projectId) { setSuggestedKey(''); return }
+    try { setSuggestedKey(await nextEpicKey(projectId)) }
+    catch { setSuggestedKey('') }
+  }, [])
+
+  function openNewEpic() {
+    setNewEpicError(null)
+    setNewEpicOpen(true)
+    const projects = data?.projects ?? []
+    if (projects.length === 1) void refreshSuggestedKey(projects[0].id)
+    else setSuggestedKey('')
+  }
+
+  async function handleCreateEpic(input: {
+    projectId: string; name: string; key?: string
+    description?: string | null; quarter?: string | null; ownerId?: string | null
+  }) {
+    setBusy(true); setNewEpicError(null)
+    try {
+      await createEpic({ ...input, actorName: activeUser?.name })
+      setNewEpicOpen(false)
+      await load()
+    } catch (err) { setNewEpicError(err instanceof Error ? err.message : String(err)) }
+    finally { setBusy(false) }
+  }
+
   const epics = data?.epics ?? []
   const items = data?.items ?? []
   const profileById = new Map((data?.profiles ?? []).map(p => [p.id, p]))
@@ -270,7 +419,15 @@ export default function EpicsPage() {
         <span style={{ fontSize: 13, color: T.text3, background: T.neutralDim, borderRadius: 20, padding: '2px 10px' }}>
           {epics.length} épicos
         </span>
+        <button
+          onClick={openNewEpic}
+          style={{
+            marginLeft: 'auto', fontSize: 12, fontWeight: 600, padding: '7px 14px',
+            borderRadius: 8, border: 'none', background: T.accent, color: '#fff', cursor: 'pointer',
+          }}
+        >+ Novo épico</button>
       </div>
+
 
       {loading && <StateBox>Carregando épicos…</StateBox>}
       {!loading && error && (
@@ -487,6 +644,20 @@ export default function EpicsPage() {
         onClose={() => { setDetailId(null); void load() }}
       />
     )}
+
+    {newEpicOpen && (
+      <NewEpicModal
+        projects={data?.projects ?? []}
+        profiles={data?.profiles ?? []}
+        busy={busy}
+        error={newEpicError}
+        suggestedKey={suggestedKey}
+        onKeyRefresh={id => { void refreshSuggestedKey(id) }}
+        onClose={() => setNewEpicOpen(false)}
+        onCreate={input => { void handleCreateEpic(input) }}
+      />
+    )}
+
     </>
   )
 }

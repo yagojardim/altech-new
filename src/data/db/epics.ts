@@ -158,3 +158,57 @@ export async function linkItemToEpic(itemId: string, epicId: string, actorName =
   if (error) throw new Error(missingTableMessage('work_items', error.message))
   await writeAudit('work_item', itemId, 'work_item.epic_linked', actorName, null, { epic_id: epicId })
 }
+
+export interface CreateEpicInput {
+  projectId: string
+  name: string
+  key?: string
+  description?: string | null
+  quarter?: string | null
+  ownerId?: string | null
+  color?: string | null
+  actorName?: string
+}
+
+/** Next sequential epic key (EP-01, EP-02, …) for a project. */
+export async function nextEpicKey(projectId: string): Promise<string> {
+  const { data, error } = await supabase.from('epics')
+    .select('key').eq('project_id', projectId).eq('tenant_id', DEFAULT_TENANT_ID)
+  if (error) throw new Error(missingTableMessage('epics', error.message))
+  const max = (data ?? []).reduce((acc, r) => {
+    const n = parseInt((r.key ?? '').split('-').pop() ?? '', 10)
+    return Number.isFinite(n) && n > acc ? n : acc
+  }, 0)
+  return `EP-${String(max + 1).padStart(2, '0')}`
+}
+
+/** Creates a real epic for a project of the current tenant. */
+export async function createEpic(input: CreateEpicInput): Promise<EpicRow> {
+  try {
+    const key = input.key?.trim() || (await nextEpicKey(input.projectId))
+
+    const { data, error } = await supabase.from('epics').insert({
+      tenant_id: DEFAULT_TENANT_ID,
+      project_id: input.projectId,
+      key,
+      name: input.name,
+      description: input.description ?? null,
+      quarter: input.quarter ?? null,
+      owner_id: input.ownerId ?? null,
+      color: input.color ?? null,
+    }).select('id, project_id, key, name, description, color, quarter, owner_id').single()
+
+    if (error || !data) {
+      throw new Error(missingTableMessage('epics', error?.message ?? 'Falha ao criar o épico.'))
+    }
+
+    await writeAudit('epic', data.id, 'epic.created', input.actorName ?? 'Sistema', null, {
+      key: data.key, name: data.name, project_id: data.project_id,
+    })
+
+    return data as EpicRow
+  } catch (err) {
+    throw new Error(`Não foi possível criar o épico: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
