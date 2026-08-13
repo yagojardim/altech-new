@@ -644,6 +644,20 @@ export default function EpicsPage() {
         onClose={() => { setDetailId(null); void load() }}
       />
     )}
+
+    {newEpicOpen && (
+      <NewEpicModal
+        projects={data?.projects ?? []}
+        profiles={data?.profiles ?? []}
+        busy={busy}
+        error={newEpicError}
+        suggestedKey={suggestedKey}
+        onKeyRefresh={id => { void refreshSuggestedKey(id) }}
+        onClose={() => setNewEpicOpen(false)}
+        onCreate={input => { void handleCreateEpic(input) }}
+      />
+    )}
+
     </>
   )
 }
