@@ -524,6 +524,7 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
     switch (mod.cta.action) {
       case 'open':
         if (mod.key === 'CLIENT_PORTAL') { onNav?.('client'); return }
+        if (mod.key === 'STORAGE_MANAGER') { onNav?.('storage'); return }
         onNav?.('config'); return
       case 'preview':
         setModal({ type: 'detail', mod }); return
