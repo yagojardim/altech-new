@@ -1068,7 +1068,7 @@ export default function CalendarPage() {
     const res = await generateSprintCeremonies({
       id: sprint.id, name: sprint.name, projectId: sprint.projectId,
       startDate: sprint.start, endDate: sprint.end,
-    }, DEFAULT_TENANT_ID, activeUser.name, slots)
+    }, DEFAULT_TENANT_ID, activeUser.user_id, slots)
     setGenerating(false)
     setCeremonyDialog(false)
     if (res.error) { toast(res.error); return }
@@ -1129,7 +1129,7 @@ export default function CalendarPage() {
     setComposer(null)
     const saved = editing
       ? await updateCalendarEvent(editing.id, input, DEFAULT_TENANT_ID)
-      : await createCalendarEvent({ ...input, createdBy: activeUser.name }, DEFAULT_TENANT_ID)
+      : await createCalendarEvent({ ...input, createdBy: activeUser.user_id }, DEFAULT_TENANT_ID)
     if (!saved) { toast('Falha ao salvar o evento.'); return }
     if (gStatus.connected) {
       const externalId = await pushEventToGoogle({

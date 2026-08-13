@@ -45,6 +45,14 @@ export function normalizeEventType(value: string | null | undefined): CalendarEv
   return (EVENT_TYPES as string[]).includes(value ?? '') ? (value as CalendarEventType) : 'other'
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function normalizeCreatedBy(value: string | null | undefined): string | null {
+  if (!value) return null
+  return UUID_RE.test(value) ? value : null
+}
+
+
 export interface EventGuest { name: string; email: string }
 
 export interface DbCalendarEvent {
@@ -193,7 +201,7 @@ export async function createCalendarEvent(
       location: input.location ?? null,
       project_id: input.projectId ?? null,
       sprint_id: input.sprintId ?? null,
-      created_by: input.createdBy ?? null,
+      created_by: normalizeCreatedBy(input.createdBy),
       external_provider: input.externalProvider ?? null,
       external_id: input.externalId ?? null,
       metadata: toMetadata(input),
@@ -428,7 +436,7 @@ export async function generateSprintCeremonies(
       attendees: [] as unknown as Json,
       project_id: sprint.projectId ?? null,
       sprint_id: sprint.id,
-      created_by: createdBy,
+      created_by: normalizeCreatedBy(createdBy),
       metadata: { color: EVENT_TYPE_COLOR[p.type] } as Json,
     })
   }
