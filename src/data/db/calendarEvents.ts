@@ -45,6 +45,14 @@ export function normalizeEventType(value: string | null | undefined): CalendarEv
   return (EVENT_TYPES as string[]).includes(value ?? '') ? (value as CalendarEventType) : 'other'
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function normalizeCreatedBy(value: string | null | undefined): string | null {
+  if (!value) return null
+  return UUID_RE.test(value) ? value : null
+}
+
+
 export interface EventGuest { name: string; email: string }
 
 export interface DbCalendarEvent {
