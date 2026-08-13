@@ -11,6 +11,7 @@ import {
 } from '../lib/auth'
 import { loadProfileByAuthUserId, touchAccess } from './db/authProfile'
 import { fetchTenantPersonas } from './db/tenantPersonas'
+import { getTenantName } from './db/tenant'
 import { logger, safeCall } from '../utils/logger'
 
 export type SessionStatus = 'loading' | 'authenticated' | 'inspection' | 'anonymous'
@@ -37,6 +38,8 @@ interface SessionCtx {
   status:        SessionStatus
   authUser:      AuthUser | null
   inspectionEnabled: boolean
+  /** Nome do workspace/tenant real (tenants.name). */
+  tenantName:    string
   signOut:       () => Promise<void>
   enterInspection: () => void
   mustChangePassword: boolean
@@ -52,6 +55,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
   const [mustChangePassword, setMustChange] = useState(false)
   const [, setPersonasVersion] = useState(0)
+  const [tenantName, setTenantName] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    void getTenantName().then(name => { if (alive && name) setTenantName(name) })
+    return () => { alive = false }
+  }, [])
 
   // Personas de Inspection vêm dos profiles reais do tenant (user_id === profiles.id).
   useEffect(() => {
@@ -175,7 +185,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   return (
     <SessionContext.Provider value={{
       activeUser, setActiveUser, status, authUser,
-      inspectionEnabled: INSPECTION_MODE_ENABLED, signOut, enterInspection,
+      inspectionEnabled: INSPECTION_MODE_ENABLED, tenantName, signOut, enterInspection,
       mustChangePassword, clearMustChangePassword: () => setMustChange(false),
     }}>
       {children}

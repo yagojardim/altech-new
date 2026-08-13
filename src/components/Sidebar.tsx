@@ -343,12 +343,6 @@ function ProjectSubList({ onNav }: { onNav: (view: string) => void }) {
   )
 }
 
-const workspaces = [
-  { id: 'w1', name: 'Altech Agency',      initial: 'A', color: T.accent  },
-  { id: 'w2', name: 'Harbor Labs',        initial: 'H', color: T.warn    },
-  { id: 'w3', name: 'Internal Projects',  initial: 'I', color: T.success },
-]
-
 // ─── Pill nav button ───────────────────────────────────────────────────────────
 function NavBtn({ item, active, onClick, collapsed, disabled = false, disabledLabel }: {
   item: NavItem; active: boolean; onClick: () => void; collapsed: boolean
@@ -469,90 +463,27 @@ function NavBtnWithDisclosure({
   )
 }
 
-// ─── Workspace selector dropdown ──────────────────────────────────────────────
+// ─── Workspace (tenant real, único) ───────────────────────────────────────────
 function WorkspaceSelector({ collapsed }: { collapsed: boolean }) {
-  const [open, setOpen] = useState(false)
-  const [active, setActive] = useState('w1')
-  const ref = useRef<HTMLDivElement>(null)
-  const ws = workspaces.find(w => w.id === active) ?? workspaces[0]
-
-  useEffect(() => {
-    function close(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [])
+  const { tenantName } = useSession()
+  const name = tenantName || '—'
+  const initial = (tenantName.trim()[0] ?? '?').toUpperCase()
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen(o => !o)}
-        className={`flex items-center gap-2 rounded-xl transition-colors ${collapsed ? 'w-10 h-10 justify-center' : 'w-full px-3 py-2.5'}`}
-        style={{ background: open ? `${T.accent}14` : 'transparent' }}
-        onMouseEnter={e => { if (!open) (e.currentTarget as HTMLButtonElement).style.background = `${T.text3}14` }}
-        onMouseLeave={e => { if (!open) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+    <div
+      className={`flex items-center gap-2 rounded-xl ${collapsed ? 'w-10 h-10 justify-center' : 'w-full px-3 py-2.5'}`}
+      title={name}
+    >
+      <span
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+        style={{ background: T.accent }}
       >
-        {/* Workspace mark */}
-        <span
-          className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
-          style={{ background: ws.color }}
-        >
-          {ws.initial}
-        </span>
-        {!collapsed && (
-          <>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: T.text1 }}>{ws.name}</p>
-              <p className="text-[10px]" style={{ color: T.text3 }}>Workspace</p>
-            </div>
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ color: T.text3, flexShrink: 0 }}>
-              <path d="M2.5 5L6 8.5L9.5 5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </>
-        )}
-      </button>
-
-      {open && (
-        <div
-          className="absolute top-full mt-1 z-50 py-1.5 fade-rise overflow-hidden"
-          style={{
-            left: collapsed ? '100%' : 0,
-            marginLeft: collapsed ? 8 : 0,
-            width: 220,
-            background: T.bgSurface,
-            border: `1px solid ${T.border2}`,
-            borderRadius: 12,
-            boxShadow: T.shadowModal,
-          }}
-        >
-          <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider" style={{ color: T.text3 }}>Workspaces</p>
-          {workspaces.map(w => (
-            <button
-              key={w.id}
-              onClick={() => { setActive(w.id); setOpen(false) }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 transition-colors"
-              style={{ background: w.id === active ? `${T.accent}12` : 'transparent' }}
-              onMouseEnter={e => { if (w.id !== active) (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2 }}
-              onMouseLeave={e => { if (w.id !== active) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
-            >
-              <span className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-[11px] flex-shrink-0" style={{ background: w.color }}>{w.initial}</span>
-              <span className="flex-1 text-[13px] truncate" style={{ color: w.id === active ? T.accent : T.text1 }}>{w.name}</span>
-              {w.id === active && (
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-                  <path d="M2 5.5L4.5 8L9 3" stroke={T.accent} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              )}
-            </button>
-          ))}
-          <div className="mx-3 my-1.5 h-px" style={{ background: T.border }} />
-          <button
-            className="w-full flex items-center gap-2.5 px-3 py-2 text-[13px] transition-colors"
-            style={{ color: T.text2 }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = T.bgSurface2; (e.currentTarget as HTMLButtonElement).style.color = T.text1 }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'transparent'; (e.currentTarget as HTMLButtonElement).style.color = T.text2 }}
-          >
-            <span className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: T.bgSurface2, border: `1px dashed ${T.border2}`, color: T.text3 }}>+</span>
-            Criar workspace
-          </button>
+        {initial}
+      </span>
+      {!collapsed && (
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[13px] font-semibold leading-tight truncate" style={{ color: T.text1 }}>{name}</p>
+          <p className="text-[10px]" style={{ color: T.text3 }}>Workspace</p>
         </div>
       )}
     </div>

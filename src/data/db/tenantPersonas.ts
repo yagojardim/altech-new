@@ -80,6 +80,8 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
       }
     }
 
+    const ownerIds = new Set(active.filter(p => !!p.tenant_owner).map(p => p.id))
+
     const personas = active.map(p => {
       const name = p.name ?? p.email ?? 'Sem nome'
       const override = NAME_OVERRIDES.find(o => o.match.test(name))?.role
@@ -94,7 +96,10 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
       })
     })
 
+    // O Admin Master / tenant_owner sempre vem primeiro (persona ativa padrão).
     personas.sort((a, b) => {
+      const owner = Number(ownerIds.has(b.user_id)) - Number(ownerIds.has(a.user_id))
+      if (owner !== 0) return owner
       const d = ROLE_ORDER.indexOf(a.role_context) - ROLE_ORDER.indexOf(b.role_context)
       return d !== 0 ? d : a.name.localeCompare(b.name)
     })
