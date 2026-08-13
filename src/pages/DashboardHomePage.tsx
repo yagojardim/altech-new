@@ -12,7 +12,7 @@ import {
   SCard, ProgressBar, StatusBadge, ConditionalTag, Av,
   AuditFeed, ActivityTimeline, EmptyState, LoadingState,
   MiniBarChart, MiniSparkline,
-  type WorkItem, type FilterState, type RagStatus,
+  type WorkItem, type FilterState, type RagStatus, type AuditEntry,
 } from '../components/ds/DashboardKit'
 import {
   MOCK_TENANT, MOCK_USERS,
@@ -46,7 +46,9 @@ import {
 import { getBoardsForScope } from '../data/boards'
 import { fetchAssignedProjects } from '../data/db/projects'
 import { can } from '../data/permissions'
-import { countActiveModules } from '../data/db/modules'
+import { countActiveModules, listModules, type ModuleView } from '../data/db/modules'
+import { getMembers, setMemberStatus, type MemberRow, type MemberStatus } from '@/data/db/members'
+import { fetchRecentAdminActivity, relativeTime, type AdminActivityRow } from '@/data/db/adminActivity'
 import { countPendingInvites, nearestExpiry } from '../data/invites'
 
 // ─── Shared hook: drawer + nav + filter state ─────────────────────────────────
@@ -217,7 +219,149 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
   )
 }
 
+// ─── Admin cards (dados reais do tenant) ─────────────────────────────────────
+const AVATAR_COLORS = ['#35c9ae', '#f5a524', '#a78bfa', '#60a5fa', '#EF4444', '#22d3ee', '#f472b6']
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase()
+}
+function colorOf(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+const STATUS_COLOR: Record<string, string> = { active: T.success, blocked: T.crit, inactive: T.neutral }
+const STATUS_LABEL: Record<string, string> = { active: 'Ativo', blocked: 'Bloqueado', inactive: 'Inativo' }
+
+function AdminUsersCard({ onNav, onInvite, actorName }: {
+  onNav: (v: string, targetId?: string) => void
+  onInvite?: () => void
+  actorName?: string
+}) {
+  const [rows, setRows] = useState<MemberRow[] | null>(null)
+  const [failed, setFailed] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    void getMembers().then(list => {
+      if (!alive) return
+      setRows(list)
+      setFailed(list.length === 0)
+    })
+    return () => { alive = false }
+  }, [])
+
+  async function change(m: MemberRow, next: MemberStatus) {
+    setBusy(m.id)
+    const ok = await setMemberStatus(m.id, next, actorName)
+    if (ok) setRows(prev => (prev ?? []).map(r => r.id === m.id ? { ...r, status: next } : r))
+    setBusy(null)
+  }
+
+  return (
+    <SCard title="Gestão de Usuários" action={
+      <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
+    }>
+      {rows === null
+        ? <LoadingState />
+        : rows.length === 0
+          ? <EmptyState message={failed ? 'Não foi possível carregar os usuários.' : 'Nenhum usuário ativo no tenant.'} />
+          : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {rows.map(u => {
+                const c = STATUS_COLOR[u.status] ?? T.neutral
+                return (
+                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <Av initials={initialsOf(u.name || u.email)} color={colorOf(u.id)} size={28} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 12, color: T.text1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name || u.email}</div>
+                      <div style={{ fontSize: 10, color: T.text3 }}>{u.primary_role ?? '—'}</div>
+                    </div>
+                    <span style={{ fontSize: 10, color: c, background: `${c}18`, border: `1px solid ${c}33`, borderRadius: 4, padding: '2px 7px' }}>
+                      {STATUS_LABEL[u.status] ?? u.status}
+                    </span>
+                    {u.status === 'blocked'
+                      ? <button disabled={busy === u.id} onClick={() => void change(u, 'active')} style={{ fontSize: 10, color: T.success, background: `${T.success}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Desbloquear</button>
+                      : u.status === 'active'
+                        ? <button disabled={busy === u.id} onClick={() => void change(u, 'blocked')} style={{ fontSize: 10, color: T.warn, background: `${T.warn}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Bloquear</button>
+                        : <button disabled={busy === u.id} onClick={() => void change(u, 'active')} style={{ fontSize: 10, color: T.accent, background: `${T.accent}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Reativar</button>
+                    }
+                  </div>
+                )
+              })}
+            </div>
+          )}
+      <button onClick={() => onInvite ? onInvite() : onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
+        + Convidar usuário
+      </button>
+    </SCard>
+  )
+}
+
+const ACTIVE_MODULE_STATUS = new Set<string>(['operational', 'implemented', 'contracted', 'deploying', 'preview'])
+
+function AdminModulesCard({ onNav }: { onNav: (v: string, targetId?: string) => void }) {
+  const [mods, setMods] = useState<ModuleView[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void listModules().then(list => { if (alive) setMods(list) })
+    return () => { alive = false }
+  }, [])
+
+  return (
+    <SCard title="Módulos">
+      {mods === null
+        ? <LoadingState />
+        : mods.length === 0
+          ? <EmptyState message="Nenhum módulo disponível." />
+          : mods.map(m => {
+            const active = ACTIVE_MODULE_STATUS.has(m.status)
+            return (
+              <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: 99, background: active ? T.success : T.border, flexShrink: 0 }} />
+                  <span style={{ fontSize: 12, color: active ? T.text1 : T.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                </div>
+                {active
+                  ? <span style={{ fontSize: 10, color: T.text3, flexShrink: 0 }}>Ativo</span>
+                  : <button onClick={() => onNav('modules')} style={{ fontSize: 10, color: T.indigo, background: `${T.indigo}14`, border: `1px solid ${T.indigo}33`, borderRadius: 4, padding: '1px 7px', cursor: 'pointer', flexShrink: 0 }}>
+                      {m.status === 'pending' ? 'Pendente' : 'Solicitar'}
+                    </button>
+                }
+              </div>
+            )
+          })}
+    </SCard>
+  )
+}
+
+function AdminAuditCard() {
+  const [rows, setRows] = useState<AdminActivityRow[] | null>(null)
+  useEffect(() => {
+    let alive = true
+    void fetchRecentAdminActivity(8).then(list => { if (alive) setRows(list) })
+    return () => { alive = false }
+  }, [])
+
+  const entries: AuditEntry[] = (rows ?? []).map(r => ({
+    action: r.action,
+    user: r.entityType,
+    by: r.actorName ?? 'sistema',
+    when: relativeTime(r.createdAt),
+  }))
+
+  return (
+    <SCard title="Auditoria — Atividade Administrativa Recente">
+      {rows === null ? <LoadingState /> : <AuditFeed entries={entries} />}
+    </SCard>
+  )
+}
+
 // ─── 1. ADMIN MASTER ─────────────────────────────────────────────────────────
+
 function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string) => void; onInvite?: () => void }) {
   const [filters, setFilters] = useFilters()
   const [selProj, setSelProj] = useProjSel()
@@ -240,28 +384,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string)
         ? `${kpis.invites.pending} pendente${kpis.invites.pending !== 1 ? 's' : ''}`
         : kpis.invites.nextExpiryDays <= 0 ? 'expira hoje' : `expira em ${kpis.invites.nextExpiryDays}d`
 
-  const modules = [
-    { name: 'Board & Sprint',   active: true,  users: 9 },
-    { name: 'Relatórios',       active: true,  users: 5 },
-    { name: 'Portfólio / PMO',  active: true,  users: 2 },
-    { name: 'Analytics',        active: false, users: 0 },
-    { name: 'Automações',       active: false, users: 0 },
-    { name: 'Planning Poker',   active: false, users: 0 },
-  ]
-  const auditEntries = [
-    { action: 'Senha resetada (temporária)',   user: 'João Prado',   by: 'Diana Costa', when: '2h atrás', icon: '🔑' },
-    { action: 'Usuário bloqueado',             user: 'Lúcia Branco', by: 'Diana Costa', when: '3d atrás', icon: '🔒' },
-    { action: 'Dashboard atribuído (PMO + Admin)', user: 'Carlos D.', by: 'Diana Costa', when: '5d atrás', icon: '📊' },
-    { action: 'Convite enviado',               user: 'Pedro Luz',    by: 'Diana Costa', when: '1sem',     icon: '✉️' },
-  ]
-  const users = [
-    { name: 'Carlos Drummond', role: 'PMO',            status: 'active',   i: 'CD', c: '#35c9ae' },
-    { name: 'Mariana Souza',   role: 'Project Manager',status: 'active',   i: 'MS', c: '#f5a524' },
-    { name: 'Felipe Nunes',    role: 'Product Manager', status: 'active',  i: 'FN', c: '#a78bfa' },
-    { name: 'João Prado',      role: 'Dev',             status: 'blocked',  i: 'JP', c: '#EF4444' },
-    { name: 'Lúcia Branco',    role: 'QA',              status: 'inactive', i: 'LB', c: '#60a5fa' },
-  ]
-  const statusC = { active: T.success, blocked: T.crit, inactive: T.neutral }
+
+
 
   // Counts come straight from the tenant's tables; proportions render as donuts,
   // pure counts render as a single-value bar — never a fabricated trend.
@@ -307,54 +431,14 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string)
       </div>
 
       <Grid cols="2fr 1fr">
-        <SCard title="Gestão de Usuários" action={
-          <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
-        }>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {users.map(u => (
-              <div key={u.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Av initials={u.i} color={u.c} size={28} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: T.text1 }}>{u.name}</div>
-                  <div style={{ fontSize: 10, color: T.text3 }}>{u.role}</div>
-                </div>
-                <span style={{ fontSize: 10, color: (statusC as Record<string,string>)[u.status], background: `${(statusC as Record<string,string>)[u.status]}18`, border: `1px solid ${(statusC as Record<string,string>)[u.status]}33`, borderRadius: 4, padding: '2px 7px' }}>
-                  {u.status === 'active' ? 'Ativo' : u.status === 'blocked' ? 'Bloqueado' : 'Inativo'}
-                </span>
-                {u.status === 'blocked'
-                  ? <button style={{ fontSize: 10, color: T.success, background: `${T.success}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Desbloquear</button>
-                  : u.status === 'active'
-                  ? <button style={{ fontSize: 10, color: T.warn, background: `${T.warn}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Bloquear</button>
-                  : <button style={{ fontSize: 10, color: T.accent, background: `${T.accent}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Reativar</button>
-                }
-              </div>
-            ))}
-          </div>
-          <button onClick={() => onInvite ? onInvite() : onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
-            + Convidar usuário
-          </button>
-        </SCard>
+        <AdminUsersCard onNav={onNav} onInvite={onInvite} actorName={activeUser?.name} />
 
-        <SCard title="Módulos">
-          {modules.map(m => (
-            <div key={m.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 99, background: m.active ? T.success : T.border }} />
-                <span style={{ fontSize: 12, color: m.active ? T.text1 : T.text3 }}>{m.name}</span>
-              </div>
-              {m.active
-                ? <span style={{ fontSize: 10, color: T.text3 }}>{m.users} usuários</span>
-                : <button style={{ fontSize: 10, color: T.indigo, background: `${T.indigo}14`, border: `1px solid ${T.indigo}33`, borderRadius: 4, padding: '1px 7px', cursor: 'pointer' }}>Solicitar</button>
-              }
-            </div>
-          ))}
-        </SCard>
+        <AdminModulesCard onNav={onNav} />
 
         <ColSpan>
-          <SCard title="Auditoria — Atividade Administrativa Recente">
-            <AuditFeed entries={auditEntries} />
-          </SCard>
+          <AdminAuditCard />
         </ColSpan>
+
         <CompositionGrid dashId="admin" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
