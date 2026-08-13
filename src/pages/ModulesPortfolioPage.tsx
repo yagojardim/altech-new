@@ -311,6 +311,9 @@ type CardAction = 'trial' | 'open' | 'details' | 'reason' | 'none'
  * é responsabilidade do Altech Control.
  */
 function planFor(mod: ModuleView, trial: ModuleTrialRow | null): { label: string; action: CardAction } {
+  if (mod.is_future) {
+    return { label: 'Em breve', action: 'none' }
+  }
   switch (mod.contract_status) {
     case 'included':
     case 'active':           return { label: 'Abrir módulo', action: 'open' }
@@ -332,10 +335,11 @@ function ModulePortfolioCard({ mod, canRequest, trial, busy, onAction, onTrial }
   const plan = planFor(mod, trial)
   const label = busy ? 'Ativando…' : plan.label
   const action = plan.action
+  const isComingSoon = mod.is_future
   const { style, color } = plan.action === 'trial'
     ? { style: 'primary' as const, color: D.blue }
     : ctaStyle(status)
-  const isDisabled = busy || style === 'disabled' || (!canRequest && action === 'trial')
+  const isDisabled = busy || style === 'disabled' || isComingSoon || (!canRequest && action === 'trial')
 
   const btnSt: React.CSSProperties = (() => {
     const base: React.CSSProperties = {
