@@ -1,3 +1,4 @@
+import { SprintCeremoniesModal } from '@/components/SprintCeremoniesModal'
 import { useState, useRef, useEffect, useCallback, type CSSProperties } from 'react'
 import { T } from '@/components/ds/tokens'
 import { listDeadlines, type DeadlineItem } from '@/data/db/calendar'
@@ -5,6 +6,7 @@ import { type CalendarEvent } from '@/data/calendarEvents'
 import {
   listCalendarEvents, createCalendarEvent, updateCalendarEvent, deleteCalendarEvent,
   generateSprintCeremonies,
+  type CeremonySlot,
   EVENT_TYPES, EVENT_TYPE_LABEL, EVENT_TYPE_COLOR, EVENT_TYPE_ICON,
   upsertExternalEvents, setExternalId, GOOGLE_PROVIDER,
   DEFAULT_TENANT_ID, type CalendarEventType, type DbCalendarEvent, type CalendarEventInput,
@@ -1057,15 +1059,18 @@ export default function CalendarPage() {
     return () => { alive = false }
   }, [])
 
-  async function handleGenerateCeremonies() {
+  const [ceremonyDialog, setCeremonyDialog] = useState(false)
+
+  async function handleGenerateCeremonies(slots: CeremonySlot[]) {
     const sprint = sprintOpts.find(s => s.id === sprintSel)
     if (!sprint) { toast('Selecione uma sprint.'); return }
     setGenerating(true)
     const res = await generateSprintCeremonies({
       id: sprint.id, name: sprint.name, projectId: sprint.projectId,
       startDate: sprint.start, endDate: sprint.end,
-    }, DEFAULT_TENANT_ID, activeUser.name)
+    }, DEFAULT_TENANT_ID, activeUser.name, slots)
     setGenerating(false)
+    setCeremonyDialog(false)
     if (res.error) { toast(res.error); return }
     await reload()
     toast(res.created === 0
@@ -1217,7 +1222,7 @@ export default function CalendarPage() {
               {sprintOpts.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             <button
-              onClick={() => { void handleGenerateCeremonies() }}
+              onClick={() => setCeremonyDialog(true)}
               disabled={generating}
               title="Cria daily, planning, pré-review, review e retrospectivas da sprint"
               style={{
@@ -1418,6 +1423,16 @@ export default function CalendarPage() {
           onDisconnect={() => { void handleGoogleDisconnect() }}
         />
       )}
+
+      <SprintCeremoniesModal
+        open={ceremonyDialog}
+        sprintName={sprintOpts.find(s => s.id === sprintSel)?.name ?? 'Sprint'}
+        busy={generating}
+        onClose={() => setCeremonyDialog(false)}
+        onConfirm={slots => { void handleGenerateCeremonies(slots) }}
+      />
+
+
 
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
       {toastMsg && (
