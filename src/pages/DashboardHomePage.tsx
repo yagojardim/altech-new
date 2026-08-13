@@ -957,16 +957,23 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) =>
           <ClientFeedCard poId="u_po" tenantId={MOCK_TENANT.tenant_id} />
 
           <SCard title="Time Atuando no Projeto">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {team.map(m => (
-                <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Av initials={m.i} color={m.c} size={22} />
-                  <span style={{ flex: 1, fontSize: 12, color: T.text1 }}>{m.name}</span>
-                  <span style={{ fontSize: 10, color: T.text3 }}>{m.items}</span>
-                  <ConditionalTag label={m.status} severity={m.status === 'crítico' ? 'crit' : m.status === 'atenção' ? 'warn' : m.status === 'sem-resp' ? 'crit' : 'neutral'} />
-                </div>
-              ))}
-            </div>
+            {team.length === 0 ? (
+              <EmptyState message="Nenhuma demanda atribuída ainda." />
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {team.map(m => {
+                  const tag = workloadSeverity(m.active)
+                  return (
+                    <div key={m.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Av initials={m.initials} color={m.color} size={22} />
+                      <span style={{ flex: 1, fontSize: 12, color: T.text1 }}>{m.name}</span>
+                      <span style={{ fontSize: 10, color: T.text3 }}>{m.active}</span>
+                      <ConditionalTag label={tag.label} severity={tag.severity} />
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </SCard>
         </div>
         <CompositionGrid dashId="product-owner" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
