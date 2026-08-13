@@ -56,6 +56,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [mustChangePassword, setMustChange] = useState(false)
   const [, setPersonasVersion] = useState(0)
   const [tenantName, setTenantName] = useState('')
+  const [personaOverride, setPersonaOverride] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -169,6 +170,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setAuthUser(null)
     setMustChange(false)
     setUserId(ACTIVE_USER_ID)
+    setPersonaOverride(null)
     setStatus('anonymous')
   }
 
@@ -181,7 +183,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
 
   const mockUser = MOCK_USERS.find(u => u.user_id === userId) ?? MOCK_USERS[0]
-  const activeUser = dbUser ?? mockUser
+  const overrideUser = personaOverride
+    ? MOCK_USERS.find(u => u.user_id === personaOverride) ?? null
+    : null
+  const activeUser = overrideUser ?? dbUser ?? mockUser
 
   return (
     <SessionContext.Provider value={{
