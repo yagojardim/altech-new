@@ -912,12 +912,20 @@ function ProductOwnerPanel({ onNav }: { onNav: (v: string, targetId?: string) =>
   const funcProgress    = sprint14Items.length > 0 ? Math.round((doneSprint / sprint14Items.length) * 100) : 0
   const poPtDone        = sprint14Items.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
-  const team = [
-    { name: 'Ana Lima',  i: 'AL', c: '#fb923c', items: 4, status: 'saudável' as const },
-    { name: 'Lucas F.',  i: 'LF', c: '#34d399', items: 6, status: 'crítico'  as const },
-    { name: 'Bruno S.',  i: 'BS', c: '#fbbf24', items: 3, status: 'atenção'  as const },
-    { name: '—',         i: '?',  c: '#555',    items: 2, status: 'sem-resp' as const },
-  ]
+  const workload = liveAggregates()?.workload ?? []
+  const team = workload.map(w => ({
+    name: w.name,
+    initials: w.initials,
+    color: w.color,
+    active: w.active,
+  }))
+
+  function workloadSeverity(active: number): { label: string; severity: 'neutral' | 'warn' | 'crit' } {
+    if (active === 0) return { label: 'sem demanda', severity: 'neutral' }
+    if (active <= 4) return { label: 'saudável', severity: 'neutral' }
+    if (active === 5) return { label: 'atenção', severity: 'warn' }
+    return { label: 'sobrecarga', severity: 'crit' }
+  }
   const nativeCards: MuralNativeCard[] = [
     { id: 'po:ready', value: `${coverageReady}%`, label: 'Cobertura Ready', sub: 'pts prontos ÷ velocity', disclaimer: 'pontos prontos ÷ velocidade média da sprint', miniViz: <MiniBarChart data={[{label:'S10',value:55},{label:'S11',value:62},{label:'S12',value:70},{label:'S13',value:coverageReady,current:true}]} />, onClick: () => onNav('list') },
     { id: 'po:backlog', value: `${backlogHealth}%`, label: 'Saúde do Backlog', sub: 'itens saudáveis ÷ avaliáveis', disclaimer: 'itens saudáveis ÷ total de itens avaliáveis', color: backlogHealth < 60 ? T.warn : T.success, alert: backlogHealth < 60, miniViz: <MiniSparkline data={[{label:'S10',value:80},{value:77},{value:75},{label:'S13',value:backlogHealth}]} color={backlogHealth < 60 ? '#ef4444' : '#34d399'} />, onClick: () => onNav('list') },
