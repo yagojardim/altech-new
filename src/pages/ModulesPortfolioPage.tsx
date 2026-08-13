@@ -94,6 +94,31 @@ function HealthBadge({ health }: { health: TechnicalHealth }) {
   return <Pill label={m.label} color={m.color} outline />
 }
 
+// ─── Coming-soon footer ribbon (uniform, reused) ─────────────────────────────
+function ComingSoonRibbon() {
+  return (
+    <div
+      style={{
+        width: '100%',
+        boxSizing: 'border-box',
+        padding: '8px 16px',
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 700,
+        textAlign: 'center',
+        color: D.amber,
+        background: `${D.amber}12`,
+        border: `1px solid ${D.amber}44`,
+        opacity: 0.6,
+        cursor: 'not-allowed',
+      }}
+    >
+      Em breve
+    </div>
+  )
+}
+
+
 // ─── TypeTag ──────────────────────────────────────────────────────────────────
 function TypeTag({ mod }: { mod: ModuleView }) {
   const tag = (color: string, label: string) => (
