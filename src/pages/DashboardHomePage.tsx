@@ -240,28 +240,8 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string)
         ? `${kpis.invites.pending} pendente${kpis.invites.pending !== 1 ? 's' : ''}`
         : kpis.invites.nextExpiryDays <= 0 ? 'expira hoje' : `expira em ${kpis.invites.nextExpiryDays}d`
 
-  const modules = [
-    { name: 'Board & Sprint',   active: true,  users: 9 },
-    { name: 'Relatórios',       active: true,  users: 5 },
-    { name: 'Portfólio / PMO',  active: true,  users: 2 },
-    { name: 'Analytics',        active: false, users: 0 },
-    { name: 'Automações',       active: false, users: 0 },
-    { name: 'Planning Poker',   active: false, users: 0 },
-  ]
-  const auditEntries = [
-    { action: 'Senha resetada (temporária)',   user: 'João Prado',   by: 'Diana Costa', when: '2h atrás', icon: '🔑' },
-    { action: 'Usuário bloqueado',             user: 'Lúcia Branco', by: 'Diana Costa', when: '3d atrás', icon: '🔒' },
-    { action: 'Dashboard atribuído (PMO + Admin)', user: 'Carlos D.', by: 'Diana Costa', when: '5d atrás', icon: '📊' },
-    { action: 'Convite enviado',               user: 'Pedro Luz',    by: 'Diana Costa', when: '1sem',     icon: '✉️' },
-  ]
-  const users = [
-    { name: 'Carlos Drummond', role: 'PMO',            status: 'active',   i: 'CD', c: '#35c9ae' },
-    { name: 'Mariana Souza',   role: 'Project Manager',status: 'active',   i: 'MS', c: '#f5a524' },
-    { name: 'Felipe Nunes',    role: 'Product Manager', status: 'active',  i: 'FN', c: '#a78bfa' },
-    { name: 'João Prado',      role: 'Dev',             status: 'blocked',  i: 'JP', c: '#EF4444' },
-    { name: 'Lúcia Branco',    role: 'QA',              status: 'inactive', i: 'LB', c: '#60a5fa' },
-  ]
-  const statusC = { active: T.success, blocked: T.crit, inactive: T.neutral }
+
+
 
   // Counts come straight from the tenant's tables; proportions render as donuts,
   // pure counts render as a single-value bar — never a fabricated trend.
