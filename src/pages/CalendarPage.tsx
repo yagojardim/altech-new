@@ -1423,6 +1423,16 @@ export default function CalendarPage() {
         />
       )}
 
+      <SprintCeremoniesModal
+        open={ceremonyDialog}
+        sprintName={sprintOpts.find(s => s.id === sprintSel)?.name ?? 'Sprint'}
+        busy={generating}
+        onClose={() => setCeremonyDialog(false)}
+        onConfirm={slots => { void handleGenerateCeremonies(slots) }}
+      />
+
+
+
       {/* ── Toast ───────────────────────────────────────────────────────────── */}
       {toastMsg && (
         <div style={{
