@@ -157,9 +157,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       if (!bootSettled) settleStatus(fallbackStatus())
     })
     const unsub = onAuthStateChange(resolve)
+
+    // Timers são estrangulados em abas em segundo plano: se o boot não tiver
+    // sido liberado quando a aba voltar a ficar visível, liberamos na hora
+    // (evita a tela escura "presa" no estado de carregamento).
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || bootSettled) return
+      settleStatus(fallbackStatus())
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
     return () => {
       alive = false
       window.clearTimeout(watchdogId)
+      document.removeEventListener('visibilitychange', onVisible)
       unsub()
     }
   }, [])
