@@ -15,7 +15,7 @@ interface ProfileLite {
 }
 
 interface UserRoleLite { profile_id: string | null; role_id: string | null }
-interface RoleLite { id: string; key: string | null; name: string | null }
+interface RoleLite { id: string; key: string | null; label: string | null }
 
 const ROLE_ALIASES: Record<string, RoleContext> = {
   admin: 'Admin', admin_master: 'Admin', administrador: 'Admin',
