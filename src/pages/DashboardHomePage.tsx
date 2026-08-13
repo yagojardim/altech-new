@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, createContext, useContext, type ReactNode, type ReactElement } from 'react'
 import { useSession } from '../data/SessionContext'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
-import { fetchTenantStorage, usagePct, bytesToHuman, canViewStorage, type TenantStorage } from '@/data/db/storage'
+import { fetchTenantStorage, usagePct, bytesToHuman, type TenantStorage } from '@/data/db/storage'
 import { DEFAULT_TENANT_ID } from '@/data/db/timeline'
 import { UsageBar } from '@/pages/StoragePage'
 import { T } from '../components/ds/tokens'
@@ -1899,18 +1899,17 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
 }
 
 // ─── Tenant storage card ──────────────────────────────────────────────────────
-function TenantStorageCard({ role, onNav }: { role: string; onNav: (v: string, targetId?: string) => void }) {
+function TenantStorageCard({ show, onNav }: { show: boolean; onNav: (v: string, targetId?: string) => void }) {
   const [data, setData] = useState<TenantStorage | null>(null)
-  const allowed = canViewStorage(role)
 
   useEffect(() => {
-    if (!allowed) return
+    if (!show) return
     let alive = true
     fetchTenantStorage(DEFAULT_TENANT_ID).then(d => { if (alive) setData(d) })
     return () => { alive = false }
-  }, [allowed])
+  }, [show])
 
-  if (!allowed || !data) return null
+  if (!show || !data) return null
   const pct = usagePct(data.usedBytes, data.effectiveBytes)
 
   return (
@@ -2087,8 +2086,8 @@ function DashboardHomeInner({ onNav, onInvite }: Props) {
         ))}
       </div>
 
-      {/* ── Tenant storage card ─────────────────────────────────── */}
-      <TenantStorageCard role={String(scope.role_context)} onNav={navigate} />
+      {/* ── Tenant storage card (só para o Admin Master / dono do tenant) ───── */}
+      <TenantStorageCard show={scope.permissions?.includes('*') ?? false} onNav={navigate} />
 
       {/* ── Dashboard content (includes unified mural at top of each panel) ── */}
       <DashboardContent type={activeDashId} onNav={navigate} onInvite={onInvite} />
