@@ -287,54 +287,14 @@ function AdminPanel({ onNav, onInvite }: { onNav: (v: string, targetId?: string)
       </div>
 
       <Grid cols="2fr 1fr">
-        <SCard title="Gestão de Usuários" action={
-          <button onClick={() => onNav('team')} style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>Ver time →</button>
-        }>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {users.map(u => (
-              <div key={u.name} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Av initials={u.i} color={u.c} size={28} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12, color: T.text1 }}>{u.name}</div>
-                  <div style={{ fontSize: 10, color: T.text3 }}>{u.role}</div>
-                </div>
-                <span style={{ fontSize: 10, color: (statusC as Record<string,string>)[u.status], background: `${(statusC as Record<string,string>)[u.status]}18`, border: `1px solid ${(statusC as Record<string,string>)[u.status]}33`, borderRadius: 4, padding: '2px 7px' }}>
-                  {u.status === 'active' ? 'Ativo' : u.status === 'blocked' ? 'Bloqueado' : 'Inativo'}
-                </span>
-                {u.status === 'blocked'
-                  ? <button style={{ fontSize: 10, color: T.success, background: `${T.success}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Desbloquear</button>
-                  : u.status === 'active'
-                  ? <button style={{ fontSize: 10, color: T.warn, background: `${T.warn}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Bloquear</button>
-                  : <button style={{ fontSize: 10, color: T.accent, background: `${T.accent}14`, border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer' }}>Reativar</button>
-                }
-              </div>
-            ))}
-          </div>
-          <button onClick={() => onInvite ? onInvite() : onNav('config')} style={{ marginTop: 12, width: '100%', fontSize: 11, color: T.accent, background: `${T.accent}12`, border: `1px solid ${T.accent}33`, borderRadius: 6, padding: '6px', cursor: 'pointer' }}>
-            + Convidar usuário
-          </button>
-        </SCard>
+        <AdminUsersCard onNav={onNav} onInvite={onInvite} actorName={activeUser?.name} />
 
-        <SCard title="Módulos">
-          {modules.map(m => (
-            <div key={m.name} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{ width: 6, height: 6, borderRadius: 99, background: m.active ? T.success : T.border }} />
-                <span style={{ fontSize: 12, color: m.active ? T.text1 : T.text3 }}>{m.name}</span>
-              </div>
-              {m.active
-                ? <span style={{ fontSize: 10, color: T.text3 }}>{m.users} usuários</span>
-                : <button style={{ fontSize: 10, color: T.indigo, background: `${T.indigo}14`, border: `1px solid ${T.indigo}33`, borderRadius: 4, padding: '1px 7px', cursor: 'pointer' }}>Solicitar</button>
-              }
-            </div>
-          ))}
-        </SCard>
+        <AdminModulesCard onNav={onNav} />
 
         <ColSpan>
-          <SCard title="Auditoria — Atividade Administrativa Recente">
-            <AuditFeed entries={auditEntries} />
-          </SCard>
+          <AdminAuditCard />
         </ColSpan>
+
         <CompositionGrid dashId="admin" tenantId={MOCK_TENANT.tenant_id} selProj={selProj} />
       </Grid>
     </>
