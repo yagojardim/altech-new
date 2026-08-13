@@ -201,7 +201,7 @@ export async function createCalendarEvent(
       location: input.location ?? null,
       project_id: input.projectId ?? null,
       sprint_id: input.sprintId ?? null,
-      created_by: input.createdBy ?? null,
+      created_by: normalizeCreatedBy(input.createdBy),
       external_provider: input.externalProvider ?? null,
       external_id: input.externalId ?? null,
       metadata: toMetadata(input),
