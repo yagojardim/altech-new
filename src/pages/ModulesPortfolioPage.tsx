@@ -94,6 +94,31 @@ function HealthBadge({ health }: { health: TechnicalHealth }) {
   return <Pill label={m.label} color={m.color} outline />
 }
 
+// ─── Coming-soon footer ribbon (uniform, reused) ─────────────────────────────
+function ComingSoonRibbon() {
+  return (
+    <div
+      style={{
+        width: '100%',
+        boxSizing: 'border-box',
+        padding: '8px 16px',
+        borderRadius: 8,
+        fontSize: 12,
+        fontWeight: 700,
+        textAlign: 'center',
+        color: D.amber,
+        background: `${D.amber}12`,
+        border: `1px solid ${D.amber}44`,
+        opacity: 0.6,
+        cursor: 'not-allowed',
+      }}
+    >
+      Em breve
+    </div>
+  )
+}
+
+
 // ─── TypeTag ──────────────────────────────────────────────────────────────────
 function TypeTag({ mod }: { mod: ModuleView }) {
   const tag = (color: string, label: string) => (
@@ -415,12 +440,12 @@ function ModulePortfolioCard({ mod: rawMod, canRequest, trial, busy, onAction, o
           <div style={{ fontSize: 11, color: D.text3 }}>{mod.tagline}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
-          <ContractBadge status={mod.contract_status} />
+          {!isComingSoon && <ContractBadge status={mod.contract_status} />}
           <HealthBadge health={mod.technical_health} />
         </div>
       </div>
 
-      {mod.contract_status === 'trialing' && trial && (
+      {!isComingSoon && mod.contract_status === 'trialing' && trial && (
         <div style={{
           marginBottom: 12, padding: '7px 11px', borderRadius: 8, fontSize: 11, fontWeight: 700,
           color: daysRemaining(trial) <= 3 ? D.amber : D.violet,
@@ -431,13 +456,13 @@ function ModulePortfolioCard({ mod: rawMod, canRequest, trial, busy, onAction, o
         </div>
       )}
 
-      {(mod.contract_status === 'trial_available' || mod.contract_status === 'not_contracted') && (
+      {!isComingSoon && (mod.contract_status === 'trial_available' || mod.contract_status === 'not_contracted') && (
         <div style={{ marginBottom: 12, fontSize: 11, color: D.text3 }}>
           Teste grátis disponível por {mod.trial_duration_days} dias
         </div>
       )}
 
-      {mod.contract_status === 'trial_expired' && (
+      {!isComingSoon && mod.contract_status === 'trial_expired' && (
         <div style={{ marginBottom: 12, fontSize: 11, color: D.amber }}>
           Trial expirado
         </div>
@@ -459,16 +484,22 @@ function ModulePortfolioCard({ mod: rawMod, canRequest, trial, busy, onAction, o
         )}
       </div>
 
-      {!isDisabled ? (
-        <button onClick={() => (action === 'trial' ? onTrial(mod) : onAction(mod))} style={btnSt}>{label}</button>
+      {isComingSoon ? (
+        <ComingSoonRibbon />
       ) : (
-        <div style={btnSt}>{label}</div>
-      )}
+        <>
+          {!isDisabled ? (
+            <button onClick={() => (action === 'trial' ? onTrial(mod) : onAction(mod))} style={btnSt}>{label}</button>
+          ) : (
+            <div style={btnSt}>{label}</div>
+          )}
 
-      {!canRequest && action === 'trial' && (
-        <div style={{ fontSize: 10, color: D.text3, marginTop: 8, textAlign: 'center' }}>
-          Sem permissão para iniciar teste
-        </div>
+          {!canRequest && action === 'trial' && (
+            <div style={{ fontSize: 10, color: D.text3, marginTop: 8, textAlign: 'center' }}>
+              Sem permissão para iniciar teste
+            </div>
+          )}
+        </>
       )}
     </div>
   )
