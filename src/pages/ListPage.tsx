@@ -24,13 +24,14 @@ const COL_LABELS: Record<ColId, string> = {
   assignee:'Responsável', points:'Pts', epic:'Épico', sprint:'Sprint', labels:'Labels', dueDate:'Venc.',
 }
 
+/** Keys are UI status values (same format used by rows and by the filters). */
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  backlog:     { label:'Backlog',      color:T.text3,   bg:T.neutralDim   },
-  todo:        { label:'A Fazer',      color:T.text2,   bg:`${T.text3}18` },
-  in_progress: { label:'Em andamento', color:T.accent,  bg:T.accentDim    },
-  in_review:   { label:'Em revisão',   color:T.warn,    bg:T.warnDim      },
-  blocked:     { label:'Bloqueado',    color:T.crit,    bg:T.critDim      },
-  done:        { label:'Concluído',    color:T.success, bg:T.successDim   },
+  backlog:       { label:'Backlog',      color:T.text3,   bg:T.neutralDim   },
+  todo:          { label:'A Fazer',      color:T.text2,   bg:`${T.text3}18` },
+  'in-progress': { label:'Em andamento', color:T.accent,  bg:T.accentDim    },
+  'in-review':   { label:'Em revisão',   color:T.warn,    bg:T.warnDim      },
+  blocked:       { label:'Bloqueado',    color:T.crit,    bg:T.critDim      },
+  done:          { label:'Concluído',    color:T.success, bg:T.successDim   },
 }
 
 const PRIORITY_CFG: Record<string, { label: string; color: string; icon: string }> = {
