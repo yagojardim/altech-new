@@ -1113,6 +1113,11 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
 
   const typeCfg = TYPE_CFG[local.type] ?? TYPE_CFG.task
 
+  // ── Shell variables ───────────────────────────────────────────────────────────
+  const panelStyle: React.CSSProperties = mode === 'drawer'
+    ? { position:'fixed', top:0, right:0, bottom:0, width:560, background:T.bgSurface, borderLeft:`1px solid ${T.border}`, boxShadow:'-12px 0 48px rgba(0,0,0,0.55)', zIndex:301, display:'flex', flexDirection:'column', overflow:'hidden' }
+    : { position:'relative', display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:T.bgSurface }
+
   // ── Stable callbacks for sub-components ─────────────────────────────────────
   const handleAttachmentCount = useCallback((n: number) => {
     setLocal(prev => ({ ...prev, attachmentCount: n }))
@@ -1120,6 +1125,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   const handleAttachmentError = useCallback((msg: string) => {
     setToast(msg)
   }, [])
+
 
   return (
     <>
