@@ -41,9 +41,24 @@ const PRIORITY_CFG: Record<string, { label: string; color: string; icon: string 
   low:     { label:'Baixa',   color:T.text3,  icon:'↓'  },
 }
 
-const TYPE_ICON: Record<string, { icon: string; color: string }> = {
-  story:{icon:'◇',color:T.accent}, bug:{icon:'⬟',color:T.crit}, task:{icon:'☑',color:T.text2},
-  subtask:{icon:'◻',color:T.text3}, epic:{icon:'⚡',color:T.warn}, feature:{icon:'▣',color:T.purple},
+/** Keys are UI type values; rows are normalised to them via TYPE_FROM_DB. */
+const TYPE_ICON: Record<string, { icon: string; color: string; label: string }> = {
+  story:{icon:'◇',color:T.accent,label:'História'}, bug:{icon:'⬟',color:T.crit,label:'Bug'},
+  task:{icon:'☑',color:T.text2,label:'Tarefa'}, subtask:{icon:'◻',color:T.text3,label:'Subtarefa'},
+  epic:{icon:'⚡',color:T.warn,label:'Épico'}, feature:{icon:'▣',color:T.purple,label:'Funcionalidade'},
+}
+
+const TYPE_FROM_DB: Record<string, string> = {
+  story:'story', user_story:'story', historia:'story', 'história':'story',
+  bug:'bug', erro:'bug', defeito:'bug',
+  task:'task', tarefa:'task',
+  subtask:'subtask', sub_task:'subtask', subtarefa:'subtask',
+  epic:'epic', epico:'epic', 'épico':'epic',
+  feature:'feature', funcionalidade:'feature',
+}
+
+function uiType(t: string): string {
+  return TYPE_FROM_DB[(t ?? '').toLowerCase()] ?? t
 }
 
 interface Row {
@@ -96,7 +111,7 @@ function buildRows(
     return {
       id: i.id,
       key: i.key,
-      type: i.type,
+      type: uiType(i.type),
       title: i.title,
       // Normalise to the UI enums so display, filters and edits all speak the same language.
       status: uiStatusFromDb(i.status),
@@ -140,7 +155,7 @@ export default function ListPage() {
   useEffect(() => {
     const intent = takeReportNav('list')
     if (!intent) return
-    if (intent.itemType) setFType(intent.itemType)
+    if (intent.itemType) setFType(uiType(intent.itemType))
     if (intent.itemStatus) setFStatus(uiStatusFromDb(intent.itemStatus))
   }, [])
 
@@ -273,7 +288,7 @@ export default function ListPage() {
   function cellText(row: Row, col: ColId): string {
     switch (col) {
       case 'key': return row.key
-      case 'type': return row.type
+      case 'type': return TYPE_ICON[row.type]?.label ?? row.type
       case 'title': return row.title
       case 'status': return STATUS_CFG[row.status]?.label ?? row.status
       case 'priority': return PRIORITY_CFG[row.priority]?.label ?? row.priority
@@ -350,7 +365,7 @@ export default function ListPage() {
       </div>
     )
     if (col === 'type') {
-      const t = TYPE_ICON[row.type] ?? { icon: '☑', color: T.text2 }
+      const t = TYPE_ICON[row.type] ?? { icon: '☑', color: T.text2, label: row.type }
       return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:t.color,fontSize:14}}>{t.icon}</span></div>
     }
     if (col === 'title') {
@@ -498,7 +513,7 @@ export default function ListPage() {
         </select>
         <select value={fType} onChange={e => setFType(e.target.value)} style={selectStyle} aria-label="Tipo">
           <option value="">Tipo</option>
-          {Object.keys(TYPE_ICON).map(t => <option key={t} value={t}>{t}</option>)}
+          {Object.keys(TYPE_ICON).map(t => <option key={t} value={t}>{TYPE_ICON[t].label}</option>)}
         </select>
         <select value={fAssignee} onChange={e => setFAssignee(e.target.value)} style={selectStyle} aria-label="Responsável">
           <option value="">Responsável</option>
