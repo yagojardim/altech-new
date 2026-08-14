@@ -573,7 +573,7 @@ export default function ListPage() {
       )}
 
       {/* Table */}
-      <div style={{ overflowX:'auto', flex:1 }}>
+      <div style={{ overflow:'auto', flex:1 }}>
         {loading ? (
           <div style={{ padding:20, display:'flex', flexDirection:'column', gap:8 }}>
             {Array.from({ length: 8 }).map((_, i) => (
