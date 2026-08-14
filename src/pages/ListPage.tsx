@@ -489,7 +489,7 @@ export default function ListPage() {
 
   return (
     <>
-    <div style={{ background:T.bgPage, minHeight:'100vh', display:'flex', flexDirection:'column' }}>
+    <div style={{ background:T.bgPage, height:'100%', display:'flex', flexDirection:'column' }}>
       {/* Toolbar */}
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'14px 20px', borderBottom:`1px solid ${T.border}`, background:T.bgSurface, flexWrap:'wrap' }}>
         <span style={{ color:T.text1, fontWeight:700, fontSize:15, marginRight:8 }}>Backlog</span>
@@ -573,7 +573,7 @@ export default function ListPage() {
       )}
 
       {/* Table */}
-      <div style={{ overflow:'auto', flex:1 }}>
+      <div style={{ flex:1, overflowX:'auto', overflowY:'auto', minHeight:0 }}>
         {loading ? (
           <div style={{ padding:20, display:'flex', flexDirection:'column', gap:8 }}>
             {Array.from({ length: 8 }).map((_, i) => (
@@ -586,7 +586,7 @@ export default function ListPage() {
           </div>
         ) : (
         <table style={{ borderCollapse:'collapse', width:'max-content', minWidth:'100%' }}>
-          <thead>
+          <thead style={{ position:'sticky', top:0, zIndex:10 }}>
             <tr style={{ background:T.bgSurface, borderBottom:`1px solid ${T.border}` }}>
               {cols.map(col => {
                 const sk = sortableCols[col]
@@ -602,6 +602,7 @@ export default function ListPage() {
                       cursor: sk ? 'pointer' : 'default',
                       userSelect:'none', whiteSpace:'nowrap',
                       borderBottom: active ? `2px solid ${T.accent}` : `2px solid transparent`,
+                      background:T.bgSurface,
                     }}
                   >
                     {COL_LABELS[col]}{active ? (sortDir==='asc'?' ↑':' ↓') : ''}
