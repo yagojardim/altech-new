@@ -544,8 +544,10 @@ export default function ListPage() {
               ))}
             </div>
           )}
-          <button style={{
-            padding:'5px 12px', borderRadius:5, fontSize:12, cursor:'pointer',
+          <button onClick={exportCsv} disabled={loading || rows.length === 0} style={{
+            padding:'5px 12px', borderRadius:5, fontSize:12,
+            cursor: loading || rows.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || rows.length === 0 ? 0.5 : 1,
             background:T.bgSurface2, color:T.text2, border:`1px solid ${T.border}`,
           }}>Exportar CSV ↓</button>
         </div>
