@@ -92,6 +92,9 @@ const CatalogContext = createContext<CatalogCtx|null>(null)
 
 export function CatalogProvider({ children }: { children: React.ReactNode }) {
   const [catalog, setCatalog] = useState<Catalog>(DEFAULT_CATALOG)
+  // TEMPORARY: force root-level crash to validate ErrorBoundary fallback
+  throw new Error('Intentional CatalogProvider crash for ErrorBoundary validation')
+
 
   function updateLabels(fn:(prev:LabelDef[])=>LabelDef[]) {
     setCatalog(c => ({ ...c, labels: fn(c.labels) }))
