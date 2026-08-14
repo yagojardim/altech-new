@@ -224,6 +224,9 @@ export async function updateWorkItemField(
   // `fix_version` is not a column: it maps to release_id via the release version.
   let column: string = field
   let dbValue: AuditValue = value
+  // UI enums → DB enums. Keys are the UI values, so already-DB values pass through.
+  if (field === 'priority' && value != null) dbValue = PRIORITY_TO_DB[String(value)] ?? value
+  if (field === 'status' && value != null) dbValue = STATUS_TO_DB[String(value)] ?? value
   if (field === 'fix_version') {
     column = 'release_id'
     if (value == null || value === '') dbValue = null
