@@ -141,7 +141,7 @@ export default function ListPage() {
     const intent = takeReportNav('list')
     if (!intent) return
     if (intent.itemType) setFType(intent.itemType)
-    if (intent.itemStatus) setFStatus(intent.itemStatus)
+    if (intent.itemStatus) setFStatus(uiStatusFromDb(intent.itemStatus))
   }, [])
 
   const [items, setItems] = useState<ListItemRow[]>([])
