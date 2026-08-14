@@ -59,8 +59,9 @@ export async function listWorkItems(filters: ListFilters = {}): Promise<ListData
     .is('archived_at', null)
 
   if (filters.projectId) query = query.eq('project_id', filters.projectId)
-  if (filters.status) query = query.eq('status', filters.status)
-  if (filters.priority) query = query.eq('priority', filters.priority)
+  // Filters arrive in UI format; the DB stores pt-BR priorities and snake_case statuses.
+  if (filters.status) query = query.eq('status', STATUS_TO_DB[filters.status] ?? filters.status)
+  if (filters.priority) query = query.eq('priority', PRIORITY_TO_DB[filters.priority] ?? filters.priority)
   if (filters.type) query = query.eq('type', filters.type)
   if (filters.assigneeId) query = query.eq('assignee_id', filters.assigneeId)
   if (filters.sprintId) query = query.eq('sprint_id', filters.sprintId)
