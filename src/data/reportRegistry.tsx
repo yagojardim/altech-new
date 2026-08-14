@@ -348,7 +348,7 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
   return (
     <ChartFrame data={data} loading={loading} error={error} height={th ? 60 : 150}
       isEmpty={!cvr || (cvr.created.every(v => v === 0) && cvr.resolved.every(v => v === 0))}
-      emptyText="Nenhuma issue criada ou resolvida nas últimas 8 semanas.">
+      emptyText="Nenhuma demanda criada ou resolvida nas últimas 8 semanas.">
       {() => {
         if (multi) return <SmallMultiples series={cvr!.byProject} />
         const c = cvr!
@@ -815,10 +815,10 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
   },
   criados: {
     id: 'criados', title: 'Criados vs Resolvidos', span2: true,
-    subtitle: 'Issues criadas e resolvidas por semana (8 semanas)',
+    subtitle: 'Demandas criadas e resolvidas por semana (8 semanas)',
     Component: CreatedVsResolved,
     nav: { view: 'reports', reportId: 'criados' },
-    emptyText: 'Nenhuma issue criada ou resolvida nas últimas 8 semanas.',
+    emptyText: 'Nenhuma demanda criada ou resolvida nas últimas 8 semanas.',
     kpi: d => {
       const c = d.createdVsResolved
       const sumC = c.created.reduce((a, b) => a + b, 0)
@@ -848,11 +848,11 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
     },
   },
   aging: {
-    id: 'aging', title: 'Aging de Issues', span2: false,
-    subtitle: 'Dias no status atual por issue em andamento',
+    id: 'aging', title: 'Aging de Demandas', span2: false,
+    subtitle: 'Dias no status atual por demanda em andamento',
     Component: AgingChart,
     nav: { view: 'list', itemStatus: 'in_progress' },
-    emptyText: 'Nenhuma issue em andamento.',
+    emptyText: 'Nenhuma demanda em andamento.',
     kpi: d => {
       if (d.aging.length === 0) return null
       const max = Math.max(...d.aging.map(a => a.days))

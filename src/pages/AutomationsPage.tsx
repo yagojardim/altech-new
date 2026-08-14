@@ -10,16 +10,16 @@ interface AutoDef {
 }
 
 const INITIAL_AUTOS: AutoDef[] = [
-  { id:0, name:'Issue movida para Done → Notificar QA',  active:true,  trigger:'Issue movida de status', action:'Enviar notificação' },
-  { id:1, name:'Bug crítico criado → Atribuir a AL',      active:true,  trigger:'Issue criada',           action:'Atribuir responsável' },
+  { id:0, name:'Demanda movida para Done → Notificar QA',  active:true,  trigger:'Demanda movida de status', action:'Enviar notificação' },
+  { id:1, name:'Bug crítico criado → Atribuir a AL',      active:true,  trigger:'Demanda criada',           action:'Atribuir responsável' },
   { id:2, name:'Sprint iniciada → Criar checklist',       active:false, trigger:'Sprint iniciada',        action:'Criar subtarefa' },
   { id:3, name:'Sem atualizações há 3 dias → Alerta',     active:true,  trigger:'Campo alterado',         action:'Enviar notificação' },
   { id:4, name:'Prazo próximo → Notificar responsável',   active:true,  trigger:'Prazo atingido',         action:'Enviar notificação' },
 ]
 
 const TRIGGER_OPTIONS = [
-  'Issue movida de status',
-  'Issue criada',
+  'Demanda movida de status',
+  'Demanda criada',
   'Sprint iniciada',
   'Sprint finalizada',
   'Campo alterado',
@@ -43,12 +43,12 @@ const CONDITION_OPS    = ['é', 'não é', 'contém', 'está em']
 const WORKFLOW_STATUSES = ['Backlog', 'A Fazer', 'Em andamento', 'Em revisão', 'Concluído']
 
 const LOG_ROWS = [
-  { ts:'25 Jul 2026 14:32', trigger:'Issue movida de status', result:'success', detail:'Notificação enviada para #QA-channel' },
-  { ts:'25 Jul 2026 09:11', trigger:'Issue movida de status', result:'success', detail:'Notificação enviada para #QA-channel' },
-  { ts:'24 Jul 2026 17:48', trigger:'Issue criada',           result:'success', detail:'Responsável AL atribuído à BUG-214' },
-  { ts:'24 Jul 2026 11:03', trigger:'Issue movida de status', result:'partial', detail:'Webhook respondeu 206 — verificar payload' },
+  { ts:'25 Jul 2026 14:32', trigger:'Demanda movida de status', result:'success', detail:'Notificação enviada para #QA-channel' },
+  { ts:'25 Jul 2026 09:11', trigger:'Demanda movida de status', result:'success', detail:'Notificação enviada para #QA-channel' },
+  { ts:'24 Jul 2026 17:48', trigger:'Demanda criada',           result:'success', detail:'Responsável AL atribuído à BUG-214' },
+  { ts:'24 Jul 2026 11:03', trigger:'Demanda movida de status', result:'partial', detail:'Webhook respondeu 206 — verificar payload' },
   { ts:'23 Jul 2026 16:20', trigger:'Prazo atingido',         result:'success', detail:'Notificação enviada para Rui Melo' },
-  { ts:'22 Jul 2026 08:55', trigger:'Issue movida de status', result:'error',   detail:'Token expirado — autenticação falhou' },
+  { ts:'22 Jul 2026 08:55', trigger:'Demanda movida de status', result:'error',   detail:'Token expirado — autenticação falhou' },
   { ts:'21 Jul 2026 13:44', trigger:'Sprint iniciada',        result:'success', detail:'Checklist criado em 8 issues' },
   { ts:'19 Jul 2026 10:30', trigger:'Campo alterado',         result:'success', detail:'Alerta enviado para Ana Lima' },
 ]
@@ -110,7 +110,7 @@ export default function AutomationsPage() {
       id: Date.now(),
       name: 'Nova automação',
       active: false,
-      trigger: 'Issue criada',
+      trigger: 'Demanda criada',
       action: 'Enviar notificação',
     }
     setAutos(prev => [...prev, newA])
@@ -282,7 +282,7 @@ export default function AutomationsPage() {
                 {TRIGGER_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
-            {triggerType === 'Issue movida de status' && (
+            {triggerType === 'Demanda movida de status' && (
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 <div>
                   <label style={{ fontSize:12, color:T.text3, marginBottom:6, display:'block' }}>De status</label>
@@ -401,7 +401,7 @@ export default function AutomationsPage() {
               <div>
                 <label style={{ fontSize:12, color:T.text3, marginBottom:6, display:'block' }}>Mensagem</label>
                 <input
-                  placeholder="Ex: Issue {title} foi movida para {status}"
+                  placeholder="Ex: Demanda {title} foi movida para {status}"
                   value={actionVal}
                   onChange={e => setActionVal(e.target.value)}
                   style={inputStyle}

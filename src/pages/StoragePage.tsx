@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { T } from '@/components/ds/tokens'
+import { HelpHint } from '@/components/ds/HelpHint'
 import { useSession } from '@/data/SessionContext'
 import { DEFAULT_TENANT_ID } from '@/data/db/timeline'
 import {
@@ -98,7 +99,10 @@ export default function StoragePage({ onNav }: Props) {
           <div style={{ ...cardStyle, marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 12, color: T.text3, fontWeight: 600 }}>Consumo do tenant</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.text3, fontWeight: 600 }}>
+                  Consumo do tenant
+                  <HelpHint text="Espaço de armazenamento contratado para o tenant. Ao atingir o limite, é preciso fazer upgrade do plano." />
+                </div>
                 <div style={{ fontSize: 22, fontWeight: 700, color: T.text1, marginTop: 4 }}>
                   {bytesToHuman(tenant.usedBytes)} <span style={{ fontSize: 13, color: T.text3, fontWeight: 500 }}>de {bytesToHuman(tenant.effectiveBytes)} ({pct}%)</span>
                 </div>

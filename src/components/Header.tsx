@@ -32,7 +32,7 @@ const viewLabels: Partial<Record<View, string>> = {
   'epics':         'Épicos',
   'releases':      'Releases',
   'filters':       'Filtros & Busca',
-  'navigator':     'Issue Navigator',
+  'navigator':     'Navegador de Demandas',
   'reports':       'Relatórios & Insights',
   'automations':   'Automações',
   'config':        'Configurações',
@@ -44,7 +44,7 @@ const viewLabels: Partial<Record<View, string>> = {
   'client-login':   'Login — Portal do Cliente',
   'client':        'Portal do Cliente',
   'task-drawer':   'Detalhe da Tarefa',
-  'issue':         'Issue Detail',
+  'issue':         'Detalhe da Demanda',
 }
 
 const ROLE_CONTEXT_LABEL: Record<string, string> = {

@@ -4,6 +4,7 @@
 // it NEVER activates a module. No billing / checkout anywhere.
 import { useCallback, useEffect, useState } from 'react'
 import { T } from '../components/ds/tokens'
+import { HelpHint } from '../components/ds/HelpHint'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import { CATEGORY_LABELS, STATUS_META, type ModuleCategory, type ModuleStatus } from '../data/modules'
@@ -623,7 +624,10 @@ export default function ModulesPortfolioPage({ onNav }: Props) {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, color: D.text1 }}>Módulos da Plataforma</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 20, fontWeight: 700, color: D.text1 }}>
+            Módulos da Plataforma
+            <HelpHint title="Comercial × Técnico" text="O status comercial (contratado, em teste/trial) é separado do estado técnico (operacional, em manutenção). Um não implica o outro." />
+          </div>
           <div style={{ fontSize: 12, color: D.text3, marginTop: 4, display: 'flex', gap: 16 }}>
             <span><span style={{ color: D.green, fontWeight: 700 }}>●</span> {activeCount} ativo{activeCount !== 1 ? 's' : ''}</span>
             <span>{contractedCount} contratado{contractedCount !== 1 ? 's' : ''}</span>

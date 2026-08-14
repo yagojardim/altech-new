@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { T as DS } from '../components/ds/tokens'
+import { HelpHint } from '../components/ds/HelpHint'
 import { getBoardById } from '../data/boards'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
