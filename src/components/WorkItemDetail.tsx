@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { T } from './ds/tokens'
 import { AddRelationModal } from './AddRelationModal'
+import { AddSubtaskModal } from './AddSubtaskModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
   getWorkItem, updateWorkItemField, addComment as dbAddComment,
   toggleAcceptanceCriterion, addAcceptanceCriterion, removeAcceptanceCriterion,
   addDependency, setWorkItemLabels, uiStatusFromDb, epicColor,
+  addSubtask, listItemHistory, type UnifiedHistoryEntry,
   STATUS_TO_DB, PRIORITY_FROM_DB, PRIORITY_TO_DB,
   type WorkItemDetailData, type EditableField,
 } from '../data/db/workItem'
@@ -883,6 +885,9 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   const [editTitle,   setEditTitle]  = useState(false)
   const [statusOpen,  setStatusOpen] = useState(false)
   const [addRelOpen,  setAddRelOpen] = useState(false)
+  const [subtaskOpen, setSubtaskOpen]= useState(false)
+  const [histOpen,    setHistOpen]   = useState(false)
+  const [histRows,    setHistRows]   = useState<UnifiedHistoryEntry[] | null>(null)
   const [showDone,    setShowDone]   = useState(false)
   const [acItems,     setAcItems]    = useState<WIAcItem[]>(data.acItems ?? [])
   const [newAc,       setNewAc]      = useState('')
@@ -1127,10 +1132,46 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   }, [])
 
 
+  // ── Histórico unificado (read-only) ─────────────────────────────────────────
+  const openHistory = useCallback(() => {
+    setHistOpen(true)
+    if (!itemId) { setHistRows([]); return }
+    setHistRows(null)
+    void listItemHistory(itemId, dbRef.current?.item.epic_id ?? null).then(setHistRows)
+  }, [itemId])
+
+  // ── Subtarefas ───────────────────────────────────────────────────────────────
+  const subtaskMembers = (dbRef.current?.profiles ?? []).map(p => ({ id: p.id, name: p.name }))
+
+  const handleCreateSubtask = useCallback(async (sub: { title:string; assigneeId:string|null; storyPoints:number }) => {
+    const parent = dbRef.current?.item
+    if (!itemId || !parent) { setToast('Item ainda não carregado.'); return }
+    try {
+      await addSubtask(parent, sub.title, activeUser.name, { assigneeId: sub.assigneeId, storyPoints: sub.storyPoints })
+      const fresh = await getWorkItem(itemId)
+      applyDetail(fresh)
+      setToast('Subtarefa criada')
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'Falha ao criar subtarefa')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, activeUser.name])
+
+
   return (
     <>
       {showDone && <DoneTransitionModal onConfirm={handleDoneConfirm} onClose={()=>setShowDone(false)} />}
       {addRelOpen && <AddRelationModal currentIssueKey={local.key} onClose={()=>setAddRelOpen(false)} onAdd={handleAddRelation} />}
+      {subtaskOpen && (
+        <AddSubtaskModal
+          parentKey={local.key}
+          parentTitle={local.title}
+          members={subtaskMembers}
+          onClose={()=>setSubtaskOpen(false)}
+          onCreate={sub => { void handleCreateSubtask(sub) }}
+        />
+      )}
+      {histOpen && <HistoryModal rows={histRows} onClose={()=>setHistOpen(false)} />}
 
 
       {mode === 'drawer' && (
@@ -1238,8 +1279,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               {/* Action bar */}
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:18, flexWrap:'wrap' }}>
                 {[
-                  { label:'Anexar', icon:'📎' },
-                  { label:'+ Child issue', icon:null },
+                  { label:'+ Child issue', icon:null, onClick:()=>setSubtaskOpen(true) },
                   { label:'Vincular issue', icon:null, onClick:()=>setAddRelOpen(true) },
                 ].map(btn => (
                   <button key={btn.label} onClick={btn.onClick}
@@ -1249,7 +1289,8 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                     {btn.icon && <span>{btn.icon}</span>}{btn.label}
                   </button>
                 ))}
-                <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
+                <button title="Histórico" onClick={openHistory}
+                  style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
                   onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border2;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>···</button>
               </div>
@@ -1289,7 +1330,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               </section>
 
               {/* Child issues */}
-              {children.length > 0 && (
+              {(
                 <section style={{ marginBottom:22 }}>
                   <SecHeader title="Child Issues" count={children.length} />
                   {/* Progress bar */}
@@ -1318,7 +1359,11 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                       )
                     })}
                   </div>
-                  <button style={{ marginTop:6, fontSize:11, border:'none', background:'transparent', color:T.text3, cursor:'pointer', padding:'2px 4px', borderRadius:4 }}
+                  {children.length === 0 && (
+                    <p style={{ margin:'0 0 4px', fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhuma subtarefa ainda.</p>
+                  )}
+                  <button onClick={()=>setSubtaskOpen(true)}
+                    style={{ marginTop:6, fontSize:11, border:'none', background:'transparent', color:T.text3, cursor:'pointer', padding:'2px 4px', borderRadius:4 }}
                     onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}>+ Adicionar child issue</button>
                 </section>
@@ -1715,5 +1760,56 @@ function ActionBtn({ title, children }: { title: string; children: React.ReactNo
       onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.background='transparent';(e.currentTarget as HTMLButtonElement).style.color=T.text3}}>
       {children}
     </button>
+  )
+}
+
+// ─── Histórico (read-only) ────────────────────────────────────────────────────
+const FIELD_LABEL: Record<string, string> = {
+  status: 'status', title: 'título', description: 'descrição', priority: 'prioridade',
+  severity: 'severidade', assignee_id: 'responsável', reporter_id: 'reporter',
+  story_points: 'estimativa', due_date: 'prazo', sprint_id: 'sprint',
+  epic_id: 'épico', fix_version: 'versão',
+}
+
+function HistoryModal({ rows, onClose }: { rows: UnifiedHistoryEntry[] | null; onClose: () => void }) {
+  return (
+    <div onClick={e=>{ if(e.target===e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+      <div style={{ background:T.bgSurface, border:`1px solid ${T.border}`, borderRadius:16, boxShadow:T.shadowModal, width:560, maxHeight:'80vh', display:'flex', flexDirection:'column' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 24px', borderBottom:`1px solid ${T.border}` }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:T.text1 }}>Histórico</h2>
+            <p style={{ margin:'2px 0 0', fontSize:11, color:T.text3 }}>Toda a movimentação da história e do épico</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:T.text3, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'16px 24px' }}>
+          {rows === null && <p style={{ fontSize:12, color:T.text3 }}>Carregando histórico…</p>}
+          {rows !== null && rows.length === 0 && (
+            <p style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhum evento registrado ainda.</p>
+          )}
+          {(rows ?? []).map(ev => (
+            <div key={ev.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ width:6, height:6, borderRadius:3, background:ev.fromEpic ? T.warn ?? T.accent : T.accent, marginTop:6, flexShrink:0 }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ margin:0, fontSize:12, color:T.text1, lineHeight:1.5 }}>
+                  <strong style={{ fontWeight:600 }}>{ev.actorName}</strong>{' '}
+                  {ev.kind === 'field'
+                    ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
+                    : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
+                </p>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
+                  <span style={{ fontSize:10, color:T.text3 }}>{fmtTime(ev.createdAt)}</span>
+                  {ev.fromEpic && (
+                    <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:T.accent, background:T.accentDim, padding:'1px 6px', borderRadius:4 }}>Épico</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   )
 }

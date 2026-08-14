@@ -1,22 +1,20 @@
 import { useState } from 'react'
 import { T } from './ds/tokens'
 
-const MEMBERS = [
-  { value:'AL', label:'Ana Lima' }, { value:'NM', label:'Nuno Matos' },
-  { value:'JN', label:'João Neves' }, { value:'CS', label:'Carla Silva' },
-  { value:'RM', label:'Rui Melo' }, { value:'LF', label:'Lucas Ferreira' },
-]
+export interface SubtaskMember { id: string; name: string }
 
 interface Props {
   parentKey:   string
   parentTitle: string
+  /** Perfis reais do tenant. */
+  members?:    SubtaskMember[]
   onClose:     () => void
-  onCreate:    (sub: { title:string; assignee:string; estimate:number }) => void
+  onCreate:    (sub: { title:string; assigneeId:string|null; storyPoints:number }) => void
 }
 
-export function AddSubtaskModal({ parentKey, parentTitle, onClose, onCreate }: Props) {
+export function AddSubtaskModal({ parentKey, parentTitle, members = [], onClose, onCreate }: Props) {
   const [title,    setTitle]    = useState('')
-  const [assignee, setAssignee] = useState('AL')
+  const [assignee, setAssignee] = useState('')
   const [estimate, setEstimate] = useState(1)
 
   const inputStyle: React.CSSProperties = {
@@ -26,7 +24,7 @@ export function AddSubtaskModal({ parentKey, parentTitle, onClose, onCreate }: P
 
   function handleCreate() {
     if (!title.trim()) return
-    onCreate({ title: title.trim(), assignee, estimate })
+    onCreate({ title: title.trim(), assigneeId: assignee || null, storyPoints: estimate })
     onClose()
   }
 
@@ -56,7 +54,8 @@ export function AddSubtaskModal({ parentKey, parentTitle, onClose, onCreate }: P
             <div>
               <label style={{ fontSize:11,fontWeight:600,color:T.text3,marginBottom:5,display:'block',textTransform:'uppercase',letterSpacing:'.04em' }}>Responsável</label>
               <select value={assignee} onChange={e=>setAssignee(e.target.value)} style={inputStyle}>
-                {MEMBERS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                <option value="">Sem responsável</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
               </select>
             </div>
             <div>
