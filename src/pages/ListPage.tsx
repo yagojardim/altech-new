@@ -111,7 +111,7 @@ function buildRows(
     return {
       id: i.id,
       key: i.key,
-      type: i.type,
+      type: uiType(i.type),
       title: i.title,
       // Normalise to the UI enums so display, filters and edits all speak the same language.
       status: uiStatusFromDb(i.status),
@@ -288,7 +288,7 @@ export default function ListPage() {
   function cellText(row: Row, col: ColId): string {
     switch (col) {
       case 'key': return row.key
-      case 'type': return row.type
+      case 'type': return TYPE_ICON[row.type]?.label ?? row.type
       case 'title': return row.title
       case 'status': return STATUS_CFG[row.status]?.label ?? row.status
       case 'priority': return PRIORITY_CFG[row.priority]?.label ?? row.priority
@@ -365,7 +365,7 @@ export default function ListPage() {
       </div>
     )
     if (col === 'type') {
-      const t = TYPE_ICON[row.type] ?? { icon: '☑', color: T.text2 }
+      const t = TYPE_ICON[row.type] ?? { icon: '☑', color: T.text2, label: row.type }
       return <div style={{...cellStyle,justifyContent:'center'}}><span style={{color:t.color,fontSize:14}}>{t.icon}</span></div>
     }
     if (col === 'title') {
@@ -513,7 +513,7 @@ export default function ListPage() {
         </select>
         <select value={fType} onChange={e => setFType(e.target.value)} style={selectStyle} aria-label="Tipo">
           <option value="">Tipo</option>
-          {Object.keys(TYPE_ICON).map(t => <option key={t} value={t}>{t}</option>)}
+          {Object.keys(TYPE_ICON).map(t => <option key={t} value={t}>{TYPE_ICON[t].label}</option>)}
         </select>
         <select value={fAssignee} onChange={e => setFAssignee(e.target.value)} style={selectStyle} aria-label="Responsável">
           <option value="">Responsável</option>
