@@ -1762,3 +1762,54 @@ function ActionBtn({ title, children }: { title: string; children: React.ReactNo
     </button>
   )
 }
+
+// ─── Histórico (read-only) ────────────────────────────────────────────────────
+const FIELD_LABEL: Record<string, string> = {
+  status: 'status', title: 'título', description: 'descrição', priority: 'prioridade',
+  severity: 'severidade', assignee_id: 'responsável', reporter_id: 'reporter',
+  story_points: 'estimativa', due_date: 'prazo', sprint_id: 'sprint',
+  epic_id: 'épico', fix_version: 'versão',
+}
+
+function HistoryModal({ rows, onClose }: { rows: UnifiedHistoryEntry[] | null; onClose: () => void }) {
+  return (
+    <div onClick={e=>{ if(e.target===e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.72)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:16 }}>
+      <div style={{ background:T.bgSurface, border:`1px solid ${T.border}`, borderRadius:16, boxShadow:T.shadowModal, width:560, maxHeight:'80vh', display:'flex', flexDirection:'column' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'20px 24px', borderBottom:`1px solid ${T.border}` }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:T.text1 }}>Histórico</h2>
+            <p style={{ margin:'2px 0 0', fontSize:11, color:T.text3 }}>Toda a movimentação da história e do épico</p>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:T.text3, fontSize:20, cursor:'pointer', lineHeight:1 }}>×</button>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'16px 24px' }}>
+          {rows === null && <p style={{ fontSize:12, color:T.text3 }}>Carregando histórico…</p>}
+          {rows !== null && rows.length === 0 && (
+            <p style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhum evento registrado ainda.</p>
+          )}
+          {(rows ?? []).map(ev => (
+            <div key={ev.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
+              <div style={{ width:6, height:6, borderRadius:3, background:ev.fromEpic ? T.warn ?? T.accent : T.accent, marginTop:6, flexShrink:0 }} />
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ margin:0, fontSize:12, color:T.text1, lineHeight:1.5 }}>
+                  <strong style={{ fontWeight:600 }}>{ev.actorName}</strong>{' '}
+                  {ev.kind === 'field'
+                    ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
+                    : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
+                </p>
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
+                  <span style={{ fontSize:10, color:T.text3 }}>{fmtTime(ev.createdAt)}</span>
+                  {ev.fromEpic && (
+                    <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:T.accent, background:T.accentDim, padding:'1px 6px', borderRadius:4 }}>Épico</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
