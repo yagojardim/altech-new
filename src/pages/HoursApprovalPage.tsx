@@ -146,8 +146,10 @@ export default function HoursApprovalPage() {
   const [filterStatus, setFilterStatus] = useState<TimesheetStatus | 'all'>('submitted')
   const [filterSquad, setFilterSquad] = useState('all')
   const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [rejectTarget, setRejectTarget] = useState<'single' | 'batch' | null>(null)
+  const [rejectTarget, setRejectTarget] = useState<'single' | 'batch' | 'lane' | null>(null)
   const [rejectId, setRejectId] = useState('')
+  const [laneRejectIds, setLaneRejectIds] = useState<string[]>([])
+
   const [toast, setToast] = useState('')
   const [detailItemId, setDetailItemId] = useState<string | null>(null)
 
