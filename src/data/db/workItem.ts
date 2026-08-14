@@ -245,9 +245,13 @@ export async function updateWorkItemField(
     .eq('tenant_id', tid)
   if (error) throw fail('work_items', error.message)
 
+  let dbPrevious: AuditValue = previous
+  if (field === 'priority' && previous != null) dbPrevious = PRIORITY_TO_DB[String(previous)] ?? previous
+  if (field === 'status' && previous != null) dbPrevious = STATUS_TO_DB[String(previous)] ?? previous
+
   await writeAudit(
     itemId, `work_item.${field}_updated`, actorName,
-    { [column]: previous }, { [column]: dbValue }, ctx.actorId,
+    { [column]: dbPrevious }, { [column]: dbValue }, ctx.actorId,
   )
 
   if (field === 'status') {
@@ -255,7 +259,7 @@ export async function updateWorkItemField(
       tenant_id: tid,
       work_item_id: itemId,
       field: 'status',
-      from_value: previous == null ? null : String(previous),
+      from_value: dbPrevious == null ? null : String(dbPrevious),
       to_value: dbValue == null ? null : String(dbValue),
       actor_id: ctx.actorId ?? null,
     })
