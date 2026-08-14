@@ -416,3 +416,111 @@ export async function setWorkItemLabels(
 
   await writeAudit(itemId, 'work_item.labels_updated', actorName, {}, { labels: wanted.join(', ') })
 }
+
+// ─── Histórico unificado (read-only / observabilidade) ────────────────────────
+export interface UnifiedHistoryEntry {
+  id: string
+  createdAt: string
+  actorName: string
+  /** 'field' → alteração de campo; 'action' → evento de auditoria. */
+  kind: 'field' | 'action'
+  field?: string
+  fromValue?: string | null
+  toValue?: string | null
+  action?: string
+  detail?: string
+  /** true quando o evento veio do épico e não do item. */
+  fromEpic?: boolean
+}
+
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  'work_item.created': 'criou o item',
+  'work_item.subtask_added': 'adicionou uma subtarefa',
+  'work_item.dependency_added': 'vinculou uma issue',
+  'work_item.labels_updated': 'atualizou as labels',
+  'work_item.comment_added': 'comentou',
+  'work_item.moved': 'moveu de coluna',
+  'work_item.status': 'mudou o status',
+  'work_item.assignee_id': 'mudou o responsável',
+}
+
+function auditDetail(before: unknown, after: unknown): string | undefined {
+  const fmt = (v: unknown) => {
+    if (v == null) return ''
+    if (typeof v === 'object') {
+      const entries = Object.entries(v as Record<string, unknown>).filter(([, val]) => val != null && val !== '')
+      if (!entries.length) return ''
+      return entries.map(([k, val]) => `${k}: ${String(val)}`).join(', ')
+    }
+    return String(v)
+  }
+  const b = fmt(before); const a = fmt(after)
+  if (b && a) return `${b} → ${a}`
+  return a || b || undefined
+}
+
+/**
+ * Toda a movimentação da história (e opcionalmente do épico), mesclada por data desc.
+ * Degrada para [] em qualquer falha de leitura.
+ */
+export async function listItemHistory(workItemId: string, epicId?: string | null): Promise<UnifiedHistoryEntry[]> {
+  return safeCall('workItem.listItemHistory', async () => {
+    const tid = DEFAULT_TENANT_ID
+    const [statusRes, itemAuditRes, epicAuditRes, profilesRes] = await Promise.all([
+      supabase.from('item_status_history')
+        .select('id, field, from_value, to_value, actor_id, created_at')
+        .eq('tenant_id', tid).eq('work_item_id', workItemId)
+        .order('created_at', { ascending: false }).limit(200),
+      supabase.from('audit_logs')
+        .select('id, action, actor_id, actor_name, before, after, created_at')
+        .eq('tenant_id', tid).eq('entity_type', 'work_item').eq('entity_id', workItemId)
+        .order('created_at', { ascending: false }).limit(200),
+      epicId
+        ? supabase.from('audit_logs')
+            .select('id, action, actor_id, actor_name, before, after, created_at')
+            .eq('tenant_id', tid).eq('entity_type', 'epic').eq('entity_id', epicId)
+            .order('created_at', { ascending: false }).limit(200)
+        : Promise.resolve({ data: [], error: null } as never),
+      supabase.from('profiles').select('id, name').eq('tenant_id', tid),
+    ])
+
+    const nameById = new Map<string, string>()
+    for (const p of (profilesRes.data ?? []) as { id: string; name: string }[]) nameById.set(p.id, p.name)
+
+    const out: UnifiedHistoryEntry[] = []
+
+    for (const h of (statusRes.data ?? []) as HistoryRow[]) {
+      out.push({
+        id: `sh-${h.id}`,
+        createdAt: h.created_at,
+        actorName: (h.actor_id && nameById.get(h.actor_id)) || 'Sistema',
+        kind: 'field',
+        field: h.field,
+        fromValue: h.from_value,
+        toValue: h.to_value,
+      })
+    }
+
+    const pushAudit = (rows: unknown[], fromEpic: boolean) => {
+      for (const raw of rows as {
+        id: string; action: string; actor_id: string | null; actor_name: string | null
+        before: unknown; after: unknown; created_at: string
+      }[]) {
+        out.push({
+          id: `au-${raw.id}`,
+          createdAt: raw.created_at,
+          actorName: raw.actor_name || (raw.actor_id && nameById.get(raw.actor_id)) || 'Sistema',
+          kind: 'action',
+          action: AUDIT_ACTION_LABEL[raw.action] ?? raw.action.replace(/^(work_item|epic)\./, '').replace(/_/g, ' '),
+          detail: auditDetail(raw.before, raw.after),
+          fromEpic,
+        })
+      }
+    }
+    pushAudit(itemAuditRes.data ?? [], false)
+    pushAudit(epicAuditRes?.data ?? [], true)
+
+    out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0))
+    return out
+  }, [])
+}
