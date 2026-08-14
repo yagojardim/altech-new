@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { T } from './ds/tokens'
+import { HelpHint } from './ds/HelpHint'
 import { AddRelationModal } from './AddRelationModal'
 import { AddSubtaskModal } from './AddSubtaskModal'
 import { useSession } from '../data/SessionContext'
@@ -109,10 +110,11 @@ function Av({ i, size = 24 }: { i: string; size?: number }) {
   )
 }
 
-function SecHeader({ title, count, action }: { title: string; count?: number; action?: React.ReactNode }) {
+function SecHeader({ title, count, action, help, helpTitle }: { title: string; count?: number; action?: React.ReactNode; help?: string; helpTitle?: string }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, paddingBottom:8, marginBottom:10, borderBottom:`1px solid ${T.border}` }}>
       <span style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', color:T.text3 }}>{title}</span>
+      {help && <HelpHint text={help} title={helpTitle} label={`Ajuda sobre ${title}`} />}
       {count != null && (
         <span style={{ fontSize:9, fontWeight:700, padding:'1px 6px', borderRadius:20, background:T.accentDim, color:T.accent }}>{count}</span>
       )}
@@ -150,7 +152,7 @@ function DoneTransitionModal({ onConfirm, onClose }: {
         <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div>
             <p style={{ margin:0, fontSize:15, fontWeight:700, color:T.text1 }}>Mover para Concluído</p>
-            <p style={{ margin:'2px 0 0', fontSize:11, color:T.text3 }}>Esta ação registra a resolução da issue</p>
+            <p style={{ margin:'2px 0 0', fontSize:11, color:T.text3 }}>Esta ação registra a resolução da demanda</p>
           </div>
           <button onClick={onClose} style={{ width:26, height:26, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:6, border:'none', background:'transparent', color:T.text3, cursor:'pointer', fontSize:16 }}>×</button>
         </div>
@@ -1280,7 +1282,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:18, flexWrap:'wrap' }}>
                 {[
                   { label:'+ Child issue', icon:null, onClick:()=>setSubtaskOpen(true) },
-                  { label:'Vincular issue', icon:null, onClick:()=>setAddRelOpen(true) },
+                  { label:'Vincular demanda', icon:null, onClick:()=>setAddRelOpen(true) },
                 ].map(btn => (
                   <button key={btn.label} onClick={btn.onClick}
                     style={{ display:'flex', alignItems:'center', gap:4, height:28, padding:'0 10px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text2, fontSize:11, cursor:'pointer', fontFamily:'inherit' }}
@@ -1332,7 +1334,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               {/* Child issues */}
               {(
                 <section style={{ marginBottom:22 }}>
-                  <SecHeader title="Child Issues" count={children.length} />
+                  <SecHeader title="Child Issues" count={children.length} help="Quebra da demanda em passos menores. A barra mostra quantas subtarefas já foram concluídas." />
                   {/* Progress bar */}
                   <div style={{ marginBottom:10 }}>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
@@ -1378,12 +1380,12 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                         style={{ fontSize:11, border:'none', background:'transparent', color:T.text3, cursor:'pointer', padding:'2px 8px', borderRadius:6 }}
                         onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
                         onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>
-                        + Vincular issue
+                        + Vincular demanda
                       </button>
                     }
                   />
                   {linkedIssues.length === 0 ? (
-                    <div style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhuma relação. Clique em "+ Vincular issue" para adicionar.</div>
+                    <div style={{ fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhuma relação. Clique em "+ Vincular demanda" para adicionar.</div>
                   ) : (
                     Object.entries(linkedByType).map(([relType, items]) => (
                       <div key={relType} style={{ marginBottom:10 }}>
@@ -1408,7 +1410,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               {/* Acceptance criteria (story / task) */}
               {(local.type === 'story' || local.type === 'task' || acItems.length > 0) && (
                 <section style={{ marginBottom:22 }}>
-                  <SecHeader title="Critérios de aceite" count={acDone} />
+                  <SecHeader title="Critérios de aceite" count={acDone} help="O que a demanda precisa cumprir para ser aceita — cenários no formato Dado/Quando/Então." />
                   <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                     {acItems.map(item => (
                       <div key={item.id} style={{ display:'flex', alignItems:'flex-start', gap:8, padding:'5px 8px', borderRadius:8, cursor:'default' }}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { T } from './ds/tokens'
+import { HelpHint } from './ds/HelpHint'
 
 const SAMPLE_ISSUES = [
   { key: 'PM-101', title: 'Homepage hero — layout explorations' },
@@ -77,7 +78,10 @@ export function AddRelationModal({ currentIssueKey, onClose, onAdd }: Props) {
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: T.text1 }}>Adicionar Relação</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 15, fontWeight: 700, color: T.text1 }}>
+            Adicionar Relação
+            <HelpHint title="Relação entre demandas" text="Cria um vínculo entre esta demanda e outra: bloqueia, é bloqueada por, relaciona-se ou duplica. Aparece nas 'Relações' do item, nas setas da Timeline e nos painéis de Bloqueadores (PMO/Scrum Master)." />
+          </span>
           <button
             onClick={onClose}
             style={{
@@ -112,7 +116,7 @@ export function AddRelationModal({ currentIssueKey, onClose, onAdd }: Props) {
 
           {/* Issue search */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <label style={{ fontSize: 11, fontWeight: 600, color: T.text3 }}>Issue</label>
+            <label style={{ fontSize: 11, fontWeight: 600, color: T.text3 }}>Demanda</label>
 
             {selected ? (
               <div style={{
@@ -135,7 +139,7 @@ export function AddRelationModal({ currentIssueKey, onClose, onAdd }: Props) {
                   value={query}
                   onChange={e => { setQuery(e.target.value); setShowList(true) }}
                   onFocus={() => setShowList(true)}
-                  placeholder="Buscar issue (ex: PM-102)"
+                  placeholder="Buscar demanda (ex: PZERO-118)"
                   style={{
                     width: '100%', height: 36, padding: '0 12px', fontSize: 13, borderRadius: 8,
                     background: T.bgSurface2, border: `1px solid ${T.border}`, color: T.text1,
