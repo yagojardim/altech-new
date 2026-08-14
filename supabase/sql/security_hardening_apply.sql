@@ -61,7 +61,7 @@ as $$
       and (
         p.tenant_owner is true
         or lower(coalesce(p.primary_role, '')) in ('admin', 'admin_master', 'administrador')
-        or lower(coalesce(r.key, r.name, '')) in ('admin', 'admin_master', 'administrador')
+        or lower(coalesce(r.key, '')) in ('admin', 'admin_master', 'administrador')
       )
   )
 $$;
