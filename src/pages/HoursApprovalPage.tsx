@@ -347,14 +347,42 @@ export default function HoursApprovalPage() {
           Nenhum lançamento para os filtros selecionados.
         </div>
       ) : (
-        Object.entries(bySquad).map(([squadId, squadEntries]) => {
-          const squadName = squads.find(s => s.id === squadId)?.name ?? 'Sem squad'
+        lanes.map(([laneKey, lane]) => {
+          const laneEntries = lane.entries
+          const laneSubmitted = laneEntries.filter(e => e.status === 'submitted')
+          const laneChecked = laneSubmitted.length > 0 && laneSubmitted.every(e => selected.has(e.id))
+          const laneHours = laneEntries.reduce((s, e) => s + Number(e.hours || 0), 0)
+          function toggleLane() {
+            setSelected(prev => {
+              const n = new Set(prev)
+              if (laneChecked) laneSubmitted.forEach(e => n.delete(e.id))
+              else laneSubmitted.forEach(e => n.add(e.id))
+              return n
+            })
+          }
           return (
-            <div key={squadId} style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', marginBottom: 4 }}>
-                <div style={{ width: 8, height: 8, borderRadius: 99, background: T.accent }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: T.text2, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{squadName}</span>
-                <span style={{ fontSize: 11, color: T.text3, marginLeft: 4 }}>{squadEntries.length} lançamento{squadEntries.length !== 1 ? 's' : ''}</span>
+            <div key={laneKey} style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', marginBottom: 4 }}>
+                <input type="checkbox" checked={laneChecked} disabled={laneSubmitted.length === 0} onChange={toggleLane} style={{ cursor: laneSubmitted.length ? 'pointer' : 'not-allowed' }} />
+                <div style={{ width: 26, height: 26, borderRadius: 99, background: T.accent + '30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: T.accent, flexShrink: 0 }}>
+                  {lane.initials}
+                </div>
+                <span style={{ fontSize: 13, fontWeight: 700, color: T.text1 }}>{lane.name}</span>
+                <span style={{ fontSize: 11, color: T.text3 }}>
+                  {laneHours.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}h · {laneEntries.length} lançamento{laneEntries.length !== 1 ? 's' : ''}
+                </span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                  <button onClick={() => exportCSV(laneEntries, `horas-${lane.name.replace(/\s+/g, '-').toLowerCase()}.csv`)}
+                    style={{ padding: '4px 10px', borderRadius: 6, background: T.bgPage, border: `1px solid ${T.border}`, color: T.text2, fontSize: 11, cursor: 'pointer' }}>↓ CSV</button>
+                  {laneSubmitted.length > 0 && (
+                    <>
+                      <button onClick={() => { void runDecision(laneSubmitted.map(e => e.id), 'approved') }}
+                        style={{ padding: '4px 10px', borderRadius: 6, background: `${T.success}18`, border: `1px solid ${T.success}44`, color: T.success, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✓ Aprovar todos</button>
+                      <button onClick={() => { setLaneRejectIds(laneSubmitted.map(e => e.id)); setRejectTarget('lane') }}
+                        style={{ padding: '4px 10px', borderRadius: 6, background: `${T.crit}12`, border: `1px solid ${T.crit}44`, color: T.crit, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>✕ Rejeitar todos</button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div style={{ background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden' }}>
@@ -370,7 +398,8 @@ export default function HoursApprovalPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {squadEntries.map(entry => {
+                    {laneEntries.map(entry => {
+
                       const isChecked = selected.has(entry.id)
                       return (
                         <tr key={entry.id} style={{ borderBottom: `1px solid ${T.border}`, background: isChecked ? `${T.accent}09` : 'transparent', transition: 'background 0.1s' }}
