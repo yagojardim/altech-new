@@ -2,9 +2,10 @@
 import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { DEFAULT_TENANT_ID } from './timeline'
-import { epicColor, PRIORITY_FROM_DB } from './board'
+import { epicColor, PRIORITY_FROM_DB, PRIORITY_TO_DB } from './board'
+import { STATUS_TO_DB, uiStatusFromDb } from './workItem'
 
-export { DEFAULT_TENANT_ID, epicColor, PRIORITY_FROM_DB }
+export { DEFAULT_TENANT_ID, epicColor, PRIORITY_FROM_DB, PRIORITY_TO_DB, STATUS_TO_DB, uiStatusFromDb }
 
 type Tables = Database['public']['Tables']
 
