@@ -128,8 +128,9 @@ export function UserAvatarStack({ users, max = 3 }: {
 }
 
 // ─── SectionCard wrapper ──────────────────────────────────────────────────────
-export function SCard({ title, action, children, style }: {
+export function SCard({ title, action, children, style, help, helpTitle }: {
   title: string; action?: ReactNode; children: ReactNode; style?: CSSProperties
+  help?: string; helpTitle?: string
 }) {
   return (
     <div style={{
@@ -137,7 +138,10 @@ export function SCard({ title, action, children, style }: {
       borderRadius: 10, padding: 16, minWidth: 0, overflowX: 'auto', ...style,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{title}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: T.text1 }}>
+          {title}
+          {help && <HelpHint text={help} title={helpTitle} label={`Ajuda sobre ${title}`} />}
+        </span>
         {action}
       </div>
       {children}
