@@ -155,7 +155,7 @@ export default function ListPage() {
   useEffect(() => {
     const intent = takeReportNav('list')
     if (!intent) return
-    if (intent.itemType) setFType(intent.itemType)
+    if (intent.itemType) setFType(uiType(intent.itemType))
     if (intent.itemStatus) setFStatus(uiStatusFromDb(intent.itemStatus))
   }, [])
 
