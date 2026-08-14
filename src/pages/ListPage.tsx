@@ -41,9 +41,24 @@ const PRIORITY_CFG: Record<string, { label: string; color: string; icon: string 
   low:     { label:'Baixa',   color:T.text3,  icon:'↓'  },
 }
 
-const TYPE_ICON: Record<string, { icon: string; color: string }> = {
-  story:{icon:'◇',color:T.accent}, bug:{icon:'⬟',color:T.crit}, task:{icon:'☑',color:T.text2},
-  subtask:{icon:'◻',color:T.text3}, epic:{icon:'⚡',color:T.warn}, feature:{icon:'▣',color:T.purple},
+/** Keys are UI type values; rows are normalised to them via TYPE_FROM_DB. */
+const TYPE_ICON: Record<string, { icon: string; color: string; label: string }> = {
+  story:{icon:'◇',color:T.accent,label:'História'}, bug:{icon:'⬟',color:T.crit,label:'Bug'},
+  task:{icon:'☑',color:T.text2,label:'Tarefa'}, subtask:{icon:'◻',color:T.text3,label:'Subtarefa'},
+  epic:{icon:'⚡',color:T.warn,label:'Épico'}, feature:{icon:'▣',color:T.purple,label:'Funcionalidade'},
+}
+
+const TYPE_FROM_DB: Record<string, string> = {
+  story:'story', user_story:'story', historia:'story', 'história':'story',
+  bug:'bug', erro:'bug', defeito:'bug',
+  task:'task', tarefa:'task',
+  subtask:'subtask', sub_task:'subtask', subtarefa:'subtask',
+  epic:'epic', epico:'epic', 'épico':'epic',
+  feature:'feature', funcionalidade:'feature',
+}
+
+function uiType(t: string): string {
+  return TYPE_FROM_DB[(t ?? '').toLowerCase()] ?? t
 }
 
 interface Row {
