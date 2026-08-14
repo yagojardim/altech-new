@@ -788,18 +788,19 @@ function AttachmentsSection({ tenantId, workItemId, profileId, canUpload, onCoun
       await reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setError(msg); onError(msg)
+      setError(msg); onErrorRef.current(msg)
     } finally {
       setBusy(false)
     }
   }
 
   async function handleDownload(row: AttachmentRow) {
-    if (!row.storage_path) { onError('Arquivo sem caminho de armazenamento'); return }
+    if (!row.storage_path) { onErrorRef.current('Arquivo sem caminho de armazenamento'); return }
     const url = await getDownloadUrl(row.storage_path)
-    if (!url) { onError('Não foi possível gerar o link de download'); return }
+    if (!url) { onErrorRef.current('Não foi possível gerar o link de download'); return }
     window.open(url, '_blank', 'noopener,noreferrer')
   }
+
 
   const uploadDisabled = !canUpload || busy || !tenantId || !workItemId
 
