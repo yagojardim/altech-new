@@ -5,7 +5,7 @@ import { WorkItemDetail } from '../components/WorkItemDetail'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
-  listWorkItems, epicColor,
+  listWorkItems, epicColor, PRIORITY_FROM_DB, uiStatusFromDb,
   type ListItemRow, type ListEpicRow, type ListSprintRow, type ListProfileRow,
   type ListProjectRow, type ListLabelRow, type ListFilters,
 } from '../data/db/list'
@@ -98,8 +98,9 @@ function buildRows(
       key: i.key,
       type: i.type,
       title: i.title,
-      status: i.status,
-      priority: i.priority,
+      // Normalise to the UI enums so display, filters and edits all speak the same language.
+      status: uiStatusFromDb(i.status),
+      priority: PRIORITY_FROM_DB[(i.priority ?? '').toLowerCase()] ?? 'medium',
       assigneeId: i.assignee_id,
       assignee: p?.avatar_initials ?? (p?.name.slice(0, 2).toUpperCase() ?? '—'),
       points: Number(i.story_points ?? 0),
