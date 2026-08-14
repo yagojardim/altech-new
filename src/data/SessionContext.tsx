@@ -50,7 +50,13 @@ const SessionContext = createContext<SessionCtx>(null!)
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string>(ACTIVE_USER_ID)
-  const [status, setStatus] = useState<SessionStatus>('loading')
+  // Inspection é um modo de desenvolvimento intencional e já possui uma
+  // persona local válida. Renderizá-lo imediatamente evita que falhas ou
+  // throttling nas leituras iniciais deixem o app preso no canvas escuro.
+  // Em produção (Inspection desligado) o gate autenticado continua igual.
+  const [status, setStatus] = useState<SessionStatus>(() =>
+    INSPECTION_MODE_ENABLED && !hasManualLogout() ? 'inspection' : 'loading',
+  )
   const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [dbUser, setDbUser] = useState<MockUser | null>(null)
   const [mustChangePassword, setMustChange] = useState(false)
