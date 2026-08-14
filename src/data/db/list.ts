@@ -49,6 +49,32 @@ function missingTableMessage(table: string, message: string): string {
 
 const sel = (s: string): string => s
 
+/** UI filter value → every value the database may actually store for it. */
+const STATUS_MATCHES: Record<string, string[]> = {
+  backlog: ['backlog'],
+  todo: ['todo', 'to_do', 'a_fazer'],
+  'in-progress': ['in_progress', 'in-progress', 'doing', 'em_andamento'],
+  'in-review': ['in_review', 'in-review', 'review', 'em_revisao'],
+  blocked: ['blocked', 'bloqueado'],
+  done: ['done', 'concluido', 'concluído'],
+}
+
+const PRIORITY_MATCHES: Record<string, string[]> = {
+  critical: ['critical', 'critica', 'crítica'],
+  high: ['high', 'alta'],
+  medium: ['medium', 'media', 'média'],
+  low: ['low', 'baixa'],
+}
+
+const TYPE_MATCHES: Record<string, string[]> = {
+  story: ['story', 'user_story', 'historia', 'história'],
+  bug: ['bug', 'erro', 'defeito'],
+  task: ['task', 'tarefa'],
+  subtask: ['subtask', 'sub_task', 'subtarefa'],
+  epic: ['epic', 'epico', 'épico'],
+  feature: ['feature', 'funcionalidade'],
+}
+
 export async function listWorkItems(filters: ListFilters = {}): Promise<ListData> {
   const tid = DEFAULT_TENANT_ID
 
