@@ -761,17 +761,22 @@ function AttachmentsSection({ tenantId, workItemId, profileId, canUpload, onCoun
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const onCountChangeRef = useRef(onCountChange)
+  const onErrorRef = useRef(onError)
+  onCountChangeRef.current = onCountChange
+  onErrorRef.current = onError
 
   const reload = useCallback(async () => {
     if (!tenantId || !workItemId) return
     setLoading(true); setError(null)
     const list = await listAttachments(tenantId, workItemId)
     setRows(list)
-    onCountChange(list.length)
+    onCountChangeRef.current(list.length)
     setLoading(false)
-  }, [tenantId, workItemId, onCountChange])
+  }, [tenantId, workItemId])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => { void reload() }, [tenantId, workItemId])
+
 
   async function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
