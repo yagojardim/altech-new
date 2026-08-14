@@ -5,7 +5,7 @@ import { WorkItemDetail } from '../components/WorkItemDetail'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
-  listWorkItems, epicColor,
+  listWorkItems, epicColor, PRIORITY_FROM_DB, uiStatusFromDb,
   type ListItemRow, type ListEpicRow, type ListSprintRow, type ListProfileRow,
   type ListProjectRow, type ListLabelRow, type ListFilters,
 } from '../data/db/list'
@@ -24,13 +24,14 @@ const COL_LABELS: Record<ColId, string> = {
   assignee:'Responsável', points:'Pts', epic:'Épico', sprint:'Sprint', labels:'Labels', dueDate:'Venc.',
 }
 
+/** Keys are UI status values (same format used by rows and by the filters). */
 const STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
-  backlog:     { label:'Backlog',      color:T.text3,   bg:T.neutralDim   },
-  todo:        { label:'A Fazer',      color:T.text2,   bg:`${T.text3}18` },
-  in_progress: { label:'Em andamento', color:T.accent,  bg:T.accentDim    },
-  in_review:   { label:'Em revisão',   color:T.warn,    bg:T.warnDim      },
-  blocked:     { label:'Bloqueado',    color:T.crit,    bg:T.critDim      },
-  done:        { label:'Concluído',    color:T.success, bg:T.successDim   },
+  backlog:       { label:'Backlog',      color:T.text3,   bg:T.neutralDim   },
+  todo:          { label:'A Fazer',      color:T.text2,   bg:`${T.text3}18` },
+  'in-progress': { label:'Em andamento', color:T.accent,  bg:T.accentDim    },
+  'in-review':   { label:'Em revisão',   color:T.warn,    bg:T.warnDim      },
+  blocked:       { label:'Bloqueado',    color:T.crit,    bg:T.critDim      },
+  done:          { label:'Concluído',    color:T.success, bg:T.successDim   },
 }
 
 const PRIORITY_CFG: Record<string, { label: string; color: string; icon: string }> = {
@@ -97,8 +98,9 @@ function buildRows(
       key: i.key,
       type: i.type,
       title: i.title,
-      status: i.status,
-      priority: i.priority,
+      // Normalise to the UI enums so display, filters and edits all speak the same language.
+      status: uiStatusFromDb(i.status),
+      priority: PRIORITY_FROM_DB[(i.priority ?? '').toLowerCase()] ?? 'medium',
       assigneeId: i.assignee_id,
       assignee: p?.avatar_initials ?? (p?.name.slice(0, 2).toUpperCase() ?? '—'),
       points: Number(i.story_points ?? 0),
@@ -139,7 +141,7 @@ export default function ListPage() {
     const intent = takeReportNav('list')
     if (!intent) return
     if (intent.itemType) setFType(intent.itemType)
-    if (intent.itemStatus) setFStatus(intent.itemStatus)
+    if (intent.itemStatus) setFStatus(uiStatusFromDb(intent.itemStatus))
   }, [])
 
   const [items, setItems] = useState<ListItemRow[]>([])
@@ -266,6 +268,46 @@ export default function ListPage() {
   }
 
   const groups = groupRows()
+
+  // ── CSV export of the currently visible rows (filters + sort + selected columns) ──
+  function cellText(row: Row, col: ColId): string {
+    switch (col) {
+      case 'key': return row.key
+      case 'type': return row.type
+      case 'title': return row.title
+      case 'status': return STATUS_CFG[row.status]?.label ?? row.status
+      case 'priority': return PRIORITY_CFG[row.priority]?.label ?? row.priority
+      case 'assignee': return profiles.find(p => p.id === row.assigneeId)?.name ?? '—'
+      case 'points': return String(row.points)
+      case 'epic': return epics.find(e => e.id === row.epicId)?.name ?? '—'
+      case 'sprint': return sprints.find(s => s.id === row.sprintId)?.name ?? '—'
+      case 'labels': return row.labels.join('; ')
+      case 'dueDate': return row.dueDate
+      default: return ''
+    }
+  }
+
+  function csvEscape(v: string): string {
+    return /[",\n\r;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+  }
+
+  function exportCsv() {
+    const visible = groups.flatMap(g => g.items)
+    const lines = [
+      cols.map(c => csvEscape(COL_LABELS[c])).join(','),
+      ...visible.map(r => cols.map(c => csvEscape(cellText(r, c))).join(',')),
+    ]
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `demandas-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
 
   const colW: Record<ColId, number | string> = {
     key: 90, type: 44, title: 260, status: 130, priority: 110,
@@ -502,8 +544,10 @@ export default function ListPage() {
               ))}
             </div>
           )}
-          <button style={{
-            padding:'5px 12px', borderRadius:5, fontSize:12, cursor:'pointer',
+          <button onClick={exportCsv} disabled={loading || rows.length === 0} style={{
+            padding:'5px 12px', borderRadius:5, fontSize:12,
+            cursor: loading || rows.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: loading || rows.length === 0 ? 0.5 : 1,
             background:T.bgSurface2, color:T.text2, border:`1px solid ${T.border}`,
           }}>Exportar CSV ↓</button>
         </div>
