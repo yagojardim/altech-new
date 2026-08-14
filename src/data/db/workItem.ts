@@ -3,6 +3,7 @@
 import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { DEFAULT_TENANT_ID, PRIORITY_FROM_DB, PRIORITY_TO_DB, epicColor } from './board'
+import { safeCall } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID, PRIORITY_FROM_DB, PRIORITY_TO_DB }
 
@@ -346,6 +347,7 @@ export async function addSubtask(
   parent: Pick<WorkItemRow, 'id' | 'project_id' | 'board_id' | 'board_column_id' | 'sprint_id' | 'epic_id' | 'status'>,
   title: string,
   actorName = 'Sistema',
+  opts?: { assigneeId?: string | null; storyPoints?: number | null },
 ): Promise<RelatedItemRow> {
   const tid = DEFAULT_TENANT_ID
 
@@ -375,6 +377,8 @@ export async function addSubtask(
       title,
       status: 'todo',
       priority: 'media',
+      assignee_id: opts?.assigneeId ?? null,
+      story_points: opts?.storyPoints ?? null,
     })
     .select(RELATED_COLS)
     .single()
