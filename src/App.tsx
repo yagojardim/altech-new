@@ -256,10 +256,12 @@ function AppInner() {
   }
 
   return (
-    <CatalogProvider>
-      <ErrorBoundary scope="AdminMasterOverlay" fallback={null}><AdminMasterOverlay /></ErrorBoundary>
-      <ShellWithRole view={view} setView={setView} />
-    </CatalogProvider>
+    <ErrorBoundary scope="Shell">
+      <CatalogProvider>
+        <ErrorBoundary scope="AdminMasterOverlay" fallback={null}><AdminMasterOverlay /></ErrorBoundary>
+        <ShellWithRole view={view} setView={setView} />
+      </CatalogProvider>
+    </ErrorBoundary>
   )
 }
 
@@ -282,46 +284,48 @@ function ShellWithRole({ view, setView }: { view:View; setView:(v:View)=>void })
 
 
   return (
-    <>
-      {createOpen && (
-        <CreateIssueModal onClose={()=>setCreate(false)} onCreate={()=>setCreate(false)} />
-      )}
-      {inviteOpen && (
-        <InviteMemberModal onClose={()=>setInvite(false)} />
-      )}
-      <Shell currentView={view} onViewChange={v => { if (v === 'team') setTeamInitialTab('membros'); setView(v) }} onCreateIssue={()=>setCreate(true)}>
-        <ErrorBoundary scope={`view:${view}`} key={view}>
-        {view==='home'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><DashboardHomePage onNav={navTo} onInvite={() => setInvite(true)} /></div>}
-        {view==='projects-list' && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProjectsListPage onNav={navTo} /></div>}
-        {view==='gantt'         && <div className="h-full min-w-0 w-full overflow-hidden"><GanttPage/></div>}
-        {view==='calendar'      && <div className="h-full min-w-0 w-full overflow-hidden"><CalendarPage/></div>}
-        {view==='list'          && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ListPage/></div>}
-        {view==='timeline'      && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><TimelinePage/></div>}
-        {view==='epics'         && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><EpicsPage/></div>}
-        {view==='releases'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ReleasesPage/></div>}
-        {view==='filters'       && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><FiltersPage/></div>}
-        {view==='navigator'     && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><IssueNavigatorPage/></div>}
-        {view==='reports'       && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ReportsPage/></div>}
-        {view==='automations'   && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><AutomationsPage/></div>}
-        {view==='config'        && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ConfigPage/></div>}
-        {view==='tenant-settings' && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TenantSettingsPage/></div>}
-        {view==='team'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} initialTab={teamInitialTab} /></div>}
-        {view==='my-tasks'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><MyTasksPage onNav={navTo} /></div>}
-        {view==='dashboard'     && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage onNav={navTo} /></div>}
-        {view==='project'       && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ProjectPage boardId={selectedBoardId} projectId={selectedProjectId} onBackToBoards={selectedBoardId ? () => setView('boards-list') : undefined} /></div>}
-        {view==='issue'         && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><IssueDetailPage issueId={selectedIssueId} /></div>}
-        {view==='task-drawer'   && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}
-        {view==='role-dashboard'    && <div className="h-full min-w-0 w-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
-        {view==='client-messages'  && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ClientMessagesPage /></div>}
-        {view==='timesheet'        && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TimesheetPage /></div>}
-        {view==='hours-approval'   && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><HoursApprovalPage /></div>}
-        {view==='boards-list'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setSelectedProjectId(undefined); setView('project') }} /></div>}
-        {view==='profile'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProfilePage /></div>}
-        {view==='preferences'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><PreferencesPage /></div>}
-        {view==='storage'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><StoragePage onNav={navTo} /></div>}
-        {view==='modules'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={navTo} /></div>}
-        </ErrorBoundary>
-      </Shell>
-    </>
+    <ErrorBoundary scope="AppShell">
+      <>
+        {createOpen && (
+          <CreateIssueModal onClose={()=>setCreate(false)} onCreate={()=>setCreate(false)} />
+        )}
+        {inviteOpen && (
+          <InviteMemberModal onClose={()=>setInvite(false)} />
+        )}
+        <Shell currentView={view} onViewChange={v => { if (v === 'team') setTeamInitialTab('membros'); setView(v) }} onCreateIssue={()=>setCreate(true)}>
+          <ErrorBoundary scope={`view:${view}`} key={view}>
+          {view==='home'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><DashboardHomePage onNav={navTo} onInvite={() => setInvite(true)} /></div>}
+          {view==='projects-list' && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProjectsListPage onNav={navTo} /></div>}
+          {view==='gantt'         && <div className="h-full min-w-0 w-full overflow-hidden"><GanttPage/></div>}
+          {view==='calendar'      && <div className="h-full min-w-0 w-full overflow-hidden"><CalendarPage/></div>}
+          {view==='list'          && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ListPage/></div>}
+          {view==='timeline'      && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><TimelinePage/></div>}
+          {view==='epics'         && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><EpicsPage/></div>}
+          {view==='releases'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ReleasesPage/></div>}
+          {view==='filters'       && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><FiltersPage/></div>}
+          {view==='navigator'     && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><IssueNavigatorPage/></div>}
+          {view==='reports'       && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ReportsPage/></div>}
+          {view==='automations'   && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><AutomationsPage/></div>}
+          {view==='config'        && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ConfigPage/></div>}
+          {view==='tenant-settings' && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TenantSettingsPage/></div>}
+          {view==='team'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TeamPage onInvite={() => setInvite(true)} initialTab={teamInitialTab} /></div>}
+          {view==='my-tasks'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><MyTasksPage onNav={navTo} /></div>}
+          {view==='dashboard'     && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell" style={{ background:'var(--bg-page,#0d1321)' }}><DashboardPage onNav={navTo} /></div>}
+          {view==='project'       && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ProjectPage boardId={selectedBoardId} projectId={selectedProjectId} onBackToBoards={selectedBoardId ? () => setView('boards-list') : undefined} /></div>}
+          {view==='issue'         && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><IssueDetailPage issueId={selectedIssueId} /></div>}
+          {view==='task-drawer'   && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><TaskDrawerPage/></div>}
+          {view==='role-dashboard'    && <div className="h-full min-w-0 w-full dark-shell"><RoleDashboard onBack={() => setView('home')} /></div>}
+          {view==='client-messages'  && <div className="h-full min-w-0 w-full overflow-hidden dark-shell"><ClientMessagesPage /></div>}
+          {view==='timesheet'        && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><TimesheetPage /></div>}
+          {view==='hours-approval'   && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><HoursApprovalPage /></div>}
+          {view==='boards-list'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><BoardsListPage onSelectBoard={id => { setSelectedBoardId(id); setSelectedProjectId(undefined); setView('project') }} /></div>}
+          {view==='profile'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ProfilePage /></div>}
+          {view==='preferences'      && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><PreferencesPage /></div>}
+          {view==='storage'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><StoragePage onNav={navTo} /></div>}
+          {view==='modules'          && <div className="h-full min-w-0 w-full overflow-y-auto dark-shell"><ModulesPortfolioPage onNav={navTo} /></div>}
+          </ErrorBoundary>
+        </Shell>
+      </>
+    </ErrorBoundary>
   )
 }
