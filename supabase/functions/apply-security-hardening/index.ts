@@ -1,4 +1,6 @@
--- ============================================================================
+import postgres from "https://esm.sh/postgres@3.4.4";
+
+const SQL = `-- ============================================================================
 -- SECURITY HARDENING — script único de aplicação (2026-08)
 --
 -- Aplica de uma vez:
@@ -6,7 +8,7 @@
 --   * RLS escopado por tenant / dono / papel em todas as tabelas do public
 --   * fim do acesso anônimo (anon) ao Data API
 --   * search_path imutável em todas as funções
---   * nenhuma função SECURITY DEFINER de `public` executável por anon/authenticated
+--   * nenhuma função SECURITY DEFINER de 'public' executável por anon/authenticated
 --
 -- COMO APLICAR: cole este arquivo inteiro no SQL Editor do Supabase e execute.
 --
@@ -408,8 +410,8 @@ begin
 end $$;
 
 -- ─── 7. Nenhuma função SECURITY DEFINER exposta na API ──────────────────────
--- Toda função SECURITY DEFINER que sobrou em `public` deixa de ser executável
--- por anon/authenticated; a lógica privilegiada vive no schema `app`, e o
+-- Toda função SECURITY DEFINER que sobrou em 'public' deixa de ser executável
+-- por anon/authenticated; a lógica privilegiada vive no schema 'app', e o
 -- wrapper público public.check_slug é SECURITY INVOKER.
 do $$
 declare r record;
@@ -465,3 +467,19 @@ notify pgrst, 'reload schema';
 -- from pg_policies
 -- where schemaname = 'public'
 --   and ('anon' = any (roles) or 'public' = any (roles) or qual = 'true');
+`;
+
+Deno.serve(async () => {
+  const url = Deno.env.get("SUPABASE_DB_URL");
+  if (!url) return new Response(JSON.stringify({ ok: false, error: "missing SUPABASE_DB_URL" }), { status: 500, headers: { "content-type": "application/json" } });
+  const sql = postgres(url, { prepare: false, max: 1 });
+  try {
+    await sql.unsafe(SQL);
+    const open = await sql`select schemaname, tablename, policyname, roles::text, qual from pg_policies where schemaname = 'public' and (qual = 'true' or 'anon' = any(roles))`;
+    return new Response(JSON.stringify({ ok: true, remaining_open_policies: open }), { headers: { "content-type": "application/json" } });
+  } catch (e) {
+    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: { "content-type": "application/json" } });
+  } finally {
+    await sql.end();
+  }
+});
