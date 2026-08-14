@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { T as DS } from '../components/ds/tokens'
+import { HelpHint } from '../components/ds/HelpHint'
 import { getBoardById } from '../data/boards'
 import { CreateIssueModal } from '../components/CreateIssueModal'
 import { CompleteSprintModal } from '../components/CompleteSprintModal'
@@ -455,7 +456,8 @@ function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountPr
           {/* Goal */}
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>
-              Meta do Sprint <span style={{ color: DS.text3, fontWeight: 400 }}>(opcional)</span>
+              Meta do Sprint <span style={{ color: DS.text3, fontWeight: 400 }}>(opcional)</span>{' '}
+              <HelpHint text="Objetivo único que norteia a prioridade da sprint." label="Ajuda sobre Sprint Goal" />
             </label>
             <textarea
               value={goal}
@@ -1022,6 +1024,7 @@ function BoardTab({
             </button>
           )
         })()}
+        <HelpHint text="Fecha a sprint, calcula a velocity pelas demandas concluídas e move as não-concluídas para a próxima sprint ou para o backlog." label="Ajuda sobre Encerrar sprint" />
         <div className="w-px h-4 flex-shrink-0" style={{ background:S.border }}/>
         <div className="flex items-center gap-1">
           {ASSIGNEES.map(a=>(

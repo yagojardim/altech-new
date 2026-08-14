@@ -6,7 +6,7 @@ type Tab = 'workflow' | 'issueTypes' | 'components' | 'labels' | 'priorities' | 
 
 const TABS: { id: Tab; label: string }[] = [
   { id:'workflow',    label:'Workflow' },
-  { id:'issueTypes',  label:'Tipos de Issue' },
+  { id:'issueTypes',  label:'Tipos de Demanda' },
   { id:'components',  label:'Componentes' },
   { id:'labels',      label:'Labels' },
   { id:'priorities',  label:'Prioridades' },
@@ -173,7 +173,7 @@ function IssueTypesTab() {
   return (
     <div>
       <div style={{ marginBottom:20 }}>
-        <div style={{ fontSize:15, fontWeight:600, color:T.text1, marginBottom:4 }}>Tipos de Issue</div>
+        <div style={{ fontSize:15, fontWeight:600, color:T.text1, marginBottom:4 }}>Tipos de Demanda</div>
         <div style={{ fontSize:13, color:T.text3 }}>Defina os tipos disponíveis na criação de issues.</div>
       </div>
 

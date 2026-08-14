@@ -126,7 +126,7 @@ export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, on
           {stats.remaining > 0 && (
             <div>
               <p style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 10 }}>
-                O que fazer com as {stats.remaining} issue{stats.remaining !== 1 ? 's' : ''} restantes?
+                O que fazer com as {stats.remaining} demanda{stats.remaining !== 1 ? 's' : ''} restantes?
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {/* Next sprint option */}
@@ -177,7 +177,7 @@ export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, on
                   </svg>
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 600 }}>Mover para o Backlog</p>
-                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>Issues ficam sem sprint</p>
+                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>Demandas ficam sem sprint</p>
                   </div>
                 </button>
               </div>

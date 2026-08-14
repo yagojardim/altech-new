@@ -27,12 +27,12 @@ const viewLabels: Partial<Record<View, string>> = {
   'calendar':      'Calendário',
   'dashboard':     'Dashboard',
   'project':       'Kanban Board',
-  'list':          'Lista de Issues',
+  'list':          'Lista de Demandas',
   'timeline':      'Timeline / Roadmap',
   'epics':         'Épicos',
   'releases':      'Releases',
   'filters':       'Filtros & Busca',
-  'navigator':     'Issue Navigator',
+  'navigator':     'Navegador de Demandas',
   'reports':       'Relatórios & Insights',
   'automations':   'Automações',
   'config':        'Configurações',
@@ -44,7 +44,7 @@ const viewLabels: Partial<Record<View, string>> = {
   'client-login':   'Login — Portal do Cliente',
   'client':        'Portal do Cliente',
   'task-drawer':   'Detalhe da Tarefa',
-  'issue':         'Issue Detail',
+  'issue':         'Detalhe da Demanda',
 }
 
 const ROLE_CONTEXT_LABEL: Record<string, string> = {
@@ -215,7 +215,7 @@ export function Header({ currentView, onViewChange, onCreateIssue }: HeaderProps
               <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
                 <path d="M4.5 1v7M1 4.5h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
               </svg>
-              Issue
+              Demanda
             </button>
           )}
 

@@ -4,6 +4,7 @@
  */
 import { useState, useRef, useEffect, type ReactNode, type CSSProperties } from 'react'
 import { T } from './tokens'
+import { HelpHint } from './HelpHint'
 import { useSession } from '../../data/SessionContext'
 import { can } from '../../data/permissions'
 import {
@@ -128,8 +129,9 @@ export function UserAvatarStack({ users, max = 3 }: {
 }
 
 // ─── SectionCard wrapper ──────────────────────────────────────────────────────
-export function SCard({ title, action, children, style }: {
+export function SCard({ title, action, children, style, help, helpTitle }: {
   title: string; action?: ReactNode; children: ReactNode; style?: CSSProperties
+  help?: string; helpTitle?: string
 }) {
   return (
     <div style={{
@@ -137,7 +139,10 @@ export function SCard({ title, action, children, style }: {
       borderRadius: 10, padding: 16, minWidth: 0, overflowX: 'auto', ...style,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: T.text1 }}>{title}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: T.text1 }}>
+          {title}
+          {help && <HelpHint text={help} title={helpTitle} label={`Ajuda sobre ${title}`} />}
+        </span>
         {action}
       </div>
       {children}
@@ -246,9 +251,10 @@ export function MiniSparkline({ data, color }: {
 }
 
 // ─── KpiCard — clicking navigates to filtered list ────────────────────────────
-export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, onClick }: {
+export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, onClick, help, helpTitle }: {
   value: string; label: string; sub?: string; miniViz?: ReactNode; disclaimer?: string
   color?: string; alert?: boolean; onClick?: () => void
+  help?: string; helpTitle?: string
 }) {
   const [hovered, setHovered] = useState(false)
   const clickable  = !!onClick
@@ -275,7 +281,10 @@ export function KpiCard({ value, label, sub, miniViz, disclaimer, color, alert, 
       {/* Left: text content */}
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: hasMiniViz ? '0 0 42%' : 1 }}>
         <div style={{ fontSize: 22, fontWeight: 700, color: color ?? T.text1, lineHeight: 1 }}>{value}</div>
-        <div style={{ fontSize: 11, color: T.text2, marginTop: 4 }}>{label}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: T.text2, marginTop: 4 }}>
+          {label}
+          {help && <span onClick={e => e.stopPropagation()}><HelpHint text={help} title={helpTitle} label={`Ajuda sobre ${label}`} /></span>}
+        </div>
         {sub && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontWeight: 500 }}>{sub}</div>}
         {disclaimer && hasMiniViz && (
           <div style={{
