@@ -184,6 +184,8 @@ interface MuralNativeCard {
   color?: string
   alert?: boolean
   onClick?: () => void
+  help?: string
+  helpTitle?: string
 }
 
 function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss: (id: string) => void }) {
@@ -213,6 +215,8 @@ function NativeMuralTile({ card, onDismiss }: { card: MuralNativeCard; onDismiss
         color={card.color}
         alert={card.alert}
         onClick={card.onClick}
+        help={card.help}
+        helpTitle={card.helpTitle}
       />
     </div>
   )
@@ -462,7 +466,7 @@ function PmoPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) 
   const nativeCards: MuralNativeCard[] = [
     { id: 'pmo:projects', value: String(c?.activeProjects ?? 0), label: 'Projetos Ativos', sub: `${rags.filter(r => r.rag === 'healthy').length} no prazo`, disclaimer: 'projetos ativos no tenant', onClick: () => onNav('projects-list') },
     { id: 'pmo:risk', value: String(c?.atRisk ?? 0), label: 'Em Risco / Atrasados', sub: `${rags.filter(r => r.rag === 'blocked').length} crítico(s)`, disclaimer: 'projetos com RAG amarelo ou vermelho', color: T.warn, alert: (c?.atRisk ?? 0) > 0, onClick: () => onNav('reports') },
-    { id: 'pmo:predictability', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', onClick: () => openChart('velocity') },
+    { id: 'pmo:predictability', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', help: 'Percentual do planejado que foi efetivamente entregue.', sub: 'meta: 80%', disclaimer: '% do planejado efetivamente entregue', onClick: () => openChart('velocity') },
     { id: 'pmo:delivery', value: `${agg?.consolidatedPct ?? 0}%`, label: 'Planejado × Concluído', sub: `${agg?.done ?? 0}/${agg?.planned ?? 0} itens`, disclaimer: 'itens concluídos sobre o total planejado', onClick: () => openChart('criados') },
   ]
 
@@ -479,7 +483,7 @@ function PmoPanel({ onNav }: { onNav: (v: string, targetId?: string) => void }) 
       </div>
 
       <Grid cols="1fr 1fr">
-        <SCard title="Saúde por Projeto (RAG)">
+        <SCard title="Saúde por Projeto (RAG)" help="Semáforo de saúde: 🟢 saudável · 🟡 em risco · 🔴 bloqueado.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {rags.length === 0 && <EmptyState message="Nenhum projeto no escopo selecionado." />}
             {rags.map(r => (
@@ -535,10 +539,10 @@ function ProjectManagerPanel({ onNav }: { onNav: (v: string, targetId?: string) 
   }))
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'pm:progress', value: `${pmProgress}%`, label: 'Progresso do Projeto', sub: `${pmDone}/${pmTotal} itens concluídos`, disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <BurndownChart variant="thumbnail" sprintTotal={pmPtTotal} sprintRemaining={pmPtTotal - pmPtDone} />, onClick: () => onNav('project') },
+    { id: 'pm:progress', value: `${pmProgress}%`, label: 'Progresso do Projeto', help: 'Velocity = pontos concluídos por sprint. Burndown = pontos restantes ao longo da sprint.', sub: `${pmDone}/${pmTotal} itens concluídos`, disclaimer: '% de tarefas concluídas na sprint ativa', miniViz: <BurndownChart variant="thumbnail" sprintTotal={pmPtTotal} sprintRemaining={pmPtTotal - pmPtDone} />, onClick: () => onNav('project') },
     { id: 'pm:deadline', value: daysLeft, label: 'Prazo Restante', sub: mainRag?.periodEnd ? `Entrega: ${mainRag.periodEnd}` : 'sem data definida', disclaimer: 'dias até a data de entrega planejada', onClick: () => onNav('gantt') },
     { id: 'pm:blocked', value: String(blocked.length), label: 'Bloqueios Ativos', sub: 'ver lista', disclaimer: 'demandas atualmente bloqueadas', color: T.crit, alert: blocked.length > 0, onClick: () => onNav('list') },
-    { id: 'pm:scope', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', sub: 'planejado × entregue', disclaimer: 'entrega efetiva vs. compromisso', color: T.warn, alert: (agg?.predictability ?? 100) < 80, onClick: () => openChart('criados') },
+    { id: 'pm:scope', value: `${agg?.predictability ?? 0}%`, label: 'Previsibilidade', help: 'Percentual do planejado que foi efetivamente entregue.', sub: 'planejado × entregue', disclaimer: 'entrega efetiva vs. compromisso', color: T.warn, alert: (agg?.predictability ?? 100) < 80, onClick: () => openChart('criados') },
   ]
 
 
@@ -1008,10 +1012,10 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string, targetId?: string) => 
   const smPtDone      = sprint14.filter(w => w.status === 'done').reduce((s, w) => s + (w.points ?? 0), 0)
 
   const nativeCards: MuralNativeCard[] = [
-    { id: 'sm:health', value: `${sprintHealth || 62}%`, label: 'Saúde da Sprint', sub: `${parados.length} parados`, disclaimer: '% de conclusão em relação à meta da sprint', color: T.warn, alert: true, miniViz: <BurndownChart variant="thumbnail" sprintTotal={smPtTotal} sprintRemaining={smPtTotal - smPtDone} />, onClick: () => onNav('project') },
+    { id: 'sm:health', value: `${sprintHealth || 62}%`, label: 'Saúde da Sprint', help: 'Velocity = pontos concluídos por sprint. Burndown = pontos restantes ao longo da sprint.', sub: `${parados.length} parados`, disclaimer: '% de conclusão em relação à meta da sprint', color: T.warn, alert: true, miniViz: <BurndownChart variant="thumbnail" sprintTotal={smPtTotal} sprintRemaining={smPtTotal - smPtDone} />, onClick: () => onNav('project') },
     { id: 'sm:blocked', value: String(blocked.length), label: 'Impedimentos', sub: 'ativos', disclaimer: 'impedimentos formais sem resolução registrada', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S8',value:3},{value:5},{value:4},{value:6},{value:3},{label:'S13',value:blocked.length}]} color="#ef4444" />, onClick: () => onNav('list') },
-    { id: 'sm:goal', value: '⚠', label: 'Sprint Goal', sub: '2 itens críticos parados', disclaimer: 'itens que ameaçam atingir o objetivo da sprint', color: T.warn, miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />, onClick: () => onNav('project') },
-    { id: 'sm:wip', value: '6', label: 'WIP Atual', sub: 'limite: 5 — excedido', disclaimer: 'itens em andamento vs. limite acordado pelo time', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />, onClick: () => onNav('project') },
+    { id: 'sm:goal', value: '⚠', label: 'Sprint Goal', help: 'Objetivo único que norteia a prioridade da sprint.', sub: '2 itens críticos parados', disclaimer: 'itens que ameaçam atingir o objetivo da sprint', color: T.warn, miniViz: <MiniBarChart data={[{label:'S10',value:3},{label:'S11',value:2},{label:'S12',value:1},{label:'S13',value:2,current:true}]} showAvg={false} />, onClick: () => onNav('project') },
+    { id: 'sm:wip', value: '6', label: 'WIP Atual', help: 'Demandas em andamento ao mesmo tempo. Acima do limite acordado indica gargalo.', sub: 'limite: 5 — excedido', disclaimer: 'itens em andamento vs. limite acordado pelo time', color: T.crit, alert: true, miniViz: <MiniSparkline data={[{label:'S10',value:4},{value:5},{value:6},{label:'S13',value:6}]} color="#ef4444" />, onClick: () => onNav('project') },
   ]
 
   return (
@@ -1029,7 +1033,7 @@ function ScrumMasterPanel({ onNav }: { onNav: (v: string, targetId?: string) => 
           showDaysBlocked onViewAll={() => onNav('list')}
           emptyMsg="Nenhum impedimento ativo. 🟢" />
 
-        <SCard title="Itens Parados + Aging WIP">
+        <SCard title="Itens Parados + Aging WIP" help="Há quantos dias cada demanda está parada na coluna atual.">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 14 }}>
             {parados.length === 0
               ? <EmptyState message="Nenhum item parado." />
@@ -1127,7 +1131,7 @@ function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => voi
         <WorkQueue title="Gargalos de PRs / Issues em Revisão" items={inReview} onOpen={openDrawer}
           onViewAll={() => onNav('list')} emptyMsg="Nenhum gargalo no momento." />
 
-        <SCard title="DORA Metrics">
+        <SCard title="DORA Metrics" help="Quatro métricas de entrega do time: frequência de deploy, taxa de falha em mudanças, MTTR (tempo de recuperação) e lead time.">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {dora.map(d => (
               <div key={d.name} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px' }}>
