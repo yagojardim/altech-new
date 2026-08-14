@@ -1,4 +1,4 @@
-import postgres from "https://esm.sh/postgres@3.4.4";
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 
 const SQL = `-- ============================================================================
 -- SECURITY HARDENING — script único de aplicação (2026-08)
@@ -470,16 +470,19 @@ notify pgrst, 'reload schema';
 `;
 
 Deno.serve(async () => {
-  const url = Deno.env.get("SUPABASE_DB_URL");
-  if (!url) return new Response(JSON.stringify({ ok: false, error: "missing SUPABASE_DB_URL" }), { status: 500, headers: { "content-type": "application/json" } });
-  const sql = postgres(url, { prepare: false, max: 1 });
   try {
-    await sql.unsafe(SQL);
-    const open = await sql`select schemaname, tablename, policyname, roles::text, qual from pg_policies where schemaname = 'public' and (qual = 'true' or 'anon' = any(roles))`;
-    return new Response(JSON.stringify({ ok: true, remaining_open_policies: open }), { headers: { "content-type": "application/json" } });
+    const url = Deno.env.get("SUPABASE_DB_URL");
+    if (!url) return new Response(JSON.stringify({ ok: false, error: "missing SUPABASE_DB_URL" }), { status: 500, headers: { "content-type": "application/json" } });
+    const client = new Client(url);
+    await client.connect();
+    try {
+      await client.queryArray(SQL);
+      const open = await client.queryObject("select tablename, policyname, roles::text as roles, qual from pg_policies where schemaname = 'public' and (qual = 'true' or roles::text like '%anon%')");
+      return new Response(JSON.stringify({ ok: true, remaining_open_policies: open.rows }), { headers: { "content-type": "application/json" } });
+    } finally {
+      await client.end();
+    }
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 500, headers: { "content-type": "application/json" } });
-  } finally {
-    await sql.end();
   }
 });
