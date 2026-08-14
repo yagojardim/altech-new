@@ -276,10 +276,11 @@ export default function HoursApprovalPage() {
       )}
       {rejectTarget && (
         <RejectModal
-          count={rejectTarget === 'batch' ? selected.size : 1}
+          count={rejectTarget === 'batch' ? selected.size : rejectTarget === 'lane' ? laneRejectIds.length : 1}
           onConfirm={handleRejectConfirm}
-          onCancel={() => { setRejectTarget(null); setRejectId('') }}
+          onCancel={() => { setRejectTarget(null); setRejectId(''); setLaneRejectIds([]) }}
         />
+
       )}
       {detailItemId && (
         <WorkItemDetail
