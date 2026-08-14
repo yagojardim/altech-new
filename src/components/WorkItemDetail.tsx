@@ -761,17 +761,22 @@ function AttachmentsSection({ tenantId, workItemId, profileId, canUpload, onCoun
   const [busy,    setBusy]    = useState(false)
   const [error,   setError]   = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const onCountChangeRef = useRef(onCountChange)
+  const onErrorRef = useRef(onError)
+  onCountChangeRef.current = onCountChange
+  onErrorRef.current = onError
 
   const reload = useCallback(async () => {
     if (!tenantId || !workItemId) return
     setLoading(true); setError(null)
     const list = await listAttachments(tenantId, workItemId)
     setRows(list)
-    onCountChange(list.length)
+    onCountChangeRef.current(list.length)
     setLoading(false)
-  }, [tenantId, workItemId, onCountChange])
+  }, [tenantId, workItemId])
 
-  useEffect(() => { void reload() }, [reload])
+  useEffect(() => { void reload() }, [tenantId, workItemId])
+
 
   async function handlePick(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -783,18 +788,19 @@ function AttachmentsSection({ tenantId, workItemId, profileId, canUpload, onCoun
       await reload()
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setError(msg); onError(msg)
+      setError(msg); onErrorRef.current(msg)
     } finally {
       setBusy(false)
     }
   }
 
   async function handleDownload(row: AttachmentRow) {
-    if (!row.storage_path) { onError('Arquivo sem caminho de armazenamento'); return }
+    if (!row.storage_path) { onErrorRef.current('Arquivo sem caminho de armazenamento'); return }
     const url = await getDownloadUrl(row.storage_path)
-    if (!url) { onError('Não foi possível gerar o link de download'); return }
+    if (!url) { onErrorRef.current('Não foi possível gerar o link de download'); return }
     window.open(url, '_blank', 'noopener,noreferrer')
   }
+
 
   const uploadDisabled = !canUpload || busy || !tenantId || !workItemId
 
@@ -1112,10 +1118,20 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
     ? { position:'fixed', top:0, right:0, bottom:0, width:560, background:T.bgSurface, borderLeft:`1px solid ${T.border}`, boxShadow:'-12px 0 48px rgba(0,0,0,0.55)', zIndex:301, display:'flex', flexDirection:'column', overflow:'hidden' }
     : { position:'relative', display:'flex', flexDirection:'column', flex:1, overflow:'hidden', background:T.bgSurface }
 
+  // ── Stable callbacks for sub-components ─────────────────────────────────────
+  const handleAttachmentCount = useCallback((n: number) => {
+    setLocal(prev => ({ ...prev, attachmentCount: n }))
+  }, [])
+  const handleAttachmentError = useCallback((msg: string) => {
+    setToast(msg)
+  }, [])
+
+
   return (
     <>
       {showDone && <DoneTransitionModal onConfirm={handleDoneConfirm} onClose={()=>setShowDone(false)} />}
       {addRelOpen && <AddRelationModal currentIssueKey={local.key} onClose={()=>setAddRelOpen(false)} onAdd={handleAddRelation} />}
+
 
       {mode === 'drawer' && (
         <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:300 }} />
@@ -1390,9 +1406,10 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                 workItemId={itemId ?? null}
                 profileId={actorProfileId}
                 canUpload={isAuthenticated}
-                onCountChange={n => setLocal(prev => ({ ...prev, attachmentCount: n }))}
-                onError={msg => setToast(msg)}
+                onCountChange={handleAttachmentCount}
+                onError={handleAttachmentError}
               />
+
 
               {/* Activity: history + comments */}
               <section style={{ marginBottom:22 }}>
