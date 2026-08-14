@@ -247,18 +247,23 @@ export default function HoursApprovalPage() {
   }
 
   function handleRejectConfirm(reason: string) {
-    const ids = rejectTarget === 'single' ? [rejectId] : Array.from(selected)
-    setRejectTarget(null); setRejectId('')
+    const ids = rejectTarget === 'single' ? [rejectId]
+      : rejectTarget === 'lane' ? laneRejectIds
+      : Array.from(selected)
+    setRejectTarget(null); setRejectId(''); setLaneRejectIds([])
     void runDecision(ids, 'rejected', reason)
   }
 
-  // Group by squad
-  const bySquad: Record<string, TimesheetEntry[]> = {}
+  // Group by collaborator (swimlanes)
+  const byUser = new Map<string, { name: string; initials: string; entries: TimesheetEntry[] }>()
   for (const e of filtered) {
-    const k = e.squad_id ?? 'sem-squad'
-    if (!bySquad[k]) bySquad[k] = []
-    bySquad[k].push(e)
+    const k = e.user_id || e.user_name
+    let lane = byUser.get(k)
+    if (!lane) { lane = { name: e.user_name, initials: e.user_initials, entries: [] }; byUser.set(k, lane) }
+    lane.entries.push(e)
   }
+  const lanes = Array.from(byUser.entries()).sort((a, b) => a[1].name.localeCompare(b[1].name, 'pt-BR'))
+
 
   return (
     <div style={{ padding: '28px 32px', maxWidth: 1080, margin: '0 auto', position: 'relative' }}>
