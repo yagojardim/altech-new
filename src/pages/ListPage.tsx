@@ -269,6 +269,46 @@ export default function ListPage() {
 
   const groups = groupRows()
 
+  // ── CSV export of the currently visible rows (filters + sort + selected columns) ──
+  function cellText(row: Row, col: ColId): string {
+    switch (col) {
+      case 'key': return row.key
+      case 'type': return row.type
+      case 'title': return row.title
+      case 'status': return STATUS_CFG[row.status]?.label ?? row.status
+      case 'priority': return PRIORITY_CFG[row.priority]?.label ?? row.priority
+      case 'assignee': return profiles.find(p => p.id === row.assigneeId)?.name ?? '—'
+      case 'points': return String(row.points)
+      case 'epic': return epics.find(e => e.id === row.epicId)?.name ?? '—'
+      case 'sprint': return sprints.find(s => s.id === row.sprintId)?.name ?? '—'
+      case 'labels': return row.labels.join('; ')
+      case 'dueDate': return row.dueDate
+      default: return ''
+    }
+  }
+
+  function csvEscape(v: string): string {
+    return /[",\n\r;]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v
+  }
+
+  function exportCsv() {
+    const visible = groups.flatMap(g => g.items)
+    const lines = [
+      cols.map(c => csvEscape(COL_LABELS[c])).join(','),
+      ...visible.map(r => cols.map(c => csvEscape(cellText(r, c))).join(',')),
+    ]
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `demandas-${new Date().toISOString().slice(0, 10)}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+
   const colW: Record<ColId, number | string> = {
     key: 90, type: 44, title: 260, status: 130, priority: 110,
     assignee: 90, points: 56, epic: 130, sprint: 110, labels: 120, dueDate: 80,
