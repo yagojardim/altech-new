@@ -1132,10 +1132,46 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   }, [])
 
 
+  // ── Histórico unificado (read-only) ─────────────────────────────────────────
+  const openHistory = useCallback(() => {
+    setHistOpen(true)
+    if (!itemId) { setHistRows([]); return }
+    setHistRows(null)
+    void listItemHistory(itemId, dbRef.current?.item.epic_id ?? null).then(setHistRows)
+  }, [itemId])
+
+  // ── Subtarefas ───────────────────────────────────────────────────────────────
+  const subtaskMembers = (dbRef.current?.profiles ?? []).map(p => ({ id: p.id, name: p.name }))
+
+  const handleCreateSubtask = useCallback(async (sub: { title:string; assigneeId:string|null; storyPoints:number }) => {
+    const parent = dbRef.current?.item
+    if (!itemId || !parent) { setToast('Item ainda não carregado.'); return }
+    try {
+      await addSubtask(parent, sub.title, activeUser.name, { assigneeId: sub.assigneeId, storyPoints: sub.storyPoints })
+      const fresh = await getWorkItem(itemId)
+      applyDetail(fresh)
+      setToast('Subtarefa criada')
+    } catch (err) {
+      setToast(err instanceof Error ? err.message : 'Falha ao criar subtarefa')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, activeUser.name])
+
+
   return (
     <>
       {showDone && <DoneTransitionModal onConfirm={handleDoneConfirm} onClose={()=>setShowDone(false)} />}
       {addRelOpen && <AddRelationModal currentIssueKey={local.key} onClose={()=>setAddRelOpen(false)} onAdd={handleAddRelation} />}
+      {subtaskOpen && (
+        <AddSubtaskModal
+          parentKey={local.key}
+          parentTitle={local.title}
+          members={subtaskMembers}
+          onClose={()=>setSubtaskOpen(false)}
+          onCreate={sub => { void handleCreateSubtask(sub) }}
+        />
+      )}
+      {histOpen && <HistoryModal rows={histRows} onClose={()=>setHistOpen(false)} />}
 
 
       {mode === 'drawer' && (
