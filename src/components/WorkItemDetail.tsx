@@ -1406,9 +1406,10 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                 workItemId={itemId ?? null}
                 profileId={actorProfileId}
                 canUpload={isAuthenticated}
-                onCountChange={n => setLocal(prev => ({ ...prev, attachmentCount: n }))}
-                onError={msg => setToast(msg)}
+                onCountChange={handleAttachmentCount}
+                onError={handleAttachmentError}
               />
+
 
               {/* Activity: history + comments */}
               <section style={{ marginBottom:22 }}>
