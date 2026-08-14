@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { T } from './ds/tokens'
 import { AddRelationModal } from './AddRelationModal'
+import { AddSubtaskModal } from './AddSubtaskModal'
 import { useSession } from '../data/SessionContext'
 import { can } from '../data/permissions'
 import {
   getWorkItem, updateWorkItemField, addComment as dbAddComment,
   toggleAcceptanceCriterion, addAcceptanceCriterion, removeAcceptanceCriterion,
   addDependency, setWorkItemLabels, uiStatusFromDb, epicColor,
+  addSubtask, listItemHistory, type UnifiedHistoryEntry,
   STATUS_TO_DB, PRIORITY_FROM_DB, PRIORITY_TO_DB,
   type WorkItemDetailData, type EditableField,
 } from '../data/db/workItem'
@@ -883,6 +885,9 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
   const [editTitle,   setEditTitle]  = useState(false)
   const [statusOpen,  setStatusOpen] = useState(false)
   const [addRelOpen,  setAddRelOpen] = useState(false)
+  const [subtaskOpen, setSubtaskOpen]= useState(false)
+  const [histOpen,    setHistOpen]   = useState(false)
+  const [histRows,    setHistRows]   = useState<UnifiedHistoryEntry[] | null>(null)
   const [showDone,    setShowDone]   = useState(false)
   const [acItems,     setAcItems]    = useState<WIAcItem[]>(data.acItems ?? [])
   const [newAc,       setNewAc]      = useState('')
@@ -1238,8 +1243,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               {/* Action bar */}
               <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:18, flexWrap:'wrap' }}>
                 {[
-                  { label:'Anexar', icon:'📎' },
-                  { label:'+ Child issue', icon:null },
+                  { label:'+ Child issue', icon:null, onClick:()=>setSubtaskOpen(true) },
                   { label:'Vincular issue', icon:null, onClick:()=>setAddRelOpen(true) },
                 ].map(btn => (
                   <button key={btn.label} onClick={btn.onClick}
@@ -1249,7 +1253,8 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                     {btn.icon && <span>{btn.icon}</span>}{btn.label}
                   </button>
                 ))}
-                <button style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
+                <button title="Histórico" onClick={openHistory}
+                  style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
                   onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border2;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
                   onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>···</button>
               </div>
@@ -1289,7 +1294,7 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
               </section>
 
               {/* Child issues */}
-              {children.length > 0 && (
+              {(
                 <section style={{ marginBottom:22 }}>
                   <SecHeader title="Child Issues" count={children.length} />
                   {/* Progress bar */}
@@ -1318,7 +1323,11 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                       )
                     })}
                   </div>
-                  <button style={{ marginTop:6, fontSize:11, border:'none', background:'transparent', color:T.text3, cursor:'pointer', padding:'2px 4px', borderRadius:4 }}
+                  {children.length === 0 && (
+                    <p style={{ margin:'0 0 4px', fontSize:12, color:T.text3, fontStyle:'italic' }}>Nenhuma subtarefa ainda.</p>
+                  )}
+                  <button onClick={()=>setSubtaskOpen(true)}
+                    style={{ marginTop:6, fontSize:11, border:'none', background:'transparent', color:T.text3, cursor:'pointer', padding:'2px 4px', borderRadius:4 }}
                     onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
                     onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.color=T.text3}}>+ Adicionar child issue</button>
                 </section>
