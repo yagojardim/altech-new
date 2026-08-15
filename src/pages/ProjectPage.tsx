@@ -532,13 +532,16 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   backlog:DS.text3, todo:DS.text2, 'in-progress':DS.accent, 'in-review':DS.warn, done:DS.success,
 }
-const NAMES: Record<string, string> = {
-  AL:'Ana Lima', NM:'Natalia Moura', JN:'Julia Neves', CS:'Carlos Silva', RM:'Rafael Mendes', LF:'Lucas Ferreira',
-}
-
-function issueToWID(issue: Issue): WorkItemData {
-  const epic   = EPICS.find(e => e.id === issue.epic)
-  const sprint = SPRINTS.find(s => s.id === issue.sprint)
+function issueToWID(
+  issue: Issue,
+  availableSprints: { id: string; name: string }[],
+  availableEpics: { id: string; label: string; color: string }[],
+  availableMembers: { id: string; initials: string; name: string }[],
+): WorkItemData {
+  const epic = availableEpics.find(e => e.id === issue.epicId)
+  const sprint = availableSprints.find(s => s.id === issue.sprint)
+  const member = availableMembers.find(m => m.initials === issue.assignee)
+  const reporter = issue.reporter ? availableMembers.find(m => m.initials === issue.reporter) : undefined
   return {
     key:              issue.key,
     type:             issue.type,
@@ -547,14 +550,14 @@ function issueToWID(issue: Issue): WorkItemData {
     priority:         issue.priority,
     labels:           issue.labels,
     assigneeInitials: issue.assignee,
-    assigneeName:     NAMES[issue.assignee],
+    assigneeName:     member?.name,
     reporterInitials: issue.reporter,
-    reporterName:     issue.reporter ? NAMES[issue.reporter] : undefined,
-    epicKey:          issue.epic,
-    epicLabel:        epic?.label,
-    epicColor:        epic?.color,
+    reporterName:     reporter?.name,
+    epicKey:          issue.epicId,
+    epicLabel:        issue.epic ?? epic?.label,
+    epicColor:        issue.epicColor ?? epic?.color,
     sprintId:         issue.sprint,
-    sprintName:       sprint?.name,
+    sprintName:       sprint?.name ?? issue.sprint,
     blocked:          issue.blocked,
     blockedReason:    issue.blocked_reason,
     delayed:          issue.delayed,
@@ -563,9 +566,9 @@ function issueToWID(issue: Issue): WorkItemData {
     dueDate:          issue.dueDate,
     points:           issue.points,
     fixVersions:      issue.fix_versions ?? [],
-    availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
-    availableMembers: Object.entries(NAMES).map(([initials, name]) => ({ id: initials, initials, name })),
-    availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
+    availableEpics,
+    availableMembers,
+    availableSprints,
     availableLabels:  ['Design','Web','Research','Content','Mobile','Eng','UX','SEO','Brand','Hero'],
     availableVersions:['v2.3.0','v2.4.0','v2.4.1','v2.5.0'],
     history:          issue.history ?? [],
@@ -597,24 +600,36 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     blocked_reason:            updated.blockedReason,
     severity:                  updated.severity as Issue['severity'],
     description:               updated.description,
-    epic:                      updated.epicKey,
+    epicId:                    updated.epicKey,
+    epic:                      updated.epicLabel,
+    epicColor:                 updated.epicColor,
     history:                   updated.history,
     comments:                  (updated.comments ?? []).map(c => ({ author: c.author, text: c.body, when: c.time })),
     acceptance_criteria_count: updated.acItems?.length,
   }
 }
 
-function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
+function WorkItemDetailDrawer({
+  issue,
+  onClose,
+  onUpdate,
+  availableSprints,
+  availableEpics,
+  availableMembers,
+}: {
   issue: Issue
   onClose: () => void
   onUpdate: (updated: Issue) => void
+  availableSprints: { id: string; name: string }[]
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   return (
     <WorkItemDetail
       mode="drawer"
       // Board issues carry the real work_items uuid: the panel then reads and persists from Supabase.
       itemId={/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(issue.id ?? '') ? issue.id : undefined}
-      data={issueToWID(issue)}
+      data={issueToWID(issue, availableSprints, availableEpics, availableMembers)}
       onClose={onClose}
       onUpdate={updated => onUpdate(widToIssue(issue, updated))}
     />
