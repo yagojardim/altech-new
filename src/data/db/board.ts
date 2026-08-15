@@ -128,6 +128,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     ['board_columns', columnsRes.error], ['board_column_statuses', statusesRes.error],
     ['work_items', itemsRes.error], ['sprints', sprintsRes.error],
     ['epics', epicsRes.error], ['profiles', profilesRes.error],
+    ['projects', projectRes.error],
   ].find(([, err]) => err) as [string, { message: string }] | undefined
   if (failed) throw new Error(missingTableMessage(failed[0], failed[1].message))
 
@@ -145,6 +146,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
 
   return {
     board,
+    project: projectRes.data ?? null,
     boards,
     columns,
     items: itemsRes.data ?? [],
