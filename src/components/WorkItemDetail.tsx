@@ -1798,16 +1798,20 @@ function HistoryModal({ rows, onClose }: { rows: UnifiedHistoryEntry[] | null; o
           )}
           {(rows ?? []).map(ev => (
             <div key={ev.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
-              <div style={{ width:6, height:6, borderRadius:3, background:ev.fromEpic ? T.warn ?? T.accent : T.accent, marginTop:6, flexShrink:0 }} />
+              <div style={{ width:26, height:26, borderRadius:13, flexShrink:0, background:ev.fromEpic ? T.accentDim : T.bgSurface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:T.text2 }}>
+                {(ev.actorName || '?').split(' ').filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('')}
+              </div>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ margin:0, fontSize:12, color:T.text1, lineHeight:1.5 }}>
                   <strong style={{ fontWeight:600 }}>{ev.actorName}</strong>{' '}
-                  {ev.kind === 'field'
-                    ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
-                    : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
+                  {ev.summary
+                    ? <span style={{ color:T.text2 }}>{ev.summary}</span>
+                    : ev.kind === 'field'
+                      ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
+                      : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
                 </p>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
-                  <span style={{ fontSize:10, color:T.text3 }}>{fmtTime(ev.createdAt)}</span>
+                  <span style={{ fontSize:10, color:T.text3 }}>{fmtDateTime(ev.createdAt)}</span>
                   {ev.fromEpic && (
                     <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:T.accent, background:T.accentDim, padding:'1px 6px', borderRadius:4 }}>Épico</span>
                   )}
