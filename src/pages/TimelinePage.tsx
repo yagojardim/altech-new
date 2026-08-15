@@ -327,16 +327,16 @@ export default function TimelinePage() {
       .filter(s => s.idx >= 0 && s.idx < totalDays)
   }, [data, selectedProjects, domainStart, totalDays])
 
-  // Week markers (Mondays)
+  // Week markers relative to the PROJECT start ("Sem 1, Sem 2…" + data curta)
   const weekMarkers = useMemo(() => {
-    const out: { idx: number; label: string }[] = []
-    for (let i = 0; i < totalDays; i++) {
+    const out: { idx: number; label: string; sub: string }[] = []
+    for (let i = 0; i < totalDays; i += 7) {
       const d = toDate(addDays(domainStart, i))
-      if (d.getUTCDay() === 1) {
-        const jan1 = Date.UTC(d.getUTCFullYear(), 0, 1)
-        const week = Math.ceil(((d.getTime() - jan1) / MS_DAY + 1) / 7)
-        out.push({ idx: i, label: `W${week}` })
-      }
+      out.push({
+        idx: i,
+        label: `Sem ${Math.floor(i / 7) + 1}`,
+        sub: `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+      })
     }
     return out
   }, [domainStart, totalDays])
