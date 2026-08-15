@@ -52,7 +52,9 @@ interface Issue {
   assignee: string
   dueDate:  string
   points:   number
+  epicId?:  string
   epic?:    string
+  epicColor?: string
   sprint?:  string
   blocked?: boolean
   delayed?: boolean
