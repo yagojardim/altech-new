@@ -308,7 +308,7 @@ export async function completeSprint(
       state: 'completed',
       velocity,
       completed_at: completedAt,
-      metadata: { ...existingMeta, closure } as Tables['sprints']['Update']['metadata'],
+      metadata: { ...existingMeta, closure } as unknown as Tables['sprints']['Update']['metadata'],
     })
     .eq('id', sprintId).eq('tenant_id', DEFAULT_TENANT_ID)
   if (closeRes.error) throw new Error(closeRes.error.message)
