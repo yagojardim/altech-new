@@ -1,12 +1,16 @@
 import React, { useState } from 'react'
 import { T } from './ds/tokens'
 
+export interface RemainingItem { id: string; key: string; title: string }
+export interface SprintDecision { workItemId: string; destination: 'next-sprint' | 'backlog' }
+
 interface CompleteSprintProps {
   sprint: { id: string; name: string; goal?: string }
   stats: { done: number; total: number; remaining: number }
+  remainingItems?: RemainingItem[]
   nextSprintName?: string
   onClose: () => void
-  onConfirm: (moveRemaining: 'next-sprint' | 'backlog') => void
+  onConfirm: (decisions: SprintDecision[]) => void
 }
 
 const overlay: React.CSSProperties = {
@@ -46,14 +50,24 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'inherit',
 }
 
-export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, onConfirm }: CompleteSprintProps) {
-  const [move, setMove] = useState<'next-sprint' | 'backlog'>('next-sprint')
+export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSprintName, onClose, onConfirm }: CompleteSprintProps) {
+  const hasNext = Boolean(nextSprintName)
+  const [decisions, setDecisions] = useState<Record<string, 'next-sprint' | 'backlog'>>(() =>
+    Object.fromEntries(remainingItems.map(i => [i.id, hasNext ? 'next-sprint' : 'backlog'])),
+  )
   const [comment, setComment] = useState('')
 
   const velocity = stats.done * 3
 
+  function setAll(dest: 'next-sprint' | 'backlog') {
+    setDecisions(Object.fromEntries(remainingItems.map(i => [i.id, dest])))
+  }
+
   function handleConfirm() {
-    onConfirm(move)
+    onConfirm(remainingItems.map(i => ({
+      workItemId: i.id,
+      destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
+    })))
   }
 
   return (
@@ -122,65 +136,87 @@ export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, on
             ))}
           </div>
 
-          {/* Move remaining */}
-          {stats.remaining > 0 && (
+          {/* Per-item destination */}
+          {remainingItems.length > 0 && (
             <div>
-              <p style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 10 }}>
-                O que fazer com as {stats.remaining} demanda{stats.remaining !== 1 ? 's' : ''} restantes?
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Next sprint option */}
-                <button
-                  onClick={() => setMove('next-sprint')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    borderRadius: 10,
-                    border: `1px solid ${move === 'next-sprint' ? T.accentBorder : T.border}`,
-                    background: move === 'next-sprint' ? T.accentDim : T.bgSurface2,
-                    color: move === 'next-sprint' ? T.accent : T.text2,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <span style={{ fontSize: 18 }}>→</span>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>Mover para o próximo sprint</p>
-                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>{nextSprintName ?? 'Próxima sprint planejada'}</p>
-                  </div>
-                </button>
-
-                {/* Backlog option */}
-                <button
-                  onClick={() => setMove('backlog')}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    padding: '14px 16px',
-                    borderRadius: 10,
-                    border: `1px solid ${move === 'backlog' ? T.accentBorder : T.border}`,
-                    background: move === 'backlog' ? T.accentDim : T.bgSurface2,
-                    color: move === 'backlog' ? T.accent : T.text2,
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s',
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-                    <rect x="2" y="6" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3" />
-                    <path d="M5 6V4a4 4 0 018 0v2" stroke="currentColor" strokeWidth="1.3" />
-                    <path d="M6 10h6M6 13h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-                  </svg>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 600 }}>Mover para o Backlog</p>
-                    <p style={{ fontSize: 11, color: T.text3, marginTop: 2 }}>Demandas ficam sem sprint</p>
-                  </div>
-                </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+                <p style={{ fontSize: 12, fontWeight: 600, color: T.text2 }}>
+                  Destino de cada demanda restante ({remainingItems.length})
+                </p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button
+                    onClick={() => setAll('next-sprint')}
+                    disabled={!hasNext}
+                    style={{
+                      padding: '4px 8px', borderRadius: 6, fontSize: 11,
+                      border: `1px solid ${T.border2}`, background: 'transparent',
+                      color: hasNext ? T.text2 : T.text3, cursor: hasNext ? 'pointer' : 'not-allowed',
+                    }}
+                  >Todas → próxima sprint</button>
+                  <button
+                    onClick={() => setAll('backlog')}
+                    style={{
+                      padding: '4px 8px', borderRadius: 6, fontSize: 11,
+                      border: `1px solid ${T.border2}`, background: 'transparent',
+                      color: T.text2, cursor: 'pointer',
+                    }}
+                  >Todas → backlog</button>
+                </div>
               </div>
+
+              <div style={{
+                display: 'flex', flexDirection: 'column', gap: 6,
+                maxHeight: 260, overflowY: 'auto',
+              }}>
+                {remainingItems.map(item => {
+                  const dest = decisions[item.id] ?? (hasNext ? 'next-sprint' : 'backlog')
+                  return (
+                    <div
+                      key={item.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', borderRadius: 10,
+                        background: T.bgSurface2, border: `1px solid ${T.border}`,
+                      }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 11, color: T.text3, fontWeight: 600 }}>{item.key}</p>
+                        <p style={{
+                          fontSize: 13, color: T.text1,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>{item.title}</p>
+                      </div>
+                      <div style={{ display: 'flex', flexShrink: 0, borderRadius: 8, overflow: 'hidden', border: `1px solid ${T.border2}` }}>
+                        {([
+                          { key: 'next-sprint' as const, label: `→ ${nextSprintName ?? 'Próxima sprint'}`, disabled: !hasNext },
+                          { key: 'backlog' as const, label: 'Backlog', disabled: false },
+                        ]).map(opt => {
+                          const active = dest === opt.key
+                          return (
+                            <button
+                              key={opt.key}
+                              disabled={opt.disabled}
+                              onClick={() => setDecisions(prev => ({ ...prev, [item.id]: opt.key }))}
+                              style={{
+                                padding: '6px 10px', fontSize: 11, fontWeight: 600, border: 'none',
+                                background: active ? T.accentDim : 'transparent',
+                                color: opt.disabled ? T.text3 : active ? T.accent : T.text2,
+                                cursor: opt.disabled ? 'not-allowed' : 'pointer',
+                                maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}
+                            >{opt.label}</button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              {!hasNext && (
+                <p style={{ fontSize: 11, color: T.text3, marginTop: 8 }}>
+                  Não há próxima sprint planejada — as demandas restantes voltam para o backlog.
+                </p>
+              )}
             </div>
           )}
 
