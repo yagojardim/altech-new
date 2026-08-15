@@ -837,10 +837,10 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
   },
   criados: {
     id: 'criados', title: 'Criados vs Resolvidos', span2: true,
-    subtitle: 'Demandas criadas e resolvidas por semana (8 semanas)',
+    subtitle: 'Demandas criadas e resolvidas desde o início do projeto',
     Component: CreatedVsResolved,
     nav: { view: 'reports', reportId: 'criados' },
-    emptyText: 'Nenhuma demanda criada ou resolvida nas últimas 8 semanas.',
+    emptyText: 'Nenhuma demanda criada ou resolvida desde o início do projeto.',
     kpi: d => {
       const c = d.createdVsResolved
       const sumC = c.created.reduce((a, b) => a + b, 0)
@@ -848,7 +848,7 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
       if (sumC === 0 && sumR === 0) return null
       return {
         value: `${sumC}/${sumR}`,
-        sub: 'criadas / resolvidas em 8 semanas',
+        sub: 'criadas / resolvidas desde o início do projeto',
         viz: { kind: 'line', values: c.created, values2: c.resolved, color: T.accent, color2: T.success },
       }
     },
@@ -919,7 +919,7 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
   },
   epic: {
     id: 'epic', title: 'Epic / Release Burndown', span2: true,
-    subtitle: 'Story points restantes por épico (6 semanas)',
+    subtitle: 'Story points restantes por épico desde o início do projeto',
     Component: EpicBurndown,
     nav: { view: 'epics' },
     emptyText: 'Nenhum épico com pontos estimados.',
