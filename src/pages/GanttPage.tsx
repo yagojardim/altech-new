@@ -468,26 +468,49 @@ export default function GanttPage() {
       {/* Scrollable gantt body */}
       <div className="flex-1 overflow-auto">
         <div style={{ minWidth: 200 + totalW }}>
-          {/* Month headers */}
-          <div className="flex sticky top-0 z-10" style={{ background: '#0a1525', borderBottom: '1px solid #162032' }}>
-            <div
-              className="flex-shrink-0 flex items-center px-4 py-2.5"
-              style={{ width: 200, borderRight: '1px solid #162032' }}
-            >
-              <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#3a4d65' }}>
-                Tarefa / Projeto
-              </span>
+          {/* Quarter + month headers */}
+          <div className="sticky top-0 z-10" style={{ background: '#0a1525', borderBottom: '1px solid #162032' }}>
+            {/* Quarter band */}
+            <div className="flex" style={{ borderBottom: '1px solid #162032' }}>
+              <div className="flex-shrink-0" style={{ width: 200, borderRight: '1px solid #162032' }} />
+              <div className="flex" style={{ width: totalW }}>
+                {quarters.map((q, i) => (
+                  <div
+                    key={q.key}
+                    className="flex-shrink-0 text-center py-1 text-[10px] font-bold uppercase tracking-wider"
+                    style={{
+                      width: q.span * MONTH_W,
+                      color: q.current ? '#4d82ff' : '#546278',
+                      borderRight: '1px solid #162032',
+                      background: i % 2 === 0 ? 'rgba(77,130,255,0.04)' : 'transparent',
+                    }}
+                  >
+                    {q.label}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="flex relative" style={{ width: totalW }}>
-              {months.map((m, i) => (
-                <div
-                  key={m.key}
-                  className="flex-shrink-0 text-center py-2.5 text-[11px] font-semibold uppercase tracking-wider"
-                  style={{ width: MONTH_W, color: i === todayMonthIdx ? '#4d82ff' : '#3a4d65', borderRight: '1px solid #162032' }}
-                >
-                  {m.label}
-                </div>
-              ))}
+            {/* Month row */}
+            <div className="flex">
+              <div
+                className="flex-shrink-0 flex items-center px-4 py-2.5"
+                style={{ width: 200, borderRight: '1px solid #162032' }}
+              >
+                <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: '#3a4d65' }}>
+                  Tarefa / Projeto
+                </span>
+              </div>
+              <div className="flex relative" style={{ width: totalW }}>
+                {months.map((m, i) => (
+                  <div
+                    key={m.key}
+                    className="flex-shrink-0 text-center py-2.5 text-[11px] font-semibold uppercase tracking-wider"
+                    style={{ width: MONTH_W, color: i === todayMonthIdx ? '#4d82ff' : '#3a4d65', borderRight: '1px solid #162032' }}
+                  >
+                    {m.label}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
