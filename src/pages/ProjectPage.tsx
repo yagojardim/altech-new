@@ -2378,31 +2378,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         onClose={()=>setQuickCreate(null)}
         defaultStatus={quickCreate.colStatus}
         defaultSprintId={quickCreate.sprintId}
-        onCreate={data => {
-          // Map modal output → Issue and persist
-          const sprintMatch = dbSprints.find(s =>
-            quickCreate.sprintId ? s.id === quickCreate.sprintId : s.state === 'active'
-          )
-          const labelArr = data.labels ? String(data.labels).split(',').map((l:string)=>l.trim()).filter(Boolean) : []
-          const newIssue: Issue = {
-            key:      `PM-${++_issueSeq}`,
-            type:     (data.type as IssueType) ?? 'story',
-            title:    String(data.summary ?? ''),
-            status:   (quickCreate.colStatus as IssueStatus) ?? 'todo',
-            priority: (data.priority as Priority) ?? 'medium',
-            labels:   labelArr,
-            assignee: String(data.assignee ?? 'AL'),
-            dueDate:  '',
-            points:   parseInt(String(data.points ?? '0')) || 0,
-            sprint:   sprintMatch?.id ?? quickCreate.sprintId,
-            epicId:   data.epic ? String(data.epic).split(' ')[0] : undefined,
-            description: String(data.description ?? ''),
-          }
-          setDbIssues(prev => [newIssue, ...prev])
-          setToast(`Issue ${newIssue.key} criada na coluna`)
-          setTimeout(() => setToast(null), 3500)
-          setQuickCreate(null)
-        }}
+        onCreate={data => { void handleCreateDemand(data) }}
+
       />
     )}
     {startingSprint && (
