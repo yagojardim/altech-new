@@ -378,9 +378,21 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
             <path d={areaPath(c.resolved)} fill={T.success} opacity={0.15} />
             <path d={linePath(c.created)} stroke={T.warn} strokeWidth={2} fill="none" />
             <path d={linePath(c.resolved)} stroke={T.success} strokeWidth={2} fill="none" />
-            {c.created.map((v, i) => <circle key={`c${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.warn} />)}
-            {c.resolved.map((v, i) => <circle key={`r${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.success} />)}
-            {!th && c.weeks.map((w, i) => <text key={w} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>)}
+            {c.created.map((v, i) => (
+              <circle key={`c${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.warn}>
+                <title>{`${c.bucketTitles[i] ?? c.weeks[i]}\nCriados ${v} · Resolvidos ${c.resolved[i] ?? 0}`}</title>
+              </circle>
+            ))}
+            {c.resolved.map((v, i) => (
+              <circle key={`r${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.success}>
+                <title>{`${c.bucketTitles[i] ?? c.weeks[i]}\nCriados ${c.created[i] ?? 0} · Resolvidos ${v}`}</title>
+              </circle>
+            ))}
+            {!th && c.weeks.map((w, i) => (
+              (i % labelStep === 0 || i === weeks - 1) ? (
+                <text key={`${w}-${i}`} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>
+              ) : null
+            ))}
             {!th && (
               <g transform={`translate(${PAD.left}, ${PAD.top - 10})`}>
                 <line x1={0} y1={0} x2={14} y2={0} stroke={T.warn} strokeWidth={2} /><text x={18} y={4} fontSize={9} fill={T.text2}>Criados {sumC}</text>
