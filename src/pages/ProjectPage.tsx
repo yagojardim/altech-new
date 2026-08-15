@@ -1733,7 +1733,7 @@ function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure;
 
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onCreateSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1742,6 +1742,7 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   error: string | null
   onStartSprint: (sprint: SprintDef) => void
   onCompleteSprint: (sprint: SprintDef) => void
+  onCreateSprint: () => void
   onGenerateCeremonies: (sprint: SprintDef) => void
   generatingCeremonies: string | null
   availableEpics: { id: string; label: string; color: string }[]
@@ -1793,6 +1794,22 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   return (
     <div className="flex-1 overflow-y-auto">
       <div className="max-w-4xl mx-auto px-4 py-4 space-y-3">
+        {canManageSprint && (
+          <div className="flex justify-end">
+            <button
+              onClick={onCreateSprint}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold text-white transition-all"
+              style={{ background: DS.accent, cursor: 'pointer' }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.15)' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none' }}
+            >
+              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                <path d="M4.5 1.5v6M1.5 4.5h6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              Nova sprint
+            </button>
+          </div>
+        )}
         {sprints.length === 0 && (
           <div className="rounded-xl px-4 py-8 text-center text-[12px]"
             style={{ background: S.surface, border: `1px solid ${S.border}`, color: S.t3 }}>
@@ -2427,6 +2444,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           error={boardError}
           onStartSprint={s=>setStartingSprint(s)}
           onCompleteSprint={s=>setCompletingSprint(s)}
+          onCreateSprint={()=>setCreatingSprint(true)}
           onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
@@ -2451,6 +2469,13 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         defaultSprintId={quickCreate.sprintId}
         onCreate={data => { void handleCreateDemand(data) }}
 
+      />
+    )}
+    {creatingSprint && (
+      <NewSprintModal
+        suggestedName={`Sprint ${dbSprints.length + 1}`}
+        onClose={() => setCreatingSprint(false)}
+        onConfirm={input => { void handleCreateSprint(input) }}
       />
     )}
     {startingSprint && (
