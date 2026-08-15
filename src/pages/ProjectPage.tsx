@@ -1280,6 +1280,9 @@ function BoardTab({
             onLocalPatch(updated.key, updated)
             setOpenIssue(updated)
           }}
+          availableSprints={activeSprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
 
