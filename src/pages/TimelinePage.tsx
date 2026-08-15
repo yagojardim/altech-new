@@ -294,15 +294,23 @@ export default function TimelinePage() {
 
   const visibleItems = rows.filter(r => r.kind === 'item') as Extract<Row, { kind: 'item' }>[]
 
-  // ── Time domain derived from the visible spans ──────────────────────────────
+  // ── Time domain: starts at the PROJECT start (period_start → created_at) ────
   const { domainStart, totalDays } = useMemo(() => {
     const all = visibleItems.map(r => spans[r.id]).filter(Boolean)
-    if (all.length === 0) return { domainStart: toIso(new Date()), totalDays: 30 }
-    let min = all[0].start, max = all[0].end
-    all.forEach(s => { if (s.start < min) min = s.start; if (s.end > max) max = s.end })
-    const start = addDays(min, -3)
-    return { domainStart: start, totalDays: Math.max(30, diffDays(start, max) + 4) }
-  }, [visibleItems, spans])
+    const projectStarts = (data?.projects ?? [])
+      .filter(p => !selectedProjects || selectedProjects.has(p.id))
+      .map(p => (p.period_start ?? p.created_at ?? null))
+      .filter((v): v is string => !!v)
+      .map(v => v.slice(0, 10))
+    const starts = [...projectStarts, ...all.map(s => s.start)]
+    if (starts.length === 0) return { domainStart: toIso(new Date()), totalDays: 30 }
+    const min = starts.reduce((a, b) => (b < a ? b : a))
+    const today = toIso(new Date())
+    const ends = [...all.map(s => s.end), today]
+    const end = ends.reduce((a, b) => (b > a ? b : a))
+    return { domainStart: min, totalDays: Math.max(30, diffDays(min, end) + 4) }
+  }, [visibleItems, spans, data, selectedProjects])
+
 
   const todayIso = toIso(new Date())
   const todayIdx = diffDays(domainStart, todayIso)
@@ -319,16 +327,16 @@ export default function TimelinePage() {
       .filter(s => s.idx >= 0 && s.idx < totalDays)
   }, [data, selectedProjects, domainStart, totalDays])
 
-  // Week markers (Mondays)
+  // Week markers relative to the PROJECT start ("Sem 1, Sem 2…" + data curta)
   const weekMarkers = useMemo(() => {
-    const out: { idx: number; label: string }[] = []
-    for (let i = 0; i < totalDays; i++) {
+    const out: { idx: number; label: string; sub: string }[] = []
+    for (let i = 0; i < totalDays; i += 7) {
       const d = toDate(addDays(domainStart, i))
-      if (d.getUTCDay() === 1) {
-        const jan1 = Date.UTC(d.getUTCFullYear(), 0, 1)
-        const week = Math.ceil(((d.getTime() - jan1) / MS_DAY + 1) / 7)
-        out.push({ idx: i, label: `W${week}` })
-      }
+      out.push({
+        idx: i,
+        label: `Sem ${Math.floor(i / 7) + 1}`,
+        sub: `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+      })
     }
     return out
   }, [domainStart, totalDays])
@@ -501,7 +509,16 @@ export default function TimelinePage() {
                     )
                   })}
                   {weekMarkers.map(w => (
-                    <div key={w.idx} style={{ position: 'absolute', left: w.idx * DAY_PX, top: 4, fontSize: 10, color: T.text2, fontWeight: 700, paddingLeft: 3 }}>{w.label}</div>
+                    <div
+                      key={w.idx}
+                      style={{
+                        position: 'absolute', left: w.idx * DAY_PX, top: 2, paddingLeft: 4,
+                        borderLeft: `1px solid ${T.border}`, lineHeight: 1.2, whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <div style={{ fontSize: 10, color: T.text2, fontWeight: 700 }}>{w.label}</div>
+                      <div style={{ fontSize: 9, color: T.text3 }}>{w.sub}</div>
+                    </div>
                   ))}
                 </div>
 

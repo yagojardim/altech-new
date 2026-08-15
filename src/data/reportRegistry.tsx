@@ -348,7 +348,7 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
   return (
     <ChartFrame data={data} loading={loading} error={error} height={th ? 60 : 150}
       isEmpty={!cvr || (cvr.created.every(v => v === 0) && cvr.resolved.every(v => v === 0))}
-      emptyText="Nenhuma demanda criada ou resolvida nas últimas 8 semanas.">
+      emptyText="Nenhuma demanda criada ou resolvida desde o início do projeto.">
       {() => {
         if (multi) return <SmallMultiples series={cvr!.byProject} />
         const c = cvr!
@@ -356,9 +356,10 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
         const PAD = { top: th ? 4 : 20, right: 8, bottom: th ? 4 : 28, left: th ? 4 : 28 }
         const cw = W - PAD.left - PAD.right
         const ch = H - PAD.top - PAD.bottom
-        const weeks = c.weeks.length
+        const weeks = Math.max(1, c.weeks.length)
+        const labelStep = Math.ceil(weeks / 8)
         const maxV = Math.max(1, c.max)
-        const toX = (i: number) => PAD.left + (i / (weeks - 1)) * cw
+        const toX = (i: number) => weeks === 1 ? PAD.left + cw / 2 : PAD.left + (i / (weeks - 1)) * cw
         const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const areaPath = (d: number[]) => linePath(d) + ` L ${toX(weeks - 1)} ${PAD.top + ch} L ${toX(0)} ${PAD.top + ch} Z`
@@ -377,9 +378,21 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
             <path d={areaPath(c.resolved)} fill={T.success} opacity={0.15} />
             <path d={linePath(c.created)} stroke={T.warn} strokeWidth={2} fill="none" />
             <path d={linePath(c.resolved)} stroke={T.success} strokeWidth={2} fill="none" />
-            {c.created.map((v, i) => <circle key={`c${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.warn} />)}
-            {c.resolved.map((v, i) => <circle key={`r${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.success} />)}
-            {!th && c.weeks.map((w, i) => <text key={w} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>)}
+            {c.created.map((v, i) => (
+              <circle key={`c${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.warn}>
+                <title>{`${c.bucketTitles[i] ?? c.weeks[i]}\nCriados ${v} · Resolvidos ${c.resolved[i] ?? 0}`}</title>
+              </circle>
+            ))}
+            {c.resolved.map((v, i) => (
+              <circle key={`r${i}`} cx={toX(i)} cy={toY(v)} r={3} fill={T.success}>
+                <title>{`${c.bucketTitles[i] ?? c.weeks[i]}\nCriados ${c.created[i] ?? 0} · Resolvidos ${v}`}</title>
+              </circle>
+            ))}
+            {!th && c.weeks.map((w, i) => (
+              (i % labelStep === 0 || i === weeks - 1) ? (
+                <text key={`${w}-${i}`} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>
+              ) : null
+            ))}
             {!th && (
               <g transform={`translate(${PAD.left}, ${PAD.top - 10})`}>
                 <line x1={0} y1={0} x2={14} y2={0} stroke={T.warn} strokeWidth={2} /><text x={18} y={4} fontSize={9} fill={T.text2}>Criados {sumC}</text>
@@ -608,9 +621,10 @@ export function EpicBurndown({ variant = 'full', data: explicit }: ChartProps) {
         const PAD = { top: th ? 6 : 24, right: 8, bottom: th ? 4 : 28, left: th ? 4 : 36 }
         const cw = W - PAD.left - PAD.right
         const ch = H - PAD.top - PAD.bottom
-        const weeks = e.weeks.length
+        const weeks = Math.max(1, e.weeks.length)
+        const labelStep = Math.ceil(weeks / 8)
         const maxV = Math.max(1, e.max)
-        const toX = (i: number) => PAD.left + (i / (weeks - 1)) * cw
+        const toX = (i: number) => weeks === 1 ? PAD.left + cw / 2 : PAD.left + (i / (weeks - 1)) * cw
         const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const ticks = [0, Math.round(maxV / 3), Math.round((2 * maxV) / 3), Math.round(maxV)]
@@ -618,8 +632,16 @@ export function EpicBurndown({ variant = 'full', data: explicit }: ChartProps) {
           <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
             {ticks.map(t => <line key={t} x1={PAD.left} y1={toY(t)} x2={W - PAD.right} y2={toY(t)} stroke={T.border} strokeWidth={0.5} />)}
             {e.epics.map((ep, i) => <path key={i} d={linePath(ep.data)} stroke={ep.color} strokeWidth={th ? 2.5 : 2} fill="none" />)}
-            {e.epics.map((ep, i) => ep.data.map((v, j) => <circle key={`${i}-${j}`} cx={toX(j)} cy={toY(v)} r={th ? 2.5 : 3} fill={ep.color} />))}
-            {!th && e.weeks.map((w, i) => <text key={w} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>)}
+            {e.epics.map((ep, i) => ep.data.map((v, j) => (
+              <circle key={`${i}-${j}`} cx={toX(j)} cy={toY(v)} r={th ? 2.5 : 3} fill={ep.color}>
+                <title>{`${ep.label}\n${e.bucketTitles[j] ?? e.weeks[j]} · ${v} pts restantes`}</title>
+              </circle>
+            )))}
+            {!th && e.weeks.map((w, i) => (
+              (i % labelStep === 0 || i === weeks - 1) ? (
+                <text key={`${w}-${i}`} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>
+              ) : null
+            ))}
             {!th && ticks.map((t, i) => <text key={i} x={PAD.left - 4} y={toY(t) + 4} textAnchor="end" fontSize={9} fill={T.text3}>{t}</text>)}
             {!th && (
               <g transform={`translate(${PAD.left}, ${PAD.top - 16})`}>
@@ -815,10 +837,10 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
   },
   criados: {
     id: 'criados', title: 'Criados vs Resolvidos', span2: true,
-    subtitle: 'Demandas criadas e resolvidas por semana (8 semanas)',
+    subtitle: 'Demandas criadas e resolvidas desde o início do projeto',
     Component: CreatedVsResolved,
     nav: { view: 'reports', reportId: 'criados' },
-    emptyText: 'Nenhuma demanda criada ou resolvida nas últimas 8 semanas.',
+    emptyText: 'Nenhuma demanda criada ou resolvida desde o início do projeto.',
     kpi: d => {
       const c = d.createdVsResolved
       const sumC = c.created.reduce((a, b) => a + b, 0)
@@ -826,7 +848,7 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
       if (sumC === 0 && sumR === 0) return null
       return {
         value: `${sumC}/${sumR}`,
-        sub: 'criadas / resolvidas em 8 semanas',
+        sub: 'criadas / resolvidas desde o início do projeto',
         viz: { kind: 'line', values: c.created, values2: c.resolved, color: T.accent, color2: T.success },
       }
     },
@@ -897,7 +919,7 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
   },
   epic: {
     id: 'epic', title: 'Epic / Release Burndown', span2: true,
-    subtitle: 'Story points restantes por épico (6 semanas)',
+    subtitle: 'Story points restantes por épico desde o início do projeto',
     Component: EpicBurndown,
     nav: { view: 'epics' },
     emptyText: 'Nenhum épico com pontos estimados.',

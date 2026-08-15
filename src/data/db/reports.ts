@@ -19,6 +19,7 @@ type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'project_id' | 'name' | '
 type EpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'name' | 'color'>
 type ProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials'>
 type HistoryRow = Pick<Tables['item_status_history']['Row'], 'work_item_id' | 'field' | 'from_value' | 'to_value' | 'created_at'>
+type ProjectAnchorRow = Pick<Tables['projects']['Row'], 'id' | 'period_start' | 'created_at'>
 
 export interface SeriesPoint { label: string; value: number }
 
@@ -39,6 +40,12 @@ export interface ReportsData {
   bugs: { label: string; color: string; val: number }[]
   createdVsResolved: {
     weeks: string[]
+    /** Rótulo longo por bucket (para tooltip): "27/07 – 02/08" ou "Ago 2025". */
+    bucketTitles: string[]
+    /** Granularidade do eixo, derivada do tempo de vida do projeto. */
+    unit: 'week' | 'month'
+    /** Início do eixo (início do projeto), ISO. */
+    axisStart: string | null
     created: number[]
     resolved: number[]
     max: number
@@ -49,8 +56,83 @@ export interface ReportsData {
   aging: { id: string; itemId: string; days: number; tag: string | null; color: string }[]
   leadCycle: { leadAvg: number; cycleAvg: number; buckets: { label: string; value: number }[] }
   health: { axes: { label: string; val: number }[]; score: number }
-  epicBurndown: { weeks: string[]; epics: { label: string; color: string; data: number[] }[]; max: number }
+  epicBurndown: {
+    weeks: string[]
+    bucketTitles: string[]
+    unit: 'week' | 'month'
+    axisStart: string | null
+    epics: { label: string; color: string; data: number[] }[]
+    max: number
+  }
   totals: { issues: number; velocity: number; leadAvg: number; bugRate: number }
+}
+
+interface Axis {
+  unit: 'week' | 'month'
+  labels: string[]
+  titles: string[]
+  ranges: { from: Date; to: Date }[]
+}
+
+const MONTH_ABBR_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const ddmm = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+
+/** Início do projeto: period_start → created_at do projeto → created_at mais antigo das demandas. */
+function projectStartAnchor(
+  projects: { period_start: string | null; created_at: string | null }[],
+  items: { created_at: string | null }[],
+  now: Date,
+): Date | null {
+  const candidates: number[] = []
+  for (const p of projects) {
+    const raw = p.period_start ?? p.created_at
+    if (raw) { const t = new Date(raw).getTime(); if (!Number.isNaN(t)) candidates.push(t) }
+  }
+  if (candidates.length === 0) {
+    for (const i of items) {
+      if (i.created_at) { const t = new Date(i.created_at).getTime(); if (!Number.isNaN(t)) candidates.push(t) }
+    }
+  }
+  if (candidates.length === 0) return null
+  const min = Math.min(...candidates)
+  return new Date(Math.min(min, now.getTime()))
+}
+
+/** Eixo do início do projeto até hoje: semanal até ~14 semanas, mensal acima disso. */
+function buildAxis(anchor: Date | null, now: Date): Axis {
+  const start = anchor ?? new Date(now.getTime() - 7 * 7 * DAY)
+  const spanWeeks = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (7 * DAY)))
+  const ranges: { from: Date; to: Date }[] = []
+  const labels: string[] = []
+  const titles: string[] = []
+
+  if (spanWeeks <= 14) {
+    for (let w = 0; w < spanWeeks; w++) {
+      const from = new Date(start.getTime() + w * 7 * DAY)
+      const to = new Date(Math.min(from.getTime() + 7 * DAY, now.getTime()))
+      ranges.push({ from, to })
+      labels.push(ddmm(from))
+      titles.push(`Sem ${w + 1} · ${ddmm(from)} – ${ddmm(new Date(to.getTime() - DAY))}`)
+    }
+    return { unit: 'week', labels, titles, ranges }
+  }
+
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  while (cursor.getTime() <= now.getTime()) {
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    const from = new Date(Math.max(cursor.getTime(), start.getTime()))
+    const to = new Date(Math.min(next.getTime(), now.getTime()))
+    ranges.push({ from, to })
+    labels.push(`${MONTH_ABBR_PT[cursor.getMonth()]}/${String(cursor.getFullYear()).slice(2)}`)
+    titles.push(`${MONTH_ABBR_PT[cursor.getMonth()]} ${cursor.getFullYear()}`)
+    cursor = next
+  }
+  if (ranges.length === 0) {
+    ranges.push({ from: start, to: now })
+    labels.push(ddmm(start))
+    titles.push(`${ddmm(start)} – ${ddmm(now)}`)
+  }
+  return { unit: 'month', labels, titles, ranges }
 }
 
 function missingTableMessage(table: string, message: string): string {
@@ -112,7 +194,11 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     .select('id, project_id, name, color').eq('tenant_id', tid).is('archived_at', null)
   if (scoped) epicsQ = epicsQ.in('project_id', scoped)
 
-  const [items, sprints, epics, profiles, history] = await Promise.all([
+  let projectsQ = supabase.from('projects')
+    .select('id, period_start, created_at').eq('tenant_id', tid)
+  if (scoped) projectsQ = projectsQ.in('id', scoped)
+
+  const [items, sprints, epics, profiles, history, projects] = await Promise.all([
     itemsQ.returns<ItemRow[]>(),
     sprintsQ.returns<SprintRow[]>(),
     epicsQ.returns<EpicRow[]>(),
@@ -120,6 +206,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     supabase.from('item_status_history')
       .select('work_item_id, field, from_value, to_value, created_at')
       .eq('tenant_id', tid).order('created_at').returns<HistoryRow[]>(),
+    projectsQ.returns<ProjectAnchorRow[]>(),
   ])
 
   const failed = [
@@ -133,6 +220,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
   const epicRows = epics.data ?? []
   const profileRows = profiles.data ?? []
   const historyRows = history.data ?? []
+  const projectRows = projects.data ?? []
 
   const historyByItem = new Map<string, HistoryRow[]>()
   for (const h of historyRows) {
@@ -219,19 +307,15 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     }).length,
   })).filter(s => s.val > 0)
 
-  // ── Created vs resolved (8 weeks) ──────────────────────────────────────────
-  const weeks: string[] = []
-  const created: number[] = []
-  const resolved: number[] = []
-  const weekRanges: { from: Date; to: Date }[] = []
-  for (let w = 7; w >= 0; w--) {
-    const from = addDays(now, -(w + 1) * 7)
-    const to = addDays(now, -w * 7)
-    weekRanges.push({ from, to })
-    weeks.push(`W${8 - w}`)
-    created.push(itemRows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length)
-    resolved.push(itemRows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length)
-  }
+  // ── Created vs resolved — eixo ancorado no início do projeto ───────────────
+  const anchor = projectStartAnchor(projectRows, itemRows, now)
+  const axis = buildAxis(anchor, now)
+  const weeks = axis.labels
+  const weekRanges = axis.ranges
+  const created = weekRanges.map(({ from, to }) =>
+    itemRows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length)
+  const resolved = weekRanges.map(({ from, to }) =>
+    itemRows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length)
   const cvrMax = Math.max(1, ...created, ...resolved)
   const cvrByProject = (scoped ?? []).map(pid => {
     const rows = itemRows.filter(i => i.project_id === pid)
@@ -316,19 +400,15 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
   ]
   const health = { axes, score: Math.round(axes.reduce((a, b) => a + b.val, 0) / axes.length) }
 
-  // ── Epic burndown (6 weeks, top 3 epics by remaining points) ───────────────
-  const epicWeeks: string[] = []
-  for (let w = 5; w >= 0; w--) epicWeeks.push(`W${6 - w}`)
+  // ── Epic burndown — mesmo eixo ancorado no início do projeto ───────────────
   const epicSeries = epicRows.map(e => {
     const rows = itemRows.filter(i => i.epic_id === e.id)
-    const data = epicWeeks.map((_, idx) => {
-      const at = addDays(now, -(5 - idx) * 7)
-      return rows.reduce((a, i) => {
+    const data = axis.ranges.map(({ to: at }) =>
+      rows.reduce((a, i) => {
         if (i.created_at && new Date(i.created_at) > at) return a
         const dn = doneAt(i)
         return dn && dn <= at ? a : a + pts(i)
-      }, 0)
-    })
+      }, 0))
     return { label: e.name, color: epicColorFor(e.color), data, remaining: data[data.length - 1] }
   })
     .sort((a, b) => b.remaining - a.remaining)
@@ -344,12 +424,19 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     burndown,
     cfd: { days: cfdDays, layers: cfdLayers, max: cfdMax * 1.1 },
     bugs,
-    createdVsResolved: { weeks, created, resolved, max: cvrMax * 1.2, byProject: cvrByProject },
+    createdVsResolved: {
+      weeks, bucketTitles: axis.titles, unit: axis.unit, axisStart: anchor ? anchor.toISOString() : null,
+      created, resolved, max: cvrMax * 1.2, byProject: cvrByProject,
+    },
     workload,
     aging,
     leadCycle,
     health,
-    epicBurndown: { weeks: epicWeeks, epics: epicSeries, max: epicMax },
+    epicBurndown: {
+      weeks: axis.labels, bucketTitles: axis.titles, unit: axis.unit,
+      axisStart: anchor ? anchor.toISOString() : null,
+      epics: epicSeries, max: epicMax,
+    },
     totals: {
       issues: totalItems,
       velocity: velocitySeries.length ? velocitySeries[velocitySeries.length - 1].value : 0,
