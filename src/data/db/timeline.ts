@@ -8,7 +8,7 @@ import { T } from '../../components/ds/tokens'
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001'
 
 type Tables = Database['public']['Tables']
-export type ProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name' | 'period_start' | 'period_end' | 'status' | 'metadata'>
+export type ProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name' | 'period_start' | 'period_end' | 'status' | 'metadata' | 'created_at'>
 export type EpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'name' | 'color'>
 export type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'project_id' | 'name' | 'start_date' | 'end_date' | 'state'>
 export type WorkItemRow = Pick<
@@ -70,7 +70,7 @@ export async function fetchTimelineData(): Promise<TimelineData> {
   const tid = DEFAULT_TENANT_ID
 
   const [projects, epics, sprints, workItems, dependencies, profiles] = await Promise.all([
-    supabase.from('projects').select('id, name, period_start, period_end, status, metadata')
+    supabase.from('projects').select('id, name, period_start, period_end, status, metadata, created_at')
       .eq('tenant_id', tid).is('archived_at', null).order('name'),
     supabase.from('epics').select('id, project_id, name, color')
       .eq('tenant_id', tid).is('archived_at', null).order('name'),

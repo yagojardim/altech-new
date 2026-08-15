@@ -302,14 +302,12 @@ export default function TimelinePage() {
       .map(p => (p.period_start ?? p.created_at ?? null))
       .filter((v): v is string => !!v)
       .map(v => v.slice(0, 10))
-    let min = projectStarts.length > 0 ? projectStarts.reduce((a, b) => (b < a ? b : a)) : null
-    let max: string | null = null
-    all.forEach(s => {
-      if (min == null || s.start < min) min = s.start
-      if (max == null || s.end > max) max = s.end
-    })
-    if (min == null) return { domainStart: toIso(new Date()), totalDays: 30 }
-    const end = max && max > toIso(new Date()) ? max : toIso(new Date())
+    const starts = [...projectStarts, ...all.map(s => s.start)]
+    if (starts.length === 0) return { domainStart: toIso(new Date()), totalDays: 30 }
+    const min = starts.reduce((a, b) => (b < a ? b : a))
+    const today = toIso(new Date())
+    const ends = [...all.map(s => s.end), today]
+    const end = ends.reduce((a, b) => (b > a ? b : a))
     return { domainStart: min, totalDays: Math.max(30, diffDays(min, end) + 4) }
   }, [visibleItems, spans, data, selectedProjects])
 
