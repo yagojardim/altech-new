@@ -582,6 +582,7 @@ export async function listItemHistory(workItemId: string, epicId?: string | null
           kind: 'action',
           action: AUDIT_ACTION_LABEL[raw.action] ?? raw.action.replace(/^(work_item|epic)\./, '').replace(/_/g, ' '),
           detail: auditDetail(raw.before, raw.after),
+          summary: auditSummary(raw.action, raw.before, raw.after),
           fromEpic,
         })
       }
