@@ -57,6 +57,10 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
     Object.fromEntries(remainingItems.map(i => [i.id, hasNext ? 'next-sprint' : 'backlog'])),
   )
   const [comment, setComment] = useState('')
+  const [reason, setReason] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  const commentMissing = comment.trim().length === 0
 
   const velocity = stats.done * 3
 
@@ -65,14 +69,17 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
   }
 
   function handleConfirm() {
+    if (commentMissing) { setTouched(true); return }
     onConfirm(
       remainingItems.map(i => ({
         workItemId: i.id,
         destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
       })),
-      comment,
+      comment.trim(),
+      reason.trim(),
     )
   }
+
 
   return (
     <div style={overlay} onClick={onClose}>
