@@ -16,7 +16,7 @@ export type BoardColumnRow = Pick<
 >
 export type BoardSprintRow = Pick<
   Tables['sprints']['Row'],
-  'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity'
+  'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity' | 'metadata'
 >
 export type BoardItemRow = Pick<
   Tables['work_items']['Row'],
@@ -114,7 +114,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
       .select('id, key, title, description, type, status, priority, severity, project_id, board_id, board_column_id, sprint_id, epic_id, assignee_id, reporter_id, story_points, position, is_blocked, blocked_reason, due_date')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null)
       .order('position'),
-    supabase.from('sprints').select('id, project_id, name, goal, state, start_date, end_date, velocity')
+    supabase.from('sprints').select('id, project_id, name, goal, state, start_date, end_date, velocity, metadata')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null).order('start_date'),
     supabase.from('epics').select('id, project_id, key, name, color')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null),
