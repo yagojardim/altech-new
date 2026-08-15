@@ -1997,7 +1997,7 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                 )}
 
                 {closure && (
-                  <SprintClosureSummary closure={closure} />
+                  <SprintClosureSummary closure={closure} onOpenItem={handleOpenItem} />
                 )}
 
                 <div className="flex items-center gap-3">
