@@ -2108,7 +2108,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   }
 
 
-  const { activeUser }    = useSession()
+  const { activeUser, tenantName } = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
 
   // ── Cerimônias da sprint (calendar_events) ──────────────────────────────────
