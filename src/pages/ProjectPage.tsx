@@ -2142,6 +2142,74 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     setBoardData(prev => prev ? { ...prev, items: [created, ...prev.items] } : prev)
   }
 
+  /** Cria a demanda vinda do CreateIssueModal direto no banco (work_items). */
+  async function handleCreateDemand(data: Record<string, unknown>) {
+    const target = quickCreate
+    setQuickCreate(null)
+    try {
+      const columns = boardData?.columns ?? []
+      const column = (target?.colStatus
+        ? columns.find(c => c.statuses.includes(target.colStatus!) || c.category === target.colStatus)
+        : undefined) ?? columns[0]
+      const projectId = boardData?.board?.project_id ?? scopedProjectId
+      if (!projectId || !column) throw new Error('Board indisponível para criar demanda')
+
+      const sprintId = target?.sprintId ?? dbSprints.find(s => s.state === 'active')?.id ?? null
+      const epicLabel = data.epic && data.epic !== '—' ? String(data.epic) : ''
+      const epicId = epicLabel
+        ? (boardData?.epics ?? []).find(e => e.name === epicLabel || e.id === epicLabel.split(' ')[0])?.id ?? null
+        : null
+      const assigneeName = data.assignee && data.assignee !== '—' ? String(data.assignee) : ''
+      const assigneeId = assigneeName
+        ? (boardData?.profiles ?? []).find(p => p.name === assigneeName)?.id ?? null
+        : null
+      const points = parseInt(String(data.points ?? ''), 10)
+
+      const created = await createWorkItem({
+        projectId,
+        boardId: boardData?.board?.id ?? null,
+        column,
+        sprintId,
+        epicId,
+        assigneeId,
+        title: String(data.summary ?? '').trim() || 'Nova demanda',
+        type: String(data.type ?? 'story'),
+        priority: (data.priority as 'critical' | 'high' | 'medium' | 'low') ?? 'medium',
+        storyPoints: Number.isFinite(points) ? points : null,
+        description: data.description ? String(data.description) : null,
+      }, activeUser.name)
+
+      await loadBoard()
+      setToast(`Demanda ${created.key} criada`)
+    } catch (err) {
+      setToast(`Falha ao criar a demanda: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 3500)
+  }
+
+  /** Cria uma sprint planejada a partir do modal "Nova sprint". */
+  async function handleCreateSprint(input: { name: string; goal: string; startDate: string; endDate: string }) {
+    const projectId = boardData?.board?.project_id ?? scopedProjectId
+    if (!projectId) { setToast('Projeto indisponível para criar sprint'); setTimeout(()=>setToast(null), 3500); return }
+    setCreatingSprint(false)
+    try {
+      const sprint = await dbCreateSprint({
+        projectId,
+        name: input.name,
+        goal: input.goal || null,
+        startDate: input.startDate || null,
+        endDate: input.endDate || null,
+        actorName: activeUser.name,
+      })
+      await loadBoard()
+      setToast(`${sprint.name} criada (planejada)`)
+    } catch (err) {
+      setToast(`Falha ao criar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 3500)
+  }
+
+
 
   const { activeUser, tenantName } = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
