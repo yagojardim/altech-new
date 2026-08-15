@@ -181,6 +181,37 @@ async function writeScopeEvents(
   )
 }
 
+export interface CreateSprintInput {
+  projectId: string
+  name: string
+  goal?: string | null
+  startDate?: string | null
+  endDate?: string | null
+  state?: SprintState
+  actorName?: string
+}
+
+/** Creates a sprint from scratch (defaults to `planned`) inside the current tenant. */
+export async function createSprint(input: CreateSprintInput): Promise<SprintRow> {
+  const state = input.state ?? 'planned'
+  const { data, error } = await supabase.from('sprints').insert({
+    tenant_id: DEFAULT_TENANT_ID,
+    project_id: input.projectId,
+    name: input.name,
+    goal: input.goal || null,
+    start_date: input.startDate || null,
+    end_date: input.endDate || null,
+    state,
+  }).select(SPRINT_FIELDS).single()
+  if (error) throw new Error(missingTableMessage('sprints', error.message))
+
+  const row = data as SprintRow
+  await writeSprintAudit(row.id, 'sprint.created', input.actorName ?? 'Sistema', {},
+    { name: row.name, start_date: row.start_date, end_date: row.end_date, goal: row.goal, state: row.state })
+
+  return row
+}
+
 export interface StartSprintInput {
   goal?: string | null
   startDate?: string | null
