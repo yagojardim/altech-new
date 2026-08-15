@@ -2016,7 +2016,6 @@ interface ProjectPageProps {
 export default function ProjectPage({ boardId, projectId, onBackToBoards }: ProjectPageProps = {}) {
   const [tab, setTab]     = useState<Tab>('Board')
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
-  const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
   const [toast, setToast] = useState<string|null>(null)
