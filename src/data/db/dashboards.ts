@@ -90,6 +90,58 @@ export interface WorkloadEntry {
 
 export interface DashboardProjectOption { id: string; name: string; color: string }
 
+/** Métricas de entrega calculadas das próprias demandas (sem CI/deploy). */
+export interface DeliveryMetrics {
+  leadTimeDias: number | null
+  vazaoSemana: number | null
+  cycleTimeDias: number | null
+  taxaBugsPct: number | null
+}
+
+/** Linha mínima usada para calcular as métricas de entrega. */
+export interface DeliveryRow {
+  projectId: string
+  type: string
+  status: string
+  createdAt: string | null
+  completedAt: string | null
+  firstInProgressAt: string | null
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+/** Calcula lead time, vazão, cycle time e retrabalho para um conjunto de demandas. */
+export function computeDeliveryMetrics(rows: DeliveryRow[]): DeliveryMetrics {
+  if (rows.length === 0) {
+    return { leadTimeDias: null, vazaoSemana: null, cycleTimeDias: null, taxaBugsPct: null }
+  }
+
+  const doneRows = rows.filter(r => r.status === 'done' && r.completedAt)
+
+  const leadDays = doneRows
+    .filter(r => r.createdAt)
+    .map(r => (new Date(r.completedAt!).getTime() - new Date(r.createdAt!).getTime()) / DAY)
+    .filter(d => Number.isFinite(d) && d >= 0)
+  const leadTimeDias = leadDays.length ? round1(leadDays.reduce((a, b) => a + b, 0) / leadDays.length) : null
+
+  const anchorTimes = rows.map(r => (r.createdAt ? new Date(r.createdAt).getTime() : NaN)).filter(t => !Number.isNaN(t))
+  let vazaoSemana: number | null = null
+  if (anchorTimes.length && doneRows.length) {
+    const weeks = Math.max(1, (Date.now() - Math.min(...anchorTimes)) / (DAY * 7))
+    vazaoSemana = round1(doneRows.length / weeks)
+  }
+
+  const cycleDays = doneRows
+    .filter(r => r.firstInProgressAt)
+    .map(r => (new Date(r.completedAt!).getTime() - new Date(r.firstInProgressAt!).getTime()) / DAY)
+    .filter(d => Number.isFinite(d) && d >= 0)
+  const cycleTimeDias = cycleDays.length ? round1(cycleDays.reduce((a, b) => a + b, 0) / cycleDays.length) : null
+
+  const taxaBugsPct = round1((rows.filter(r => r.type === 'bug').length / rows.length) * 100)
+
+  return { leadTimeDias, vazaoSemana, cycleTimeDias, taxaBugsPct }
+}
+
 export interface DashboardAggregates {
   projects: DashboardProjectOption[]
   rag: RagProject[]
@@ -104,6 +156,10 @@ export interface DashboardAggregates {
   upcoming: WorkItem[]
   workload: WorkloadEntry[]
   items: WorkItem[]
+  /** Métricas de entrega de todo o escopo carregado. */
+  delivery: DeliveryMetrics
+  /** Linhas cruas para recalcular as métricas por subconjunto de projetos. */
+  deliveryRows: DeliveryRow[]
   counts: {
     projects: number
     activeProjects: number
@@ -119,6 +175,7 @@ export interface DashboardAggregates {
   velocityAvg: number
   predictability: number
 }
+
 
 function missingTableMessage(table: string, message: string): string {
   if (/does not exist|schema cache|Could not find the table/i.test(message)) {
