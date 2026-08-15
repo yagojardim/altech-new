@@ -37,7 +37,7 @@ import {
 } from '../data/dashboardAssignments'
 import { listSquads, type SquadOption } from '../data/db/timesheets'
 import { safeCall } from '../utils/logger'
-import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
+import { fetchAdminKpis, computeDeliveryMetrics, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
   ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
