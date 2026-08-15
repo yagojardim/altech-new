@@ -19,6 +19,7 @@ type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'project_id' | 'name' | '
 type EpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'name' | 'color'>
 type ProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials'>
 type HistoryRow = Pick<Tables['item_status_history']['Row'], 'work_item_id' | 'field' | 'from_value' | 'to_value' | 'created_at'>
+type ProjectAnchorRow = Pick<Tables['projects']['Row'], 'id' | 'period_start' | 'created_at'>
 
 export interface SeriesPoint { label: string; value: number }
 
