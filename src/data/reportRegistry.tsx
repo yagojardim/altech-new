@@ -348,7 +348,7 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
   return (
     <ChartFrame data={data} loading={loading} error={error} height={th ? 60 : 150}
       isEmpty={!cvr || (cvr.created.every(v => v === 0) && cvr.resolved.every(v => v === 0))}
-      emptyText="Nenhuma demanda criada ou resolvida nas últimas 8 semanas.">
+      emptyText="Nenhuma demanda criada ou resolvida desde o início do projeto.">
       {() => {
         if (multi) return <SmallMultiples series={cvr!.byProject} />
         const c = cvr!
@@ -356,9 +356,10 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
         const PAD = { top: th ? 4 : 20, right: 8, bottom: th ? 4 : 28, left: th ? 4 : 28 }
         const cw = W - PAD.left - PAD.right
         const ch = H - PAD.top - PAD.bottom
-        const weeks = c.weeks.length
+        const weeks = Math.max(1, c.weeks.length)
+        const labelStep = Math.ceil(weeks / 8)
         const maxV = Math.max(1, c.max)
-        const toX = (i: number) => PAD.left + (i / (weeks - 1)) * cw
+        const toX = (i: number) => weeks === 1 ? PAD.left + cw / 2 : PAD.left + (i / (weeks - 1)) * cw
         const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const areaPath = (d: number[]) => linePath(d) + ` L ${toX(weeks - 1)} ${PAD.top + ch} L ${toX(0)} ${PAD.top + ch} Z`
