@@ -564,6 +564,9 @@ export async function listItemHistory(workItemId: string, epicId?: string | null
         field: h.field,
         fromValue: h.from_value,
         toValue: h.to_value,
+        summary: h.field === 'status'
+          ? `Moveu de ${h.from_value || '—'} para ${h.to_value || '—'}`
+          : `Alterou ${PT_FIELD[h.field] ?? h.field} de ${h.from_value || '—'} para ${h.to_value || '—'}`,
       })
     }
 
