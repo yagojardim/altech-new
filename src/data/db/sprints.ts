@@ -375,6 +375,9 @@ export async function completeSprint(
       moved_to_backlog: toBacklog.length,
       next_sprint: target ? target.name : null,
       comment: closure.comment,
+      reason: closure.reason,
+      items: closure.items.map(i => ({ key: i.key, outcome: i.outcome, points: i.points })),
+
     })
 
   return {
