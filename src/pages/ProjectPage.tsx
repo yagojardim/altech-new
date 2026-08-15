@@ -2110,19 +2110,19 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
   //    sprint_scope_events/audit_logs) and re-read so Board and Timeline follow.
-  async function handleCompleteSprint(moveRemaining: 'next-sprint' | 'backlog') {
+  async function handleCompleteSprint(decisions: { workItemId: string; destination: 'next-sprint' | 'backlog' }[]) {
     if (!completingSprint) return
     const sprint = completingSprint
     setCompletingSprint(null)
     try {
-      const result = await dbCompleteSprint(sprint.id, moveRemaining, activeUser.name)
+      const result = await dbCompleteSprint(sprint.id, decisions, activeUser.name)
       await loadBoard()
-      const destLabel = result.destinationSprint ? result.destinationSprint.name : 'backlog'
-      const fallbackNote = moveRemaining === 'next-sprint' && !result.destinationSprint
-        ? ' (sem próxima sprint planejada, movido para backlog)'
-        : ''
-      const n = result.movedCount
-      setToast(`${sprint.name} encerrada — velocity ${result.velocity}pts · ${n} ${n === 1 ? 'item movido' : 'itens movidos'} para ${destLabel}${fallbackNote}`)
+      const parts: string[] = []
+      if (result.movedToNext > 0) parts.push(`${result.movedToNext} para ${result.destinationSprint?.name ?? 'próxima sprint'}`)
+      if (result.movedToBacklog > 0) parts.push(`${result.movedToBacklog} para o backlog`)
+      const fallbackNote = result.fellBackToBacklog ? ' (sem próxima sprint planejada)' : ''
+      const moved = parts.length > 0 ? ` · ${parts.join(' · ')}` : ''
+      setToast(`${sprint.name} encerrada — velocity ${result.velocity}pts${moved}${fallbackNote}`)
     } catch (err) {
       setToast(`Falha ao encerrar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
     }
