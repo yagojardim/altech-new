@@ -2152,7 +2152,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   const boardDef          = boardId ? getBoardById(boardId) : undefined
   const isArchivedBoard   = boardDef?.status === 'archived'
 
-  const activeSprint      = sprints.find(s => s.state === 'active')
+  const activeSprint      = dbSprints.find(s => s.state === 'active')
   const activeSid         = activeSprint?.id ?? 's14'
 
   // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
