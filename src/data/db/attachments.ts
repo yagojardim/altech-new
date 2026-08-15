@@ -194,6 +194,20 @@ export async function uploadAttachment({ tenantId, workItemId, file, profileId }
   }
 
   const r = insert.data
+
+  // Registra no histórico da demanda (nunca bloqueia o upload).
+  await safeCall('attachments.auditUpload', async () => {
+    await supabase.from('audit_logs').insert({
+      tenant_id: tenantId,
+      entity_type: 'work_item',
+      entity_id: workItemId,
+      action: 'attachment_added',
+      actor_id: profileId,
+      after: { name: file.name },
+    })
+    return null
+  }, null, { workItemId })
+
   return {
     id: r.id,
     name: r.name,
