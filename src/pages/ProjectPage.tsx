@@ -2310,10 +2310,21 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onMoveCard={moveCard}
           onQuickCreate={quickCreateCard}
           onLocalPatch={patchDbIssue}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
       {tab === 'Backlog' && (
-        <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
+        <BacklogTab
+          issues={dbIssues}
+          sprints={dbSprints}
+          canManageSprint={canManageSprint}
+          onCreateIssue={()=>setQuickCreate({})}
+          onCompleteSprint={s=>setCompletingSprint(s)}
+          onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
+        />
       )}
       {tab === 'Sprints' && (
         <SprintsTab
@@ -2327,6 +2338,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
 
@@ -2346,7 +2359,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         defaultSprintId={quickCreate.sprintId}
         onCreate={data => {
           // Map modal output → Issue and persist
-          const sprintMatch = sprints.find(s =>
+          const sprintMatch = dbSprints.find(s =>
             quickCreate.sprintId ? s.id === quickCreate.sprintId : s.state === 'active'
           )
           const labelArr = data.labels ? String(data.labels).split(',').map((l:string)=>l.trim()).filter(Boolean) : []
@@ -2361,10 +2374,10 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
             dueDate:  '',
             points:   parseInt(String(data.points ?? '0')) || 0,
             sprint:   sprintMatch?.id ?? quickCreate.sprintId,
-            epic:     data.epic ? String(data.epic).split(' ')[0] : undefined,
+            epicId:   data.epic ? String(data.epic).split(' ')[0] : undefined,
             description: String(data.description ?? ''),
           }
-          setIssues(prev => [newIssue, ...prev])
+          setDbIssues(prev => [newIssue, ...prev])
           setToast(`Issue ${newIssue.key} criada na coluna`)
           setTimeout(() => setToast(null), 3500)
           setQuickCreate(null)
