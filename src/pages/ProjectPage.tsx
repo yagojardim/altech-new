@@ -1716,7 +1716,7 @@ function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
   if (!hasItems && !hasOverflow && !closure.comment && !closure.reason) return null
 
   const badge = (outcome: 'done' | 'next' | 'backlog') => {
-    if (outcome === 'done') return { label: 'Concluído', color: S.done ?? '#35C9AE', bg: 'rgba(53,201,174,0.14)' }
+    if (outcome === 'done') return { label: 'Concluído', color: '#35C9AE', bg: 'rgba(53,201,174,0.14)' }
     if (outcome === 'next') return { label: '→ Próxima sprint', color: '#4C8DFF', bg: 'rgba(76,141,255,0.14)' }
     return { label: '↩ Backlog', color: S.t3, bg: S.surface }
   }
