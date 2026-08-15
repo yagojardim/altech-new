@@ -37,7 +37,7 @@ import {
 } from '../data/dashboardAssignments'
 import { listSquads, type SquadOption } from '../data/db/timesheets'
 import { safeCall } from '../utils/logger'
-import { fetchAdminKpis, type AdminKpis } from '../data/db/dashboards'
+import { fetchAdminKpis, computeDeliveryMetrics, type AdminKpis } from '../data/db/dashboards'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST, ReportChartModal, useChartModal,
   ReportsDataProvider, ReportKpiPreview, ReportMiniViz, navigateToReport,
@@ -1094,12 +1094,37 @@ function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => voi
     filters
   )
 
-  const dora = [
-    { name: 'Deploy Frequency',      value: '2.1/sem', alert: false },
-    { name: 'Change Failure Rate',   value: '6%',       alert: true  },
-    { name: 'MTTR',                  value: '48min',    alert: false },
-    { name: 'Lead Time for Changes', value: '3.2d',     alert: false },
+  const nf = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  const deliveryRows = liveAggregates()?.deliveryRows ?? []
+  const scopedRows = selProj.size > 0 ? deliveryRows.filter(r => selProj.has(r.projectId)) : deliveryRows
+  const dm = computeDeliveryMetrics(scopedRows)
+  const entrega = [
+    {
+      name: 'Lead Time médio',
+      value: dm.leadTimeDias != null ? `${nf(dm.leadTimeDias)} dias` : '—',
+      sub: dm.leadTimeDias != null ? 'Do início da demanda até a conclusão — quanto menor, melhor.' : 'sem dados suficientes ainda',
+      alert: dm.leadTimeDias != null && dm.leadTimeDias > 14,
+    },
+    {
+      name: 'Vazão',
+      value: dm.vazaoSemana != null ? `${nf(dm.vazaoSemana)}/semana` : '—',
+      sub: dm.vazaoSemana != null ? 'Demandas concluídas por semana — quanto maior, melhor.' : 'sem dados suficientes ainda',
+      alert: dm.vazaoSemana != null && dm.vazaoSemana < 1,
+    },
+    {
+      name: 'Cycle Time médio',
+      value: dm.cycleTimeDias != null ? `${nf(dm.cycleTimeDias)} dias` : '—',
+      sub: dm.cycleTimeDias != null ? 'Tempo em execução ativa (Em andamento → Concluído).' : 'sem dados suficientes ainda',
+      alert: dm.cycleTimeDias != null && dm.cycleTimeDias > 7,
+    },
+    {
+      name: '% de Retrabalho (Bugs)',
+      value: dm.taxaBugsPct != null ? `${nf(dm.taxaBugsPct)}%` : '—',
+      sub: dm.taxaBugsPct != null ? 'Proporção de demandas que são correção — quanto menor, melhor.' : 'sem dados suficientes ainda',
+      alert: dm.taxaBugsPct != null && dm.taxaBugsPct > 20,
+    },
   ]
+
   const divida = [
     { area: 'Cobertura de testes',  pct: 74, meta: 80 },
     { area: 'TODOs no código',      pct: 18, meta: 5  },
@@ -1131,16 +1156,22 @@ function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => voi
         <WorkQueue title="Gargalos de PRs / Issues em Revisão" items={inReview} onOpen={openDrawer}
           onViewAll={() => onNav('list')} emptyMsg="Nenhum gargalo no momento." />
 
-        <SCard title="DORA Metrics" help="Quatro métricas de entrega do time: frequência de deploy, taxa de falha em mudanças, MTTR (tempo de recuperação) e lead time.">
+        <SCard
+          title="Métricas de Entrega"
+          helpTitle="Métricas de Entrega"
+          help="Indicadores calculados a partir das próprias demandas do projeto (lead time, vazão, cycle time e retrabalho). Não dependem de integração com CI/deploy."
+        >
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {dora.map(d => (
+            {entrega.map(d => (
               <div key={d.name} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: d.alert ? T.warn : T.text1 }}>{d.value}</div>
-                <div style={{ fontSize: 10, color: T.text3, marginTop: 3 }}>{d.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: d.value === '—' ? T.text3 : d.alert ? T.warn : T.success }}>{d.value}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: T.text2, marginTop: 3 }}>{d.name}</div>
+                <div style={{ fontSize: 10, color: T.text3, marginTop: 4, lineHeight: 1.4 }}>{d.sub}</div>
               </div>
             ))}
           </div>
         </SCard>
+
 
         <ColSpan>
           <SCard title="Dívida Técnica / Saúde do Código">

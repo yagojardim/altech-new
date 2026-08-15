@@ -90,6 +90,58 @@ export interface WorkloadEntry {
 
 export interface DashboardProjectOption { id: string; name: string; color: string }
 
+/** Métricas de entrega calculadas das próprias demandas (sem CI/deploy). */
+export interface DeliveryMetrics {
+  leadTimeDias: number | null
+  vazaoSemana: number | null
+  cycleTimeDias: number | null
+  taxaBugsPct: number | null
+}
+
+/** Linha mínima usada para calcular as métricas de entrega. */
+export interface DeliveryRow {
+  projectId: string
+  type: string
+  status: string
+  createdAt: string | null
+  completedAt: string | null
+  firstInProgressAt: string | null
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10
+
+/** Calcula lead time, vazão, cycle time e retrabalho para um conjunto de demandas. */
+export function computeDeliveryMetrics(rows: DeliveryRow[]): DeliveryMetrics {
+  if (rows.length === 0) {
+    return { leadTimeDias: null, vazaoSemana: null, cycleTimeDias: null, taxaBugsPct: null }
+  }
+
+  const doneRows = rows.filter(r => r.status === 'done' && r.completedAt)
+
+  const leadDays = doneRows
+    .filter(r => r.createdAt)
+    .map(r => (new Date(r.completedAt!).getTime() - new Date(r.createdAt!).getTime()) / DAY)
+    .filter(d => Number.isFinite(d) && d >= 0)
+  const leadTimeDias = leadDays.length ? round1(leadDays.reduce((a, b) => a + b, 0) / leadDays.length) : null
+
+  const anchorTimes = rows.map(r => (r.createdAt ? new Date(r.createdAt).getTime() : NaN)).filter(t => !Number.isNaN(t))
+  let vazaoSemana: number | null = null
+  if (anchorTimes.length && doneRows.length) {
+    const weeks = Math.max(1, (Date.now() - Math.min(...anchorTimes)) / (DAY * 7))
+    vazaoSemana = round1(doneRows.length / weeks)
+  }
+
+  const cycleDays = doneRows
+    .filter(r => r.firstInProgressAt)
+    .map(r => (new Date(r.completedAt!).getTime() - new Date(r.firstInProgressAt!).getTime()) / DAY)
+    .filter(d => Number.isFinite(d) && d >= 0)
+  const cycleTimeDias = cycleDays.length ? round1(cycleDays.reduce((a, b) => a + b, 0) / cycleDays.length) : null
+
+  const taxaBugsPct = round1((rows.filter(r => r.type === 'bug').length / rows.length) * 100)
+
+  return { leadTimeDias, vazaoSemana, cycleTimeDias, taxaBugsPct }
+}
+
 export interface DashboardAggregates {
   projects: DashboardProjectOption[]
   rag: RagProject[]
@@ -104,6 +156,10 @@ export interface DashboardAggregates {
   upcoming: WorkItem[]
   workload: WorkloadEntry[]
   items: WorkItem[]
+  /** Métricas de entrega de todo o escopo carregado. */
+  delivery: DeliveryMetrics
+  /** Linhas cruas para recalcular as métricas por subconjunto de projetos. */
+  deliveryRows: DeliveryRow[]
   counts: {
     projects: number
     activeProjects: number
@@ -119,6 +175,7 @@ export interface DashboardAggregates {
   velocityAvg: number
   predictability: number
 }
+
 
 function missingTableMessage(table: string, message: string): string {
   if (/does not exist|schema cache|Could not find the table/i.test(message)) {
@@ -201,7 +258,7 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
     .eq('tenant_id', tid).is('archived_at', null)
   if (scoped) sprintsQ = sprintsQ.in('project_id', scoped)
 
-  const [projects, items, sprints, profiles, deps, labels] = await Promise.all([
+  const [projects, items, sprints, profiles, deps, labels, history] = await Promise.all([
     projectsQ.returns<ProjectRow[]>(),
     itemsQ.returns<ItemRow[]>(),
     sprintsQ.returns<SprintRow[]>(),
@@ -210,7 +267,11 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
     supabase.from('dependencies').select('source_id, target_id, relation_type')
       .eq('tenant_id', tid).returns<DependencyRow[]>(),
     supabase.from('work_item_labels').select('work_item_id, labels(name)').eq('tenant_id', tid),
+    supabase.from('item_status_history').select('work_item_id, to_value, created_at')
+      .eq('tenant_id', tid).eq('field', 'status').eq('to_value', 'in_progress')
+      .order('created_at', { ascending: true }),
   ])
+
 
   const failed = [
     ['projects', projects.error], ['work_items', items.error], ['sprints', sprints.error],
@@ -357,7 +418,24 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
 
   const bugs = itemRows.filter(i => i.type === 'bug' && i.status !== 'done')
 
+  // ── Métricas de entrega (lead time, vazão, cycle time, retrabalho) ─────────
+  const firstInProgress = new Map<string, string>()
+  for (const h of (history.error ? [] : (history.data ?? [])) as { work_item_id: string; created_at: string }[]) {
+    if (!firstInProgress.has(h.work_item_id)) firstInProgress.set(h.work_item_id, h.created_at)
+  }
+  const deliveryRows: DeliveryRow[] = itemRows.map(i => ({
+    projectId: i.project_id,
+    type: i.type,
+    status: i.status,
+    createdAt: i.created_at,
+    completedAt: i.completed_at,
+    firstInProgressAt: firstInProgress.get(i.id) ?? null,
+  }))
+
   return {
+    delivery: computeDeliveryMetrics(deliveryRows),
+    deliveryRows,
+
     projects: projectRows.map((p, i) => ({ id: p.id, name: p.name, color: dashProjectColor(p, i) })),
     rag,
     consolidatedPct: totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0,
