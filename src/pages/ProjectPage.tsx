@@ -2259,11 +2259,11 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 text-[13px]">
-          <span style={{ color: S.t2 }}>Harbor Labs</span>
+          <span style={{ color: S.t2 }}>{tenantName}</span>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ color: S.t3 }}>
             <path d="M3 2.5L5.5 4.5L3 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
-          <span className="font-semibold" style={{ color: S.t1 }}>Website Relaunch</span>
+          <span className="font-semibold" style={{ color: S.t1 }}>{boardData?.project?.name ?? '—'}</span>
         </div>
 
         {/* Tabs */}
