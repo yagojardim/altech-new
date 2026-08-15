@@ -1291,10 +1291,15 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                     {btn.icon && <span>{btn.icon}</span>}{btn.label}
                   </button>
                 ))}
-                <button title="Histórico" onClick={openHistory}
-                  style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border2;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>···</button>
+                <button title="Histórico da demanda" onClick={openHistory}
+                  style={{ display:'flex', alignItems:'center', gap:5, height:28, padding:'0 10px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text2, cursor:'pointer', fontSize:11, fontFamily:'inherit' }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.accent;(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.color=T.text2}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                  </svg>
+                  Histórico
+                </button>
               </div>
 
               {/* Data error banner */}
