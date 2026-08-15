@@ -1,7 +1,7 @@
 // Temporary admin SQL runner — deleted right after the security hardening run.
 import postgres from "https://deno.land/x/postgresjs@v3.4.4/mod.js";
 
-const KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const KEY = Deno.env.get("TMP_SQL_TOKEN")!;
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("no", { status: 405 });
