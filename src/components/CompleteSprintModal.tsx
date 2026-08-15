@@ -1,12 +1,16 @@
 import React, { useState } from 'react'
 import { T } from './ds/tokens'
 
+export interface RemainingItem { id: string; key: string; title: string }
+export interface SprintDecision { workItemId: string; destination: 'next-sprint' | 'backlog' }
+
 interface CompleteSprintProps {
   sprint: { id: string; name: string; goal?: string }
   stats: { done: number; total: number; remaining: number }
+  remainingItems?: RemainingItem[]
   nextSprintName?: string
   onClose: () => void
-  onConfirm: (moveRemaining: 'next-sprint' | 'backlog') => void
+  onConfirm: (decisions: SprintDecision[]) => void
 }
 
 const overlay: React.CSSProperties = {
