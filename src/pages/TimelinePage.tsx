@@ -294,15 +294,25 @@ export default function TimelinePage() {
 
   const visibleItems = rows.filter(r => r.kind === 'item') as Extract<Row, { kind: 'item' }>[]
 
-  // ── Time domain derived from the visible spans ──────────────────────────────
+  // ── Time domain: starts at the PROJECT start (period_start → created_at) ────
   const { domainStart, totalDays } = useMemo(() => {
     const all = visibleItems.map(r => spans[r.id]).filter(Boolean)
-    if (all.length === 0) return { domainStart: toIso(new Date()), totalDays: 30 }
-    let min = all[0].start, max = all[0].end
-    all.forEach(s => { if (s.start < min) min = s.start; if (s.end > max) max = s.end })
-    const start = addDays(min, -3)
-    return { domainStart: start, totalDays: Math.max(30, diffDays(start, max) + 4) }
-  }, [visibleItems, spans])
+    const projectStarts = (data?.projects ?? [])
+      .filter(p => !selectedProjects || selectedProjects.has(p.id))
+      .map(p => (p.period_start ?? p.created_at ?? null))
+      .filter((v): v is string => !!v)
+      .map(v => v.slice(0, 10))
+    let min = projectStarts.length > 0 ? projectStarts.reduce((a, b) => (b < a ? b : a)) : null
+    let max: string | null = null
+    all.forEach(s => {
+      if (min == null || s.start < min) min = s.start
+      if (max == null || s.end > max) max = s.end
+    })
+    if (min == null) return { domainStart: toIso(new Date()), totalDays: 30 }
+    const end = max && max > toIso(new Date()) ? max : toIso(new Date())
+    return { domainStart: min, totalDays: Math.max(30, diffDays(min, end) + 4) }
+  }, [visibleItems, spans, data, selectedProjects])
+
 
   const todayIso = toIso(new Date())
   const todayIdx = diffDays(domainStart, todayIso)
