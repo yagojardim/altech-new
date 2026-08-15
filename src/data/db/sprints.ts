@@ -13,8 +13,44 @@ export type SprintState = 'planned' | 'active' | 'completed'
 
 export type SprintRow = Pick<
   Tables['sprints']['Row'],
-  'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity' | 'completed_at'
+  'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity' | 'completed_at' | 'metadata'
 >
+
+/** Snapshot persisted in sprints.metadata.closure when a sprint is completed. */
+export interface SprintClosure {
+  committedCount: number
+  committedPoints: number
+  doneCount: number
+  donePoints: number
+  deliveredPctCount: number
+  deliveredPctPoints: number
+  movedToNext: string[]
+  movedToBacklog: string[]
+  comment: string | null
+  closedAt: string
+}
+
+/** Reads the closure snapshot out of a sprint metadata blob, when present. */
+export function readSprintClosure(metadata: unknown): SprintClosure | null {
+  if (!metadata || typeof metadata !== 'object') return null
+  const closure = (metadata as Record<string, unknown>).closure
+  if (!closure || typeof closure !== 'object') return null
+  const c = closure as Record<string, unknown>
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const keys = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [])
+  return {
+    committedCount: num(c.committedCount),
+    committedPoints: num(c.committedPoints),
+    doneCount: num(c.doneCount),
+    donePoints: num(c.donePoints),
+    deliveredPctCount: num(c.deliveredPctCount),
+    deliveredPctPoints: num(c.deliveredPctPoints),
+    movedToNext: keys(c.movedToNext),
+    movedToBacklog: keys(c.movedToBacklog),
+    comment: typeof c.comment === 'string' && c.comment.trim() ? c.comment : null,
+    closedAt: typeof c.closedAt === 'string' ? c.closedAt : '',
+  }
+}
 
 export type SprintItemRow = Pick<
   Tables['work_items']['Row'],
@@ -22,7 +58,7 @@ export type SprintItemRow = Pick<
   | 'story_points' | 'assignee_id' | 'epic_id' | 'is_blocked' | 'project_id'
 >
 
-const SPRINT_FIELDS = 'id, project_id, name, goal, state, start_date, end_date, velocity, completed_at'
+const SPRINT_FIELDS = 'id, project_id, name, goal, state, start_date, end_date, velocity, completed_at, metadata'
 const ITEM_FIELDS =
   'id, key, title, type, status, priority, sprint_id, story_points, assignee_id, epic_id, is_blocked, project_id'
 
@@ -158,6 +194,7 @@ export interface CompleteSprintResult {
   doneCount: number
   movedToNext: number
   movedToBacklog: number
+  closure: SprintClosure
   /** true when items asked for 'next-sprint' but no planned sprint existed. */
   fellBackToBacklog: boolean
   destinationSprint: SprintRow | null
@@ -171,6 +208,7 @@ export interface CompleteSprintResult {
 export async function completeSprint(
   sprintId: string,
   decisions: SprintItemDecision[],
+  comment?: string,
   actorName = 'Sistema',
 ): Promise<CompleteSprintResult> {
   const sprintRes = await supabase.from('sprints').select(SPRINT_FIELDS)
@@ -183,6 +221,12 @@ export async function completeSprint(
   const done = items.filter(i => i.status === 'done')
   const remaining = items.filter(i => i.status !== 'done')
   const velocity = done.reduce((sum, i) => sum + Number(i.story_points ?? 0), 0)
+
+  // Snapshot taken BEFORE any item leaves the sprint.
+  const committedCount = items.length
+  const committedPoints = items.reduce((sum, i) => sum + Number(i.story_points ?? 0), 0)
+  const donePoints = velocity
+  const pct = (part: number, whole: number) => (whole > 0 ? Math.round((part / whole) * 100) : 0)
 
   const decisionBy = new Map(decisions.map(d => [d.workItemId, d.destination]))
   const wantsNext = remaining.filter(i => (decisionBy.get(i.id) ?? 'backlog') === 'next-sprint')
@@ -242,8 +286,30 @@ export async function completeSprint(
   }
 
   const completedAt = new Date().toISOString()
+  const closure: SprintClosure = {
+    committedCount,
+    committedPoints,
+    doneCount: done.length,
+    donePoints,
+    deliveredPctCount: pct(done.length, committedCount),
+    deliveredPctPoints: pct(donePoints, committedPoints),
+    movedToNext: toNext.map(i => i.key),
+    movedToBacklog: toBacklog.map(i => i.key),
+    comment: comment?.trim() ? comment.trim() : null,
+    closedAt: completedAt,
+  }
+  const existingMeta =
+    sprint.metadata && typeof sprint.metadata === 'object' && !Array.isArray(sprint.metadata)
+      ? (sprint.metadata as Record<string, unknown>)
+      : {}
+
   const closeRes = await supabase.from('sprints')
-    .update({ state: 'completed', velocity, completed_at: completedAt })
+    .update({
+      state: 'completed',
+      velocity,
+      completed_at: completedAt,
+      metadata: { ...existingMeta, closure } as unknown as Tables['sprints']['Update']['metadata'],
+    })
     .eq('id', sprintId).eq('tenant_id', DEFAULT_TENANT_ID)
   if (closeRes.error) throw new Error(closeRes.error.message)
 
@@ -254,13 +320,20 @@ export async function completeSprint(
       velocity,
       completed_at: completedAt,
       done_items: done.length,
+      committed_count: committedCount,
+      committed_points: committedPoints,
+      done_points: donePoints,
+      delivered_pct_count: closure.deliveredPctCount,
+      delivered_pct_points: closure.deliveredPctPoints,
       moved_to_next: toNext.length,
       moved_to_backlog: toBacklog.length,
       next_sprint: target ? target.name : null,
+      comment: closure.comment,
     })
 
   return {
     velocity,
+    closure,
     doneCount: done.length,
     movedToNext: toNext.length,
     movedToBacklog: toBacklog.length,
