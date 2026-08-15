@@ -105,10 +105,10 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     boards[0] ?? null
 
   if (!board) {
-    return { board: null, boards, columns: [], items: [], sprints: [], epics: [], profiles: [] }
+    return { board: null, project: null, boards, columns: [], items: [], sprints: [], epics: [], profiles: [] }
   }
 
-  const [columnsRes, statusesRes, itemsRes, sprintsRes, epicsRes, profilesRes] = await Promise.all([
+  const [columnsRes, statusesRes, itemsRes, sprintsRes, epicsRes, profilesRes, projectRes] = await Promise.all([
     supabase.from('board_columns').select('id, board_id, name, category, position, wip_limit')
       .eq('tenant_id', tid).eq('board_id', board.id).order('position'),
     supabase.from('board_column_statuses').select('board_column_id, status_key').eq('tenant_id', tid),
