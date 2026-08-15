@@ -112,7 +112,7 @@ const ROLE_NAV_MAP: Record<RoleContext, string[]> = {
   ProductManager: ['home','calendar','projects-list','boards-list','dashboard','epics','releases','reports','filters','navigator'],
   ProductOwner:   ['home','my-tasks','calendar','projects-list','boards-list','storage','list','gantt','timeline','dashboard','epics','releases','filters','navigator','reports','client','client-access','client-messages'],
   ScrumMaster:    ['home','my-tasks','calendar','projects-list','boards-list','list','gantt','timeline','filters','navigator','reports','client-messages'],
-  TechLead:       ['home','my-tasks','calendar','projects-list','boards-list','storage','list','gantt','filters','navigator','reports','client-messages'],
+  TechLead:       ['home','my-tasks','calendar','projects-list','boards-list','storage','list','gantt','timeline','filters','navigator','reports','client-messages'],
   Dev:            ['home','my-tasks','calendar','projects-list','boards-list','storage','list','filters','navigator','client-messages'],
   UX:             ['home','my-tasks','calendar','projects-list','boards-list','list','filters','navigator'],
   QA:             ['home','my-tasks','calendar','projects-list','boards-list','list','filters','navigator'],
