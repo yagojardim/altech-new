@@ -2175,12 +2175,14 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   async function handleCompleteSprint(
     decisions: { workItemId: string; destination: 'next-sprint' | 'backlog' }[],
     comment: string,
+    reason: string,
   ) {
     if (!completingSprint) return
     const sprint = completingSprint
     setCompletingSprint(null)
     try {
-      const result = await dbCompleteSprint(sprint.id, decisions, comment, activeUser.name)
+      const result = await dbCompleteSprint(sprint.id, decisions, comment, activeUser.name, reason)
+
       await loadBoard()
       const parts: string[] = []
       if (result.movedToNext > 0) parts.push(`${result.movedToNext} para ${result.destinationSprint?.name ?? 'próxima sprint'}`)
