@@ -125,7 +125,11 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     .select('id, project_id, name, color').eq('tenant_id', tid).is('archived_at', null)
   if (scoped) epicsQ = epicsQ.in('project_id', scoped)
 
-  const [items, sprints, epics, profiles, history] = await Promise.all([
+  let projectsQ = supabase.from('projects')
+    .select('id, period_start, created_at').eq('tenant_id', tid)
+  if (scoped) projectsQ = projectsQ.in('id', scoped)
+
+  const [items, sprints, epics, profiles, history, projects] = await Promise.all([
     itemsQ.returns<ItemRow[]>(),
     sprintsQ.returns<SprintRow[]>(),
     epicsQ.returns<EpicRow[]>(),
@@ -133,6 +137,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     supabase.from('item_status_history')
       .select('work_item_id, field, from_value, to_value, created_at')
       .eq('tenant_id', tid).order('created_at').returns<HistoryRow[]>(),
+    projectsQ.returns<ProjectAnchorRow[]>(),
   ])
 
   const failed = [
@@ -146,6 +151,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
   const epicRows = epics.data ?? []
   const profileRows = profiles.data ?? []
   const historyRows = history.data ?? []
+  const projectRows = projects.data ?? []
 
   const historyByItem = new Map<string, HistoryRow[]>()
   for (const h of historyRows) {
