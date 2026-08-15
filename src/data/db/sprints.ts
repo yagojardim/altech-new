@@ -16,6 +16,16 @@ export type SprintRow = Pick<
   'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity' | 'completed_at' | 'metadata'
 >
 
+/** Outcome of each committed item at sprint closure. */
+export type SprintClosureOutcome = 'done' | 'next' | 'backlog'
+
+export interface SprintClosureItem {
+  key: string
+  title: string
+  points: number
+  outcome: SprintClosureOutcome
+}
+
 /** Snapshot persisted in sprints.metadata.closure when a sprint is completed. */
 export interface SprintClosure {
   committedCount: number
@@ -26,7 +36,9 @@ export interface SprintClosure {
   deliveredPctPoints: number
   movedToNext: string[]
   movedToBacklog: string[]
+  items: SprintClosureItem[]
   comment: string | null
+  reason: string | null
   closedAt: string
 }
 
@@ -38,6 +50,25 @@ export function readSprintClosure(metadata: unknown): SprintClosure | null {
   const c = closure as Record<string, unknown>
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
   const keys = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [])
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  const items: SprintClosureItem[] = Array.isArray(c.items)
+    ? c.items.flatMap(raw => {
+        if (!raw || typeof raw !== 'object') return []
+        const r = raw as Record<string, unknown>
+        const key = typeof r.key === 'string' ? r.key : ''
+        if (!key) return []
+        const outcome: SprintClosureOutcome =
+          r.outcome === 'next' || r.outcome === 'backlog' || r.outcome === 'done'
+            ? r.outcome
+            : 'done'
+        return [{
+          key,
+          title: typeof r.title === 'string' ? r.title : '',
+          points: num(r.points),
+          outcome,
+        }]
+      })
+    : []
   return {
     committedCount: num(c.committedCount),
     committedPoints: num(c.committedPoints),
@@ -47,10 +78,13 @@ export function readSprintClosure(metadata: unknown): SprintClosure | null {
     deliveredPctPoints: num(c.deliveredPctPoints),
     movedToNext: keys(c.movedToNext),
     movedToBacklog: keys(c.movedToBacklog),
-    comment: typeof c.comment === 'string' && c.comment.trim() ? c.comment : null,
+    items,
+    comment: str(c.comment),
+    reason: str(c.reason),
     closedAt: typeof c.closedAt === 'string' ? c.closedAt : '',
   }
 }
+
 
 export type SprintItemRow = Pick<
   Tables['work_items']['Row'],
