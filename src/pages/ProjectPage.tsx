@@ -15,6 +15,8 @@ import {
 import {
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
+  readSprintClosure,
+  type SprintClosure,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
 import { generateSprintCeremonies, DEFAULT_TENANT_ID, type CeremonySlot } from '@/data/db/calendarEvents'
@@ -1706,6 +1708,49 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
   )
 }
 
+/** Closure snapshot of a completed sprint (overflow lists + comment). */
+function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
+  const [open, setOpen] = useState(false)
+  const hasOverflow = closure.movedToNext.length > 0 || closure.movedToBacklog.length > 0
+  if (!hasOverflow && !closure.comment) return null
+
+  return (
+    <div className="mb-3 rounded-lg px-3 py-2" style={{ background: S.surface2, border: `1px solid ${S.border}` }}
+      onClick={e => e.stopPropagation()}>
+      {hasOverflow && (
+        <div className="flex items-center gap-3 text-[10px]" style={{ color: S.t3 }}>
+          <span>→ Próxima sprint: <b style={{ color: S.t2 }}>{closure.movedToNext.length}</b></span>
+          <span>↩ Backlog: <b style={{ color: S.t2 }}>{closure.movedToBacklog.length}</b></span>
+          <button
+            onClick={() => setOpen(o => !o)}
+            className="ml-auto text-[10px] underline"
+            style={{ color: S.t3, background: 'transparent', border: 'none', cursor: 'pointer' }}
+          >{open ? 'ocultar' : 'ver demandas'}</button>
+        </div>
+      )}
+      {open && hasOverflow && (
+        <div className="mt-2 space-y-1">
+          {closure.movedToNext.length > 0 && (
+            <p className="text-[10px]" style={{ color: S.t3 }}>
+              → {closure.movedToNext.join(', ')}
+            </p>
+          )}
+          {closure.movedToBacklog.length > 0 && (
+            <p className="text-[10px]" style={{ color: S.t3 }}>
+              ↩ {closure.movedToBacklog.join(', ')}
+            </p>
+          )}
+        </div>
+      )}
+      {closure.comment && (
+        <p className="text-[10px] mt-2" style={{ color: S.t2 }}>
+          Comentário de encerramento: <span style={{ color: S.t3 }}>{closure.comment}</span>
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
 function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies }: {
   issues: Issue[]
@@ -1773,7 +1818,10 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
           const donePts = done.reduce((s, i) => s + i.points, 0)
           const blocked = si.filter(i => i.blocked)
           const inProg  = si.filter(i => i.status === 'in-progress' || i.status === 'in-review')
-          const pct     = total ? Math.round((donePts / total) * 100) : 0
+          const closure = sprint.state === 'completed' ? sprint.closure ?? null : null
+          const pct     = closure
+            ? (closure.committedPoints > 0 ? closure.deliveredPctPoints : closure.deliveredPctCount)
+            : total ? Math.round((donePts / total) * 100) : 0
           const vel     = sprint.velocity ?? 0
           const isOpen  = expanded.has(sprint.id)
 
@@ -1873,13 +1921,25 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                 {sprint.state !== 'planned' && (
                   <div className="mb-3">
                     <div className="flex justify-between text-[10px] mb-1" style={{ color: S.t3 }}>
-                      <span>{pct}% concluído</span>
-                      <span>{donePts}/{total}pts</span>
+                      <span>
+                        {closure
+                          ? `${pct}% entregue · ${closure.doneCount}/${closure.committedCount} demandas`
+                          : `${pct}% concluído`}
+                      </span>
+                      <span>
+                        {closure
+                          ? `${closure.donePoints}/${closure.committedPoints}pts`
+                          : `${donePts}/${total}pts`}
+                      </span>
                     </div>
                     <div className="h-1.5 rounded-full overflow-hidden" style={{ background:`${sc}20` }}>
                       <div className="h-full rounded-full transition-all" style={{ width:`${pct}%`, background:sc }} />
                     </div>
                   </div>
+                )}
+
+                {closure && (
+                  <SprintClosureSummary closure={closure} />
                 )}
 
                 <div className="flex items-center gap-3">
