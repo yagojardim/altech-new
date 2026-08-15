@@ -2332,10 +2332,14 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       const doneCount     = sprintIssues.filter(i => i.status === 'done').length
       const totalCount    = sprintIssues.length
       const remainCount   = sprintIssues.filter(i => i.status !== 'done').length
+      const remainingItems = (boardData?.items ?? [])
+        .filter(it => it.sprint_id === completingSprint.id && it.status !== 'done')
+        .map(it => ({ id: it.id, key: it.key, title: it.title }))
       return (
         <CompleteSprintModal
           sprint={completingSprint}
           stats={{ done: doneCount, total: totalCount, remaining: remainCount }}
+          remainingItems={remainingItems}
           nextSprintName={dbSprints.find(s => s.state === 'planned')?.name}
           onClose={() => setCompletingSprint(null)}
           onConfirm={m => { void handleCompleteSprint(m) }}
