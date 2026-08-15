@@ -1387,7 +1387,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
     setStarting(null)
   }
 
-  const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+  const getEpicColor = (epicId?: string) => availableEpics.find(e => e.id === epicId)?.color ?? DS.text3
 
   const backlogIssues = issues.filter(i => !i.sprint)
 
