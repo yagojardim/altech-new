@@ -440,8 +440,63 @@ export interface UnifiedHistoryEntry {
   toValue?: string | null
   action?: string
   detail?: string
+  /** Resumo legível pronto para exibição. */
+  summary?: string
   /** true quando o evento veio do épico e não do item. */
   fromEpic?: boolean
+}
+
+const PT_FIELD: Record<string, string> = {
+  status: 'status', title: 'título', description: 'descrição', priority: 'prioridade',
+  severity: 'severidade', assignee_id: 'responsável', reporter_id: 'reporter',
+  story_points: 'estimativa', due_date: 'prazo', start_date: 'data de início',
+  sprint_id: 'sprint', epic_id: 'épico', fix_version: 'versão',
+}
+
+function pick(v: unknown, ...keys: string[]): string | undefined {
+  if (v == null) return undefined
+  if (typeof v !== 'object') return String(v)
+  const obj = v as Record<string, unknown>
+  for (const k of keys) {
+    const val = obj[k]
+    if (val != null && val !== '') return String(val)
+  }
+  const first = Object.values(obj).find(x => x != null && x !== '')
+  return first == null ? undefined : String(first)
+}
+
+/** Resumo legível de um evento de auditoria a partir de action + before/after. */
+function auditSummary(action: string, before: unknown, after: unknown): string {
+  const a = pick(after)
+  const b = pick(before)
+  switch (action) {
+    case 'work_item.created': return 'Criou a demanda'
+    case 'work_item.priority_updated': return `Alterou a prioridade de ${b ?? '—'} para ${a ?? '—'}`
+    case 'work_item.status_updated': return `Moveu de ${b ?? '—'} para ${a ?? '—'}`
+    case 'work_item.moved': return `Moveu de ${b ?? '—'} para ${a ?? '—'}`
+    case 'work_item.epic_id_updated':
+    case 'work_item.epic_linked': return a ? `Alterou o épico para ${a}` : 'Alterou o épico'
+    case 'work_item.due_date_updated': return `Alterou a data (Gantt) para ${a ?? '—'}`
+    case 'work_item.start_date_updated': return `Alterou a data de início (Gantt) para ${a ?? '—'}`
+    case 'work_item.dependency_added': return `Vinculou dependência ${pick(after, 'target', 'key', 'target_key') ?? ''}`.trim()
+    case 'work_item.subtask_added': return `Adicionou subtarefa ${pick(after, 'key', 'title') ?? ''}`.trim()
+    case 'work_item.assignee_id':
+    case 'work_item.assignee_updated': return `Alterou o responsável para ${a ?? '—'}`
+    case 'work_item.title_updated': return `Alterou o título para “${a ?? '—'}”`
+    case 'work_item.description_updated': return 'Atualizou a descrição'
+    case 'work_item.labels_updated': return `Atualizou as labels${a ? `: ${a}` : ''}`
+    case 'work_item.comment_added': return 'Comentou na demanda'
+    case 'attachment_added': return `Anexou o arquivo ${pick(after, 'name') ?? ''}`.trim()
+    case 'attachment_deleted': return `Removeu o anexo ${pick(before, 'name') ?? ''}`.trim()
+    default: {
+      const m = /^(?:work_item|epic)\.(.+?)(?:_updated)?$/.exec(action)
+      const fieldKey = m?.[1] ?? action
+      const label = PT_FIELD[fieldKey] ?? fieldKey.replace(/_/g, ' ')
+      if (b && a) return `Alterou ${label} de ${b} para ${a}`
+      if (a) return `Alterou ${label} para ${a}`
+      return `Atualizou ${label}`
+    }
+  }
 }
 
 const AUDIT_ACTION_LABEL: Record<string, string> = {
