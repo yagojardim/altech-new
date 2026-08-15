@@ -27,6 +27,7 @@ export type BoardItemRow = Pick<
 >
 export type BoardEpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'key' | 'name' | 'color'>
 export type BoardProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials' | 'avatar_color'>
+export type BoardProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name'>
 
 /** A board column enriched with the statuses it maps (board_column_statuses). */
 export interface BoardColumnDef extends BoardColumnRow {
@@ -35,6 +36,7 @@ export interface BoardColumnDef extends BoardColumnRow {
 
 export interface BoardData {
   board: BoardRow | null
+  project: BoardProjectRow | null
   boards: BoardRow[]
   columns: BoardColumnDef[]
   items: BoardItemRow[]
