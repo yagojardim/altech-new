@@ -673,6 +673,14 @@ function fmtTime(iso?: string | null): string {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/** dd/mm/aaaa hh:mm — usado no histórico da demanda. */
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function toWorkItemData(d: WorkItemDetailData): WorkItemData {
   const profileById = new Map(d.profiles.map(p => [p.id, p]))
   const initials = (id?: string | null) => {
@@ -1291,10 +1299,15 @@ export function WorkItemDetail({ data: dataProp, itemId, onUpdate, onClose, mode
                     {btn.icon && <span>{btn.icon}</span>}{btn.label}
                   </button>
                 ))}
-                <button title="Histórico" onClick={openHistory}
-                  style={{ width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text3, cursor:'pointer', fontSize:14 }}
-                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border2;(e.currentTarget as HTMLButtonElement).style.background=T.bgSurface2}}
-                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.background='transparent'}}>···</button>
+                <button title="Histórico da demanda" onClick={openHistory}
+                  style={{ display:'flex', alignItems:'center', gap:5, height:28, padding:'0 10px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.text2, cursor:'pointer', fontSize:11, fontFamily:'inherit' }}
+                  onMouseEnter={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.accent;(e.currentTarget as HTMLButtonElement).style.color=T.accent}}
+                  onMouseLeave={e=>{(e.currentTarget as HTMLButtonElement).style.borderColor=T.border;(e.currentTarget as HTMLButtonElement).style.color=T.text2}}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" />
+                  </svg>
+                  Histórico
+                </button>
               </div>
 
               {/* Data error banner */}
@@ -1793,16 +1806,20 @@ function HistoryModal({ rows, onClose }: { rows: UnifiedHistoryEntry[] | null; o
           )}
           {(rows ?? []).map(ev => (
             <div key={ev.id} style={{ display:'flex', gap:10, padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
-              <div style={{ width:6, height:6, borderRadius:3, background:ev.fromEpic ? T.warn ?? T.accent : T.accent, marginTop:6, flexShrink:0 }} />
+              <div style={{ width:26, height:26, borderRadius:13, flexShrink:0, background:ev.fromEpic ? T.accentDim : T.bgSurface2, border:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, color:T.text2 }}>
+                {(ev.actorName || '?').split(' ').filter(Boolean).slice(0,2).map(w => w[0]?.toUpperCase()).join('')}
+              </div>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ margin:0, fontSize:12, color:T.text1, lineHeight:1.5 }}>
                   <strong style={{ fontWeight:600 }}>{ev.actorName}</strong>{' '}
-                  {ev.kind === 'field'
-                    ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
-                    : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
+                  {ev.summary
+                    ? <span style={{ color:T.text2 }}>{ev.summary}</span>
+                    : ev.kind === 'field'
+                      ? <>alterou <em style={{ fontStyle:'normal', color:T.text2 }}>{FIELD_LABEL[ev.field ?? ''] ?? ev.field}</em> de “{ev.fromValue || '—'}” para “{ev.toValue || '—'}”</>
+                      : <>{ev.action}{ev.detail ? <span style={{ color:T.text3 }}> — {ev.detail}</span> : null}</>}
                 </p>
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:3 }}>
-                  <span style={{ fontSize:10, color:T.text3 }}>{fmtTime(ev.createdAt)}</span>
+                  <span style={{ fontSize:10, color:T.text3 }}>{fmtDateTime(ev.createdAt)}</span>
                   {ev.fromEpic && (
                     <span style={{ fontSize:9, fontWeight:700, textTransform:'uppercase', letterSpacing:'.05em', color:T.accent, background:T.accentDim, padding:'1px 6px', borderRadius:4 }}>Épico</span>
                   )}
