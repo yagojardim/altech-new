@@ -32,6 +32,11 @@ function errMessage(err: unknown, fallback: string): string {
 /** Estado da conexão do usuário atual. Degrada para desconectado. */
 export async function getGoogleStatus(): Promise<GoogleStatus> {
   try {
+    // Sem sessão Supabase (ex.: modo inspeção/persona) a função retorna 401.
+    // Nesse caso não há conector para consultar — degrade silenciosamente.
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return { connected: false }
+
     const { data, error } = await supabase.functions.invoke('gcal-status')
     if (error) throw error
     const res = data as GoogleStatus
@@ -41,6 +46,7 @@ export async function getGoogleStatus(): Promise<GoogleStatus> {
     return { connected: false, error: 'Conector Google indisponível no momento.' }
   }
 }
+
 
 function waitForOAuthCompletion(popup: Window): Promise<void> {
   return new Promise((resolve, reject) => {
