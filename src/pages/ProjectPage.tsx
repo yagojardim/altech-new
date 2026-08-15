@@ -20,6 +20,7 @@ import {
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
 import { generateSprintCeremonies, DEFAULT_TENANT_ID, type CeremonySlot } from '@/data/db/calendarEvents'
+import { epicColor } from '@/data/db/timeline'
 import { SprintCeremoniesModal } from '@/components/SprintCeremoniesModal'
 
 
@@ -52,7 +53,9 @@ interface Issue {
   assignee: string
   dueDate:  string
   points:   number
+  epicId?:  string
   epic?:    string
+  epicColor?: string
   sprint?:  string
   blocked?: boolean
   delayed?: boolean
@@ -99,110 +102,6 @@ const _SPRINT_AUDIT: { ts: string; who: string; action: string }[] = []
 
 // BOARD_COLS and UNMAPPED_COL moved to BoardTab as INITIAL_COLS (editable per session)
 
-// ─── Sprints ──────────────────────────────────────────────────────────────────
-const SPRINTS: SprintDef[] = [
-  { id: 's13', name: 'Sprint 13', goal: 'Tokens, CI e teardown competitivo', start: '01/04', end: '14/04', state: 'completed', velocity: 22 },
-  { id: 's14', name: 'Sprint 14', goal: 'Homepage responsiva + correção de bugs críticos mobile', start: '15/04', end: '28/04', state: 'active' },
-  { id: 's15', name: 'Sprint 15', goal: '',  start: '29/04', end: '12/05', state: 'planned' },
-]
-
-// ─── Issues ───────────────────────────────────────────────────────────────────
-const INIT_ISSUES: Issue[] = [
-  // Sprint 14 (active)
-  {
-    key:'PM-101', type:'story', title:'Homepage hero — layout explorations',
-    status:'in-progress', priority:'high', labels:['Design','Hero'], assignee:'AL', dueDate:'Abr 4', points:5,
-    epic:'EP-01', sprint:'s14', reporter:'JN',
-    description:'Explorar variações de layout para o bloco hero da homepage: fullbleed, split e centered. Entregar 3 opções para revisão do PO.',
-    acceptance_criteria_count:2, comment_count:3, attachment_count:2,
-  },
-  {
-    key:'PM-102', type:'bug', title:'Login form validation falha no mobile',
-    status:'in-progress', priority:'critical', labels:['Eng'], assignee:'JN', dueDate:'Abr 3', points:3,
-    epic:'EP-02', sprint:'s14', blocked:true, severity:'critical', reporter:'CS',
-    blocked_reason:'Aguardando fix no serviço de auth — ticket #892 aberto com infra.',
-    description:'Em viewports < 480px o submit do formulário de login dispara sem validar os campos obrigatórios, enviando payload vazio para a API.',
-    evidence_count:0,
-    comments:[
-      { author:'CS', text:'Reproduzido no Chrome Mobile e Safari iOS 17. Não ocorre no Android Firefox.', when:'há 2d' },
-      { author:'JN', text:'Bloqueado pelo serviço de auth. Aguardando resposta da infra.', when:'há 1d' },
-    ],
-  },
-  {
-    key:'PM-103', type:'task', title:'Configurar Storybook para componentes',
-    status:'in-progress', priority:'medium', labels:['Eng'], assignee:'LF', dueDate:'Abr 6', points:2,
-    epic:'EP-02', sprint:'s14', reporter:'LF',
-    description:'Instalar e configurar Storybook 7 com suporte a Tailwind CSS v4 e tokens de design. Criar stories para Button, Badge e Input.',
-    acceptance_criteria_count:1, comment_count:1,
-  },
-  {
-    key:'PM-104', type:'story', title:'Breakpoints responsivos — hero + feature grid',
-    status:'in-progress', priority:'high', labels:['Design','Mobile'], assignee:'CS', dueDate:'Abr 3', points:8,
-    epic:'EP-01', sprint:'s14', delayed:true, reporter:'AL',
-    open_dependency:true,
-    acceptance_criteria_count:0,
-    description:'',
-    blocked_reason:'',
-    comments:[{ author:'AL', text:'Aguardando aprovação dos breakpoints no Figma antes de implementar.', when:'há 1d' }],
-  },
-  {
-    key:'PM-105', type:'bug', title:'Footer sobrepõe conteúdo no Safari',
-    status:'todo', priority:'medium', labels:['Eng','Web'], assignee:'NM', dueDate:'Abr 10', points:2,
-    epic:'EP-02', sprint:'s14', severity:'medium', reporter:'AL',
-    description:'No Safari 17, o footer em position:fixed sobrepõe o último bloco de conteúdo quando scroll chega ao final da página.',
-    evidence_count:1, comment_count:0,
-  },
-  {
-    key:'PM-107', type:'task', title:'Spec de nav + componente footer',
-    status:'in-review', priority:'low', labels:['Design'], assignee:'AL', dueDate:'Abr 3', points:3,
-    epic:'EP-01', sprint:'s14', reporter:'JN',
-    description:'Criar especificação de componente para o footer: tipografia, espaçamento, links e comportamento responsivo. Entregar no Figma com anotações.',
-    acceptance_criteria_count:2, comment_count:1,
-  },
-  {
-    key:'PM-108', type:'story', title:'UX study: design Northwind',
-    status:'in-review', priority:'medium', labels:['UX','SEO'], assignee:'JN', dueDate:'Abr 5', points:5,
-    epic:'EP-03', sprint:'s14', reporter:'NM',
-    description:'Teardown de UX do site Northwind: navigation, CTAs, onboarding flow e tratamento de erros. Deliverable: deck de insights com printscreens anotados.',
-    acceptance_criteria_count:1, comment_count:2,
-  },
-  // Sprint 15 (planned) — RULE 1: not overwritten by board actions
-  {
-    key:'PM-106', type:'story', title:'Copywriting da página de preços v2',
-    status:'backlog', priority:'high', labels:['Content'], assignee:'NM', dueDate:'Abr 22', points:5,
-    epic:'EP-03', sprint:'s15', reporter:'RM',
-    description:'',
-    acceptance_criteria_count:0,
-  },
-  {
-    key:'PM-109', type:'story', title:'Entrevistas com 5 clientes trial',
-    status:'backlog', priority:'medium', labels:['Research'], assignee:'JN', dueDate:'Abr 16', points:5,
-    epic:'EP-03', sprint:'s15', reporter:'NM',
-    description:'Realizar entrevistas qualitativas semi-estruturadas com clientes em período trial para identificar friction points no onboarding e razões de churn.',
-    acceptance_criteria_count:2, comment_count:1,
-  },
-  {
-    key:'PM-110', type:'task', title:'Auditoria de a11y nas páginas de marketing',
-    status:'backlog', priority:'medium', labels:['Design','Web'], assignee:'AL', dueDate:'Abr 12', points:3,
-    epic:'EP-01', sprint:'s15', reporter:'CS',
-    description:'Auditar contraste, foco de teclado, labels ARIA e semântica HTML nas 6 páginas de marketing. Usar axe-core e revisão manual.',
-    acceptance_criteria_count:1,
-  },
-  // Completed
-  { key:'PM-111', type:'story', title:'Teardown competitivo — 8 sites',              status:'done', priority:'low',    labels:['Research'], assignee:'RM', dueDate:'Mar 28', points:3, epic:'EP-03', sprint:'s13', description:'Análise de 8 sites competidores com foco em pricing, hero e onboarding.', acceptance_criteria_count:2 },
-  { key:'PM-112', type:'task',  title:'Finalizar tokens de cor + tipografia',         status:'done', priority:'medium', labels:['Brand'],    assignee:'NM', dueDate:'Mar 28', points:2, epic:'EP-01', sprint:'s13', description:'Definir e exportar tokens de design no Figma e CSS.', acceptance_criteria_count:1 },
-  { key:'PM-113', type:'task',  title:'Scaffolding do repositório + CI pipeline',     status:'done', priority:'high',   labels:['Eng'],      assignee:'LF', dueDate:'Mar 22', points:2, epic:'EP-02', sprint:'s13', description:'Setup inicial do repo com Vite, TypeScript, Tailwind e pipeline CI/CD.', acceptance_criteria_count:1 },
-  // Backlog (no sprint)
-  { key:'PM-114', type:'story',   title:'Auditoria de metadata SEO', status:'backlog', priority:'low',    labels:['SEO'],     assignee:'RM', dueDate:'Mai 5',  points:3, epic:'EP-03', description:'', acceptance_criteria_count:0 },
-  { key:'PM-115', type:'subtask', title:'Escrever copy do hero principal', status:'backlog', priority:'low', labels:['Content'], assignee:'NM', dueDate:'Abr 8', points:1, epic:'EP-01', description:'Redigir headline, subheadline e CTA do hero para 3 variações de A/B test.' },
-  { key:'PM-116', type:'feature', title:'Sistema de busca do portal', status:'backlog', priority:'medium', labels:['Eng'], assignee:'LF', dueDate:'Mai 20', points:8, epic:'EP-02', description:'Implementar busca full-text com Algolia no portal de conteúdo.', acceptance_criteria_count:3, comment_count:2 },
-]
-
-const EPICS = [
-  { id:'EP-01', key:'EP-01', label:'Website Relaunch',    color: DS.accent  },
-  { id:'EP-02', key:'EP-02', label:'Infra & Eng',         color: DS.warn    },
-  { id:'EP-03', key:'EP-03', label:'Pesquisa & Conteúdo', color: DS.purple  },
-]
 
 // ─── Shared styles ────────────────────────────────────────────────────────────
 const S = {
@@ -352,7 +251,7 @@ function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountPr
   const [endDate, setEnd]       = useState(sprint.end)
   const [goal, setGoal]         = useState(sprint.goal ?? '')
 
-  const issueCount = issueCountProp ?? INIT_ISSUES.filter(i => i.sprint === sprint.id).length
+  const issueCount = issueCountProp ?? 0
 
   return (
     <div
@@ -634,13 +533,16 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   backlog:DS.text3, todo:DS.text2, 'in-progress':DS.accent, 'in-review':DS.warn, done:DS.success,
 }
-const NAMES: Record<string, string> = {
-  AL:'Ana Lima', NM:'Natalia Moura', JN:'Julia Neves', CS:'Carlos Silva', RM:'Rafael Mendes', LF:'Lucas Ferreira',
-}
-
-function issueToWID(issue: Issue): WorkItemData {
-  const epic   = EPICS.find(e => e.id === issue.epic)
-  const sprint = SPRINTS.find(s => s.id === issue.sprint)
+function issueToWID(
+  issue: Issue,
+  availableSprints: { id: string; name: string }[],
+  availableEpics: { id: string; label: string; color: string }[],
+  availableMembers: { id: string; initials: string; name: string }[],
+): WorkItemData {
+  const epic = availableEpics.find(e => e.id === issue.epicId)
+  const sprint = availableSprints.find(s => s.id === issue.sprint)
+  const member = availableMembers.find(m => m.initials === issue.assignee)
+  const reporter = issue.reporter ? availableMembers.find(m => m.initials === issue.reporter) : undefined
   return {
     key:              issue.key,
     type:             issue.type,
@@ -649,14 +551,14 @@ function issueToWID(issue: Issue): WorkItemData {
     priority:         issue.priority,
     labels:           issue.labels,
     assigneeInitials: issue.assignee,
-    assigneeName:     NAMES[issue.assignee],
+    assigneeName:     member?.name,
     reporterInitials: issue.reporter,
-    reporterName:     issue.reporter ? NAMES[issue.reporter] : undefined,
-    epicKey:          issue.epic,
-    epicLabel:        epic?.label,
-    epicColor:        epic?.color,
+    reporterName:     reporter?.name,
+    epicKey:          issue.epicId,
+    epicLabel:        issue.epic ?? epic?.label,
+    epicColor:        issue.epicColor ?? epic?.color,
     sprintId:         issue.sprint,
-    sprintName:       sprint?.name,
+    sprintName:       sprint?.name ?? issue.sprint,
     blocked:          issue.blocked,
     blockedReason:    issue.blocked_reason,
     delayed:          issue.delayed,
@@ -665,9 +567,9 @@ function issueToWID(issue: Issue): WorkItemData {
     dueDate:          issue.dueDate,
     points:           issue.points,
     fixVersions:      issue.fix_versions ?? [],
-    availableEpics:   EPICS.map(e => ({ id: e.id, label: e.label, color: e.color })),
-    availableMembers: Object.entries(NAMES).map(([initials, name]) => ({ id: initials, initials, name })),
-    availableSprints: SPRINTS.map(s => ({ id: s.id, name: s.name })),
+    availableEpics,
+    availableMembers,
+    availableSprints,
     availableLabels:  ['Design','Web','Research','Content','Mobile','Eng','UX','SEO','Brand','Hero'],
     availableVersions:['v2.3.0','v2.4.0','v2.4.1','v2.5.0'],
     history:          issue.history ?? [],
@@ -699,24 +601,36 @@ function widToIssue(issue: Issue, updated: WorkItemData): Issue {
     blocked_reason:            updated.blockedReason,
     severity:                  updated.severity as Issue['severity'],
     description:               updated.description,
-    epic:                      updated.epicKey,
+    epicId:                    updated.epicKey,
+    epic:                      updated.epicLabel,
+    epicColor:                 updated.epicColor,
     history:                   updated.history,
     comments:                  (updated.comments ?? []).map(c => ({ author: c.author, text: c.body, when: c.time })),
     acceptance_criteria_count: updated.acItems?.length,
   }
 }
 
-function WorkItemDetailDrawer({ issue, onClose, onUpdate }: {
+function WorkItemDetailDrawer({
+  issue,
+  onClose,
+  onUpdate,
+  availableSprints,
+  availableEpics,
+  availableMembers,
+}: {
   issue: Issue
   onClose: () => void
   onUpdate: (updated: Issue) => void
+  availableSprints: { id: string; name: string }[]
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   return (
     <WorkItemDetail
       mode="drawer"
       // Board issues carry the real work_items uuid: the panel then reads and persists from Supabase.
       itemId={/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(issue.id ?? '') ? issue.id : undefined}
-      data={issueToWID(issue)}
+      data={issueToWID(issue, availableSprints, availableEpics, availableMembers)}
       onClose={onClose}
       onUpdate={updated => onUpdate(widToIssue(issue, updated))}
     />
@@ -770,7 +684,9 @@ function mapDbItem(
     assignee: initials,
     dueDate:  it.due_date ? fmtDay(it.due_date) : '',
     points:   it.story_points != null ? Number(it.story_points) : 0,
+    epicId:   it.epic_id ?? undefined,
     epic:     epic?.name,
+    epicColor: epicColor(epic?.color ?? null),
     sprint:   it.sprint_id ?? undefined,
     blocked:  it.is_blocked,
     blocked_reason: it.blocked_reason ?? undefined,
@@ -802,6 +718,7 @@ function uiStatus(dbStatus: string): IssueStatus {
 function BoardTab({
   issues, onCreateIssue, onCompleteSprint, canManageSprint, activeSprints,
   dbCols, loading, error, onMoveCard, onQuickCreate, onLocalPatch,
+  availableEpics, availableMembers,
 }: {
   issues: Issue[]
   onCreateIssue: () => void
@@ -814,6 +731,8 @@ function BoardTab({
   onMoveCard: (issue: Issue, colId: string) => Promise<void>
   onQuickCreate: (title: string, colId: string, sprintId: string) => Promise<void>
   onLocalPatch: (key: string, patch: Partial<Issue>) => void
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const { activeUser: boardUser } = useSession()
   const canDrag = can(boardUser.permissions, 'board:manage')
@@ -1005,7 +924,7 @@ function BoardTab({
         </select>
         {/* Encerrar sprint */}
         {(() => {
-          const currentSprint = (activeSprints ?? SPRINTS).find(s => s.id === activeSprint)
+          const currentSprint = activeSprints.find(s => s.id === activeSprint)
           const isActive = currentSprint?.state === 'active'
           const disabled = !canManageSprint || !isActive
           return (
@@ -1363,6 +1282,9 @@ function BoardTab({
             onLocalPatch(updated.key, updated)
             setOpenIssue(updated)
           }}
+          availableSprints={activeSprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
 
@@ -1439,13 +1361,15 @@ function BacklogRow({ issue, epicColor, onOpen }: { issue: Issue; epicColor: str
 }
 
 // ─── Backlog tab ──────────────────────────────────────────────────────────────
-function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint, onUpdateIssue }: {
+function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint, onUpdateIssue, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   canManageSprint: boolean
   onCreateIssue: () => void
   onCompleteSprint: (sprint: SprintDef) => void
   onUpdateIssue: (updated: Issue) => void
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const [collapsed, setCollapsed]       = useState<Set<string>>(new Set())
   const [startingSprint, setStarting]   = useState<SprintDef | null>(null)
@@ -1465,7 +1389,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
     setStarting(null)
   }
 
-  const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+  const getEpicColor = (epicId?: string) => availableEpics.find(e => e.id === epicId)?.color ?? DS.text3
 
   const backlogIssues = issues.filter(i => !i.sprint)
 
@@ -1618,7 +1542,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
                   ) : (
                     <div className="divide-y" style={{ borderColor: S.border }}>
                       {sprintIssues.map(issue => (
-                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
+                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epicId)} onOpen={()=>setOpenIssue(issue)} />
                       ))}
                     </div>
                   )}
@@ -1673,7 +1597,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
               ) : (
                 <div className="divide-y" style={{ borderColor: S.border }}>
                   {backlogIssues.map(issue => (
-                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
+                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epicId)} onOpen={()=>setOpenIssue(issue)} />
                   ))}
                 </div>
               )}
@@ -1702,6 +1626,9 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
             onUpdateIssue(updated)
             setOpenIssue(updated)
           }}
+          availableSprints={sprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
     </div>
@@ -1805,7 +1732,7 @@ function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure;
 
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1816,10 +1743,12 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   onCompleteSprint: (sprint: SprintDef) => void
   onGenerateCeremonies: (sprint: SprintDef) => void
   generatingCeremonies: string | null
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
-  const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+  const getEpicColor = (epicId?: string) => availableEpics.find(e => e.id === epicId)?.color ?? DS.text3
 
   function handleOpenItem(key: string) {
     const found = issues.find(i => i.key === key)
@@ -2049,7 +1978,7 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                           <span className="text-[10px] cursor-grab" style={{ color:S.t3, opacity:0.3 }} onClick={e=>e.stopPropagation()}>⠿</span>
                           <TypeIcon t={issue.type} />
                           <span className="text-[10px] font-mono w-14 flex-shrink-0" style={{ color:S.t3 }}>{issue.key}</span>
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:getEpicColor(issue.epic) }}/>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:getEpicColor(issue.epicId) }}/>
                           <span className="flex-1 text-[12px] truncate" style={{ color:S.t1 }}>{issue.title}</span>
                           {/* Status badge */}
                           <span className="w-16 text-right flex-shrink-0">
@@ -2084,6 +2013,9 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
             onUpdateIssue(updated)
             setOpenIssue(updated)
           }}
+          availableSprints={sprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
     </div>
@@ -2102,8 +2034,6 @@ interface ProjectPageProps {
 
 export default function ProjectPage({ boardId, projectId, onBackToBoards }: ProjectPageProps = {}) {
   const [tab, setTab]     = useState<Tab>('Board')
-  const [issues, setIssues]   = useState<Issue[]>(INIT_ISSUES)
-  const [sprints, setSprints] = useState<SprintDef[]>(SPRINTS)
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
@@ -2166,6 +2096,22 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     closure: readSprintClosure(s.metadata),
   })), [boardData])
 
+  const availableEpics = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    return (boardData?.epics ?? []).map(e => ({
+      id: e.id,
+      label: e.name,
+      color: epicColor(e.color),
+    }))
+  }, [boardData])
+
+  const availableMembers = useMemo<{ id: string; initials: string; name: string }[]>(() => {
+    return (boardData?.profiles ?? []).map(p => ({
+      id: p.id,
+      initials: p.avatar_initials ?? p.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase(),
+      name: p.name,
+    }))
+  }, [boardData])
+
   function patchDbIssue(key: string, patch: Partial<Issue>) {
     setDbIssues(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i))
   }
@@ -2197,7 +2143,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   }
 
 
-  const { activeUser }    = useSession()
+  const { activeUser, tenantName } = useSession()
   const canManageSprint   = can(activeUser.permissions, 'sprint:manage')
 
   // ── Cerimônias da sprint (calendar_events) ──────────────────────────────────
@@ -2225,7 +2171,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   const boardDef          = boardId ? getBoardById(boardId) : undefined
   const isArchivedBoard   = boardDef?.status === 'archived'
 
-  const activeSprint      = sprints.find(s => s.state === 'active')
+  const activeSprint      = dbSprints.find(s => s.state === 'active')
   const activeSid         = activeSprint?.id ?? 's14'
 
   // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
@@ -2269,8 +2215,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   const tabBadges: Partial<Record<Tab, number>> = {
     Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
-    Backlog: issues.filter(i => !i.sprint || i.sprint === sprints.find(s => s.state === 'planned')?.id).length,
-    Sprints: sprints.length,
+    Backlog: dbIssues.filter(i => !i.sprint || i.sprint === dbSprints.find(s => s.state === 'planned')?.id).length,
+    Sprints: dbSprints.length,
   }
 
   if (projectWithoutBoard) {
@@ -2315,11 +2261,11 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 text-[13px]">
-          <span style={{ color: S.t2 }}>Harbor Labs</span>
+          <span style={{ color: S.t2 }}>{tenantName}</span>
           <svg width="9" height="9" viewBox="0 0 9 9" fill="none" style={{ color: S.t3 }}>
             <path d="M3 2.5L5.5 4.5L3 6.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
           </svg>
-          <span className="font-semibold" style={{ color: S.t1 }}>Website Relaunch</span>
+          <span className="font-semibold" style={{ color: S.t1 }}>{boardData?.project?.name ?? '—'}</span>
         </div>
 
         {/* Tabs */}
@@ -2383,10 +2329,21 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onMoveCard={moveCard}
           onQuickCreate={quickCreateCard}
           onLocalPatch={patchDbIssue}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
       {tab === 'Backlog' && (
-        <BacklogTab issues={issues} sprints={sprints} canManageSprint={canManageSprint} onCreateIssue={()=>setQuickCreate({})} onCompleteSprint={s=>setCompletingSprint(s)} onUpdateIssue={updated=>setIssues(prev=>prev.map(i=>i.key===updated.key?updated:i))} />
+        <BacklogTab
+          issues={dbIssues}
+          sprints={dbSprints}
+          canManageSprint={canManageSprint}
+          onCreateIssue={()=>setQuickCreate({})}
+          onCompleteSprint={s=>setCompletingSprint(s)}
+          onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
+        />
       )}
       {tab === 'Sprints' && (
         <SprintsTab
@@ -2400,6 +2357,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
 
@@ -2419,7 +2378,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         defaultSprintId={quickCreate.sprintId}
         onCreate={data => {
           // Map modal output → Issue and persist
-          const sprintMatch = sprints.find(s =>
+          const sprintMatch = dbSprints.find(s =>
             quickCreate.sprintId ? s.id === quickCreate.sprintId : s.state === 'active'
           )
           const labelArr = data.labels ? String(data.labels).split(',').map((l:string)=>l.trim()).filter(Boolean) : []
@@ -2434,10 +2393,10 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
             dueDate:  '',
             points:   parseInt(String(data.points ?? '0')) || 0,
             sprint:   sprintMatch?.id ?? quickCreate.sprintId,
-            epic:     data.epic ? String(data.epic).split(' ')[0] : undefined,
+            epicId:   data.epic ? String(data.epic).split(' ')[0] : undefined,
             description: String(data.description ?? ''),
           }
-          setIssues(prev => [newIssue, ...prev])
+          setDbIssues(prev => [newIssue, ...prev])
           setToast(`Issue ${newIssue.key} criada na coluna`)
           setTimeout(() => setToast(null), 3500)
           setQuickCreate(null)

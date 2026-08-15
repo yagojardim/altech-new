@@ -27,6 +27,7 @@ export type BoardItemRow = Pick<
 >
 export type BoardEpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'key' | 'name' | 'color'>
 export type BoardProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials' | 'avatar_color'>
+export type BoardProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name'>
 
 /** A board column enriched with the statuses it maps (board_column_statuses). */
 export interface BoardColumnDef extends BoardColumnRow {
@@ -35,6 +36,7 @@ export interface BoardColumnDef extends BoardColumnRow {
 
 export interface BoardData {
   board: BoardRow | null
+  project: BoardProjectRow | null
   boards: BoardRow[]
   columns: BoardColumnDef[]
   items: BoardItemRow[]
@@ -103,10 +105,10 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     boards[0] ?? null
 
   if (!board) {
-    return { board: null, boards, columns: [], items: [], sprints: [], epics: [], profiles: [] }
+    return { board: null, project: null, boards, columns: [], items: [], sprints: [], epics: [], profiles: [] }
   }
 
-  const [columnsRes, statusesRes, itemsRes, sprintsRes, epicsRes, profilesRes] = await Promise.all([
+  const [columnsRes, statusesRes, itemsRes, sprintsRes, epicsRes, profilesRes, projectRes] = await Promise.all([
     supabase.from('board_columns').select('id, board_id, name, category, position, wip_limit')
       .eq('tenant_id', tid).eq('board_id', board.id).order('position'),
     supabase.from('board_column_statuses').select('board_column_id, status_key').eq('tenant_id', tid),
@@ -119,12 +121,14 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     supabase.from('epics').select('id, project_id, key, name, color')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null),
     supabase.from('profiles').select('id, name, avatar_initials, avatar_color').eq('tenant_id', tid),
+    supabase.from('projects').select('id, name').eq('id', board.project_id).eq('tenant_id', tid).maybeSingle(),
   ])
 
   const failed = [
     ['board_columns', columnsRes.error], ['board_column_statuses', statusesRes.error],
     ['work_items', itemsRes.error], ['sprints', sprintsRes.error],
     ['epics', epicsRes.error], ['profiles', profilesRes.error],
+    ['projects', projectRes.error],
   ].find(([, err]) => err) as [string, { message: string }] | undefined
   if (failed) throw new Error(missingTableMessage(failed[0], failed[1].message))
 
@@ -142,6 +146,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
 
   return {
     board,
+    project: projectRes.data ?? null,
     boards,
     columns,
     items: itemsRes.data ?? [],
