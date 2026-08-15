@@ -432,6 +432,21 @@ export default function GanttPage() {
   const todayMonthIdx = months.findIndex(m => m.year === new Date().getFullYear() && m.month === new Date().getMonth())
   const todayLabel = `${MONTH_ABBR[new Date().getMonth()].charAt(0)}${MONTH_ABBR[new Date().getMonth()].slice(1).toLowerCase()} ${new Date().getFullYear()}`
 
+  // Quarter bands above the month ruler (calendar quarters).
+  const quarters = useMemo(() => {
+    const nowY = new Date().getFullYear()
+    const nowQ = Math.floor(new Date().getMonth() / 3) + 1
+    const out: { key: string; label: string; span: number; current: boolean }[] = []
+    months.forEach(m => {
+      const q = Math.floor(m.month / 3) + 1
+      const key = `${m.year}-Q${q}`
+      const last = out[out.length - 1]
+      if (last && last.key === key) last.span += 1
+      else out.push({ key, label: `Q${q} ${m.year}`, span: 1, current: m.year === nowY && q === nowQ })
+    })
+    return out
+  }, [months])
+
   return (
     <div className="flex flex-col h-full overflow-hidden" style={{ background: '#080f1c' }}>
       {/* Sub-header */}
