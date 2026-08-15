@@ -15,6 +15,7 @@ import {
 import {
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
+  createSprint as dbCreateSprint,
   readSprintClosure,
   type SprintClosure,
 } from '../data/db/sprints'
@@ -2037,6 +2038,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   const [quickCreate, setQuickCreate] = useState<{colStatus?:string; sprintId?:string}|null>(null)
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
+  const [creatingSprint, setCreatingSprint] = useState(false)
   const [toast, setToast] = useState<string|null>(null)
 
   // ── Board (Kanban) — real data from Supabase ────────────────────────────
@@ -2151,8 +2153,9 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
       const column = (target?.colStatus
         ? columns.find(c => c.statuses.includes(target.colStatus!) || c.category === target.colStatus)
         : undefined) ?? columns[0]
-      const projectId = boardData?.board?.project_id ?? scopedProjectId
-      if (!projectId || !column) throw new Error('Board indisponível para criar demanda')
+      const board = boardData?.board
+      const projectId = board?.project_id ?? scopedProjectId
+      if (!projectId || !column || !board) throw new Error('Board indisponível para criar demanda')
 
       const sprintId = target?.sprintId ?? dbSprints.find(s => s.state === 'active')?.id ?? null
       const epicLabel = data.epic && data.epic !== '—' ? String(data.epic) : ''
@@ -2167,7 +2170,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
       const created = await createWorkItem({
         projectId,
-        boardId: boardData?.board?.id ?? null,
+        boardId: board.id,
         column,
         sprintId,
         epicId,
