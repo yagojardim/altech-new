@@ -320,6 +320,13 @@ export async function completeSprint(
   }
 
   const completedAt = new Date().toISOString()
+  const nextIds = new Set(toNext.map(i => i.id))
+  const closureItems: SprintClosureItem[] = items.map(i => ({
+    key: i.key,
+    title: i.title ?? '',
+    points: Number(i.story_points ?? 0),
+    outcome: i.status === 'done' ? 'done' : nextIds.has(i.id) ? 'next' : 'backlog',
+  }))
   const closure: SprintClosure = {
     committedCount,
     committedPoints,
@@ -329,9 +336,12 @@ export async function completeSprint(
     deliveredPctPoints: pct(donePoints, committedPoints),
     movedToNext: toNext.map(i => i.key),
     movedToBacklog: toBacklog.map(i => i.key),
+    items: closureItems,
     comment: comment?.trim() ? comment.trim() : null,
+    reason: reason?.trim() ? reason.trim() : null,
     closedAt: completedAt,
   }
+
   const existingMeta =
     sprint.metadata && typeof sprint.metadata === 'object' && !Array.isArray(sprint.metadata)
       ? (sprint.metadata as Record<string, unknown>)
