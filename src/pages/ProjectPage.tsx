@@ -716,6 +716,7 @@ function uiStatus(dbStatus: string): IssueStatus {
 function BoardTab({
   issues, onCreateIssue, onCompleteSprint, canManageSprint, activeSprints,
   dbCols, loading, error, onMoveCard, onQuickCreate, onLocalPatch,
+  availableEpics, availableMembers,
 }: {
   issues: Issue[]
   onCreateIssue: () => void
@@ -728,6 +729,8 @@ function BoardTab({
   onMoveCard: (issue: Issue, colId: string) => Promise<void>
   onQuickCreate: (title: string, colId: string, sprintId: string) => Promise<void>
   onLocalPatch: (key: string, patch: Partial<Issue>) => void
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const { activeUser: boardUser } = useSession()
   const canDrag = can(boardUser.permissions, 'board:manage')
