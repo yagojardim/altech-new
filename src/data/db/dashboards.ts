@@ -418,7 +418,24 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
 
   const bugs = itemRows.filter(i => i.type === 'bug' && i.status !== 'done')
 
+  // ── Métricas de entrega (lead time, vazão, cycle time, retrabalho) ─────────
+  const firstInProgress = new Map<string, string>()
+  for (const h of (history.error ? [] : (history.data ?? [])) as { work_item_id: string; created_at: string }[]) {
+    if (!firstInProgress.has(h.work_item_id)) firstInProgress.set(h.work_item_id, h.created_at)
+  }
+  const deliveryRows: DeliveryRow[] = itemRows.map(i => ({
+    projectId: i.project_id,
+    type: i.type,
+    status: i.status,
+    createdAt: i.created_at,
+    completedAt: i.completed_at,
+    firstInProgressAt: firstInProgress.get(i.id) ?? null,
+  }))
+
   return {
+    delivery: computeDeliveryMetrics(deliveryRows),
+    deliveryRows,
+
     projects: projectRows.map((p, i) => ({ id: p.id, name: p.name, color: dashProjectColor(p, i) })),
     rag,
     consolidatedPct: totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0,
