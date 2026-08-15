@@ -621,9 +621,10 @@ export function EpicBurndown({ variant = 'full', data: explicit }: ChartProps) {
         const PAD = { top: th ? 6 : 24, right: 8, bottom: th ? 4 : 28, left: th ? 4 : 36 }
         const cw = W - PAD.left - PAD.right
         const ch = H - PAD.top - PAD.bottom
-        const weeks = e.weeks.length
+        const weeks = Math.max(1, e.weeks.length)
+        const labelStep = Math.ceil(weeks / 8)
         const maxV = Math.max(1, e.max)
-        const toX = (i: number) => PAD.left + (i / (weeks - 1)) * cw
+        const toX = (i: number) => weeks === 1 ? PAD.left + cw / 2 : PAD.left + (i / (weeks - 1)) * cw
         const toY = (v: number) => PAD.top + ch - (v / maxV) * ch
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const ticks = [0, Math.round(maxV / 3), Math.round((2 * maxV) / 3), Math.round(maxV)]
@@ -631,8 +632,16 @@ export function EpicBurndown({ variant = 'full', data: explicit }: ChartProps) {
           <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
             {ticks.map(t => <line key={t} x1={PAD.left} y1={toY(t)} x2={W - PAD.right} y2={toY(t)} stroke={T.border} strokeWidth={0.5} />)}
             {e.epics.map((ep, i) => <path key={i} d={linePath(ep.data)} stroke={ep.color} strokeWidth={th ? 2.5 : 2} fill="none" />)}
-            {e.epics.map((ep, i) => ep.data.map((v, j) => <circle key={`${i}-${j}`} cx={toX(j)} cy={toY(v)} r={th ? 2.5 : 3} fill={ep.color} />))}
-            {!th && e.weeks.map((w, i) => <text key={w} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>)}
+            {e.epics.map((ep, i) => ep.data.map((v, j) => (
+              <circle key={`${i}-${j}`} cx={toX(j)} cy={toY(v)} r={th ? 2.5 : 3} fill={ep.color}>
+                <title>{`${ep.label}\n${e.bucketTitles[j] ?? e.weeks[j]} · ${v} pts restantes`}</title>
+              </circle>
+            )))}
+            {!th && e.weeks.map((w, i) => (
+              (i % labelStep === 0 || i === weeks - 1) ? (
+                <text key={`${w}-${i}`} x={toX(i)} y={H - PAD.bottom + 14} textAnchor="middle" fontSize={9} fill={T.text3}>{w}</text>
+              ) : null
+            ))}
             {!th && ticks.map((t, i) => <text key={i} x={PAD.left - 4} y={toY(t) + 4} textAnchor="end" fontSize={9} fill={T.text3}>{t}</text>)}
             {!th && (
               <g transform={`translate(${PAD.left}, ${PAD.top - 16})`}>
