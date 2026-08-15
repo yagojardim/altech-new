@@ -1156,16 +1156,22 @@ function TechLeadPanel({ onNav }: { onNav: (v: string, targetId?: string) => voi
         <WorkQueue title="Gargalos de PRs / Issues em Revisão" items={inReview} onOpen={openDrawer}
           onViewAll={() => onNav('list')} emptyMsg="Nenhum gargalo no momento." />
 
-        <SCard title="DORA Metrics" help="Quatro métricas de entrega do time: frequência de deploy, taxa de falha em mudanças, MTTR (tempo de recuperação) e lead time.">
+        <SCard
+          title="Métricas de Entrega"
+          helpTitle="Métricas de Entrega"
+          help="Indicadores calculados a partir das próprias demandas do projeto (lead time, vazão, cycle time e retrabalho). Não dependem de integração com CI/deploy."
+        >
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {dora.map(d => (
+            {entrega.map(d => (
               <div key={d.name} style={{ background: T.bgPage, borderRadius: 8, padding: '12px 14px' }}>
-                <div style={{ fontSize: 18, fontWeight: 700, color: d.alert ? T.warn : T.text1 }}>{d.value}</div>
-                <div style={{ fontSize: 10, color: T.text3, marginTop: 3 }}>{d.name}</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: d.value === '—' ? T.text3 : d.alert ? T.warn : T.success }}>{d.value}</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: T.text2, marginTop: 3 }}>{d.name}</div>
+                <div style={{ fontSize: 10, color: T.text3, marginTop: 4, lineHeight: 1.4 }}>{d.sub}</div>
               </div>
             ))}
           </div>
         </SCard>
+
 
         <ColSpan>
           <SCard title="Dívida Técnica / Saúde do Código">
