@@ -509,7 +509,16 @@ export default function TimelinePage() {
                     )
                   })}
                   {weekMarkers.map(w => (
-                    <div key={w.idx} style={{ position: 'absolute', left: w.idx * DAY_PX, top: 4, fontSize: 10, color: T.text2, fontWeight: 700, paddingLeft: 3 }}>{w.label}</div>
+                    <div
+                      key={w.idx}
+                      style={{
+                        position: 'absolute', left: w.idx * DAY_PX, top: 2, paddingLeft: 4,
+                        borderLeft: `1px solid ${T.border}`, lineHeight: 1.2, whiteSpace: 'nowrap',
+                      }}
+                    >
+                      <div style={{ fontSize: 10, color: T.text2, fontWeight: 700 }}>{w.label}</div>
+                      <div style={{ fontSize: 9, color: T.text3 }}>{w.sub}</div>
+                    </div>
                   ))}
                 </div>
 
