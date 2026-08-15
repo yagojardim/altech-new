@@ -2011,6 +2011,9 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
             onUpdateIssue(updated)
             setOpenIssue(updated)
           }}
+          availableSprints={sprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
     </div>
