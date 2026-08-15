@@ -2196,8 +2196,8 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   const tabBadges: Partial<Record<Tab, number>> = {
     Board:   dbIssues.filter(i => i.sprint === (dbSprints.find(s => s.state === 'active')?.id ?? '')).length,
-    Backlog: issues.filter(i => !i.sprint || i.sprint === sprints.find(s => s.state === 'planned')?.id).length,
-    Sprints: sprints.length,
+    Backlog: dbIssues.filter(i => !i.sprint || i.sprint === dbSprints.find(s => s.state === 'planned')?.id).length,
+    Sprints: dbSprints.length,
   }
 
   if (projectWithoutBoard) {
