@@ -39,6 +39,12 @@ export interface ReportsData {
   bugs: { label: string; color: string; val: number }[]
   createdVsResolved: {
     weeks: string[]
+    /** Rótulo longo por bucket (para tooltip): "27/07 – 02/08" ou "Ago 2025". */
+    bucketTitles: string[]
+    /** Granularidade do eixo, derivada do tempo de vida do projeto. */
+    unit: 'week' | 'month'
+    /** Início do eixo (início do projeto), ISO. */
+    axisStart: string | null
     created: number[]
     resolved: number[]
     max: number
@@ -49,7 +55,14 @@ export interface ReportsData {
   aging: { id: string; itemId: string; days: number; tag: string | null; color: string }[]
   leadCycle: { leadAvg: number; cycleAvg: number; buckets: { label: string; value: number }[] }
   health: { axes: { label: string; val: number }[]; score: number }
-  epicBurndown: { weeks: string[]; epics: { label: string; color: string; data: number[] }[]; max: number }
+  epicBurndown: {
+    weeks: string[]
+    bucketTitles: string[]
+    unit: 'week' | 'month'
+    axisStart: string | null
+    epics: { label: string; color: string; data: number[] }[]
+    max: number
+  }
   totals: { issues: number; velocity: number; leadAvg: number; bugRate: number }
 }
 
