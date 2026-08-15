@@ -19,7 +19,8 @@ import {
   type SprintClosure,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
-import { generateSprintCeremonies, DEFAULT_TENANT_ID, epicColor, type CeremonySlot } from '@/data/db/calendarEvents'
+import { generateSprintCeremonies, DEFAULT_TENANT_ID, type CeremonySlot } from '@/data/db/calendarEvents'
+import { epicColor } from '@/data/db/timeline'
 import { SprintCeremoniesModal } from '@/components/SprintCeremoniesModal'
 
 
