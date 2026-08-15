@@ -258,7 +258,7 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
     .eq('tenant_id', tid).is('archived_at', null)
   if (scoped) sprintsQ = sprintsQ.in('project_id', scoped)
 
-  const [projects, items, sprints, profiles, deps, labels] = await Promise.all([
+  const [projects, items, sprints, profiles, deps, labels, history] = await Promise.all([
     projectsQ.returns<ProjectRow[]>(),
     itemsQ.returns<ItemRow[]>(),
     sprintsQ.returns<SprintRow[]>(),
@@ -267,7 +267,11 @@ export async function fetchDashboardAggregates(projectIds?: string[]): Promise<D
     supabase.from('dependencies').select('source_id, target_id, relation_type')
       .eq('tenant_id', tid).returns<DependencyRow[]>(),
     supabase.from('work_item_labels').select('work_item_id, labels(name)').eq('tenant_id', tid),
+    supabase.from('item_status_history').select('work_item_id, to_value, created_at')
+      .eq('tenant_id', tid).eq('field', 'status').eq('to_value', 'in_progress')
+      .order('created_at', { ascending: true }),
   ])
+
 
   const failed = [
     ['projects', projects.error], ['work_items', items.error], ['sprints', sprints.error],
