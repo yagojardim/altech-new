@@ -1709,7 +1709,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 }
 
 /** Closure snapshot of a completed sprint (per-item outcome + comment + reason). */
-function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
+function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure; onOpenItem?: (key: string) => void }) {
   const [open, setOpen] = useState(false)
   const hasItems = closure.items.length > 0
   const hasOverflow = closure.movedToNext.length > 0 || closure.movedToBacklog.length > 0
@@ -1719,6 +1719,19 @@ function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
     if (outcome === 'done') return { label: 'Concluído', color: '#35C9AE', bg: 'rgba(53,201,174,0.14)' }
     if (outcome === 'next') return { label: '→ Próxima sprint', color: '#4C8DFF', bg: 'rgba(76,141,255,0.14)' }
     return { label: '↩ Backlog', color: S.t3, bg: S.surface }
+  }
+
+  const handleItemClick = (key: string) => (e: React.MouseEvent) => {
+    e.stopPropagation()
+    onOpenItem?.(key)
+  }
+
+  const handleItemKey = (key: string) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      e.stopPropagation()
+      onOpenItem?.(key)
+    }
   }
 
   return (
@@ -1741,8 +1754,17 @@ function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
         <div className="mt-2 space-y-1">
           {closure.items.map(item => {
             const b = badge(item.outcome)
+            const clickable = !!onOpenItem
             return (
-              <div key={item.key} className="flex items-center gap-2 text-[10px]">
+              <div
+                key={item.key}
+                role={clickable ? 'button' : undefined}
+                tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? handleItemClick(item.key) : undefined}
+                onKeyDown={clickable ? handleItemKey(item.key) : undefined}
+                className={`flex items-center gap-2 text-[10px] ${clickable ? 'cursor-pointer hover:opacity-80' : ''}`}
+                title={clickable ? `Abrir ${item.key}` : undefined}
+              >
                 <span style={{ color: S.t3, fontWeight: 600, minWidth: 58 }}>{item.key}</span>
                 <span className="truncate" style={{ color: S.t2, flex: 1, minWidth: 0 }}>{item.title}</span>
                 <span style={{
@@ -1798,6 +1820,11 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
   const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+
+  function handleOpenItem(key: string) {
+    const found = issues.find(i => i.key === key)
+    if (found) setOpenIssue(found)
+  }
 
   function toggleExpand(id: string) {
     setExpanded(prev => {
@@ -1970,7 +1997,7 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                 )}
 
                 {closure && (
-                  <SprintClosureSummary closure={closure} />
+                  <SprintClosureSummary closure={closure} onOpenItem={handleOpenItem} />
                 )}
 
                 <div className="flex items-center gap-3">
