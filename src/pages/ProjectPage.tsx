@@ -2077,6 +2077,22 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     closure: readSprintClosure(s.metadata),
   })), [boardData])
 
+  const availableEpics = useMemo<{ id: string; label: string; color: string }[]>(() => {
+    return (boardData?.epics ?? []).map(e => ({
+      id: e.id,
+      label: e.name,
+      color: epicColor(e.color),
+    }))
+  }, [boardData])
+
+  const availableMembers = useMemo<{ id: string; initials: string; name: string }[]>(() => {
+    return (boardData?.profiles ?? []).map(p => ({
+      id: p.id,
+      initials: p.avatar_initials ?? p.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase(),
+      name: p.name,
+    }))
+  }, [boardData])
+
   function patchDbIssue(key: string, patch: Partial<Issue>) {
     setDbIssues(prev => prev.map(i => i.key === key ? { ...i, ...patch } : i))
   }
