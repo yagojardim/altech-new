@@ -673,6 +673,14 @@ function fmtTime(iso?: string | null): string {
   return new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/** dd/mm/aaaa hh:mm — usado no histórico da demanda. */
+function fmtDateTime(iso?: string | null): string {
+  if (!iso) return ''
+  return new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+}
+
 function toWorkItemData(d: WorkItemDetailData): WorkItemData {
   const profileById = new Map(d.profiles.map(p => [p.id, p]))
   const initials = (id?: string | null) => {
