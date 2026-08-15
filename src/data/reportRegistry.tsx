@@ -364,8 +364,8 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
         const linePath = (d: number[]) => d.map((v, i) => `${i === 0 ? 'M' : 'L'} ${toX(i)} ${toY(v)}`).join(' ')
         const areaPath = (d: number[]) => linePath(d) + ` L ${toX(weeks - 1)} ${PAD.top + ch} L ${toX(0)} ${PAD.top + ch} Z`
         const ticks = [...new Set([0, Math.round(maxV / 2), Math.round(maxV)])]
-        const sumC = c.created.reduce((a, b) => a + b, 0)
-        const sumR = c.resolved.reduce((a, b) => a + b, 0)
+        const sumC = c.created.length ? c.created[c.created.length - 1] : 0
+        const sumR = c.resolved.length ? c.resolved[c.resolved.length - 1] : 0
         return (
           <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
             {ticks.map(t => (
@@ -374,6 +374,7 @@ export function CreatedVsResolved({ variant = 'full', data: explicit }: ChartPro
                 {!th && <text x={PAD.left - 5} y={toY(t) + 3} textAnchor="end" fontSize={8} fill={T.text3}>{t}</text>}
               </g>
             ))}
+            <line x1={PAD.left} y1={PAD.top + ch} x2={W - PAD.right} y2={PAD.top + ch} stroke={T.border} strokeWidth={1} />
             <path d={areaPath(c.created)} fill={T.warn} opacity={0.15} />
             <path d={areaPath(c.resolved)} fill={T.success} opacity={0.15} />
             <path d={linePath(c.created)} stroke={T.warn} strokeWidth={2} fill="none" />
@@ -843,8 +844,8 @@ export const REPORT_REGISTRY: Record<string, ReportEntry> = {
     emptyText: 'Nenhuma demanda criada ou resolvida desde o início do projeto.',
     kpi: d => {
       const c = d.createdVsResolved
-      const sumC = c.created.reduce((a, b) => a + b, 0)
-      const sumR = c.resolved.reduce((a, b) => a + b, 0)
+      const sumC = c.created.length ? c.created[c.created.length - 1] : 0
+      const sumR = c.resolved.length ? c.resolved[c.resolved.length - 1] : 0
       if (sumC === 0 && sumR === 0) return null
       return {
         value: `${sumC}/${sumR}`,
