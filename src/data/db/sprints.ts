@@ -244,6 +244,8 @@ export async function completeSprint(
   decisions: SprintItemDecision[],
   comment?: string,
   actorName = 'Sistema',
+  reason?: string,
+
 ): Promise<CompleteSprintResult> {
   const sprintRes = await supabase.from('sprints').select(SPRINT_FIELDS)
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', sprintId).maybeSingle()
