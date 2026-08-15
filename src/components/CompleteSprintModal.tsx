@@ -231,19 +231,43 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
             </div>
           )}
 
-          {/* Comment */}
+          {/* Comment (required) */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 6, display: 'block' }}>
-              Comentário de conclusão (opcional)
+              Comentário de conclusão <span style={{ color: T.warn }}>*</span>
             </label>
             <textarea
               rows={2}
               value={comment}
               onChange={e => setComment(e.target.value)}
+              onBlur={() => setTouched(true)}
               placeholder="Resumo do sprint, aprendizados..."
+              style={{
+                ...inputStyle,
+                border: `1px solid ${touched && commentMissing ? T.warn : T.border}`,
+              }}
+            />
+            {touched && commentMissing && (
+              <p style={{ fontSize: 11, color: T.warn, marginTop: 6 }}>
+                Descreva o encerramento / motivo do transbordo
+              </p>
+            )}
+          </div>
+
+          {/* Overflow reason (optional) */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 6, display: 'block' }}>
+              Motivo do transbordo (opcional)
+            </label>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Por que as demandas não foram concluídas?"
               style={inputStyle}
             />
           </div>
+
 
           {/* Velocity */}
           <div style={{
