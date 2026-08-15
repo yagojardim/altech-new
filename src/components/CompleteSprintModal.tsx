@@ -311,19 +311,22 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
           >Cancelar</button>
           <button
             onClick={handleConfirm}
+            disabled={commentMissing}
+            title={commentMissing ? 'Descreva o encerramento / motivo do transbordo' : undefined}
             style={{
               padding: '9px 20px',
               borderRadius: 8,
               border: 'none',
-              background: T.warn,
-              color: '#fff',
+              background: commentMissing ? T.bgSurface2 : T.warn,
+              color: commentMissing ? T.text3 : '#fff',
               fontSize: 13,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: commentMissing ? 'not-allowed' : 'pointer',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.1)' }}
+            onMouseEnter={e => { if (!commentMissing) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.1)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none' }}
           >Concluir Sprint</button>
+
         </div>
       </div>
     </div>
