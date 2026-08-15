@@ -244,6 +244,135 @@ interface StartSprintModalProps {
   issueCount?: number
 }
 
+/** Próxima segunda-feira em ISO (yyyy-mm-dd). */
+function nextMondayISO(): string {
+  const d = new Date()
+  d.setHours(12, 0, 0, 0)
+  const delta = (8 - d.getDay()) % 7 || 7
+  d.setDate(d.getDate() + delta)
+  return d.toISOString().slice(0, 10)
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00`)
+  if (Number.isNaN(d.getTime())) return iso
+  d.setDate(d.getDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+interface NewSprintModalProps {
+  suggestedName: string
+  onConfirm: (input: { name: string; goal: string; startDate: string; endDate: string }) => void
+  onClose: () => void
+}
+
+/** Modal "Nova sprint" (estilo Jira): nome, objetivo, início e duração. */
+function NewSprintModal({ suggestedName, onConfirm, onClose }: NewSprintModalProps) {
+  const [name, setName]           = useState(suggestedName)
+  const [goal, setGoal]           = useState('')
+  const [startDate, setStart]     = useState(nextMondayISO())
+  const [weeks, setWeeks]         = useState<number | 'custom'>(2)
+  const [customEnd, setCustomEnd] = useState(addDaysISO(nextMondayISO(), 13))
+
+  const endDate = weeks === 'custom' ? customEnd : addDaysISO(startDate, weeks * 7 - 1)
+  const valid = name.trim().length > 0 && !!startDate && !!endDate
+
+  const inputStyle = {
+    background: DS.bgSurface2, border: `1px solid ${DS.border}`, color: DS.text1,
+  } as const
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center fade-rise"
+      style={{ background: 'rgba(8,10,14,0.72)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="rounded-2xl overflow-hidden flex flex-col"
+        style={{ width: 520, background: DS.bgSurface, border: `1px solid ${DS.border2}`, boxShadow: DS.shadowModal }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${DS.border}` }}>
+          <div>
+            <p className="text-[15px] font-bold" style={{ color: DS.text1 }}>Nova sprint</p>
+            <p className="text-[12px] mt-0.5" style={{ color: DS.text3 }}>A sprint nasce como planejada</p>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-lg leading-none"
+            style={{ color: DS.text3 }}>×</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Nome da sprint</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="h-9 px-3 text-[13px] rounded-lg border outline-none" style={inputStyle} />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Objetivo da sprint (opcional)</label>
+            <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={2}
+              placeholder="O que esta sprint pretende entregar..."
+              className="px-3 py-2 text-[13px] rounded-lg border outline-none resize-none" style={inputStyle} />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Data de início</label>
+              <input type="date" value={startDate} onChange={e => setStart(e.target.value)}
+                className="h-9 px-3 text-[13px] rounded-lg border outline-none" style={inputStyle} />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Data de fim</label>
+              <input type="date" value={endDate} disabled={weeks !== 'custom'}
+                onChange={e => setCustomEnd(e.target.value)}
+                className="h-9 px-3 text-[13px] rounded-lg border outline-none"
+                style={{ ...inputStyle, opacity: weeks === 'custom' ? 1 : 0.7 }} />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Duração</label>
+            <div className="flex gap-2 flex-wrap">
+              {([1, 2, 3, 4] as const).map(w => (
+                <button key={w} onClick={() => setWeeks(w)}
+                  className="px-3 h-8 rounded-lg text-[12px] font-medium"
+                  style={{
+                    background: weeks === w ? `${DS.accent}22` : DS.bgSurface2,
+                    color: weeks === w ? DS.accent : DS.text2,
+                    border: `1px solid ${weeks === w ? DS.accent : DS.border}`,
+                  }}>
+                  {w} semana{w > 1 ? 's' : ''}
+                </button>
+              ))}
+              <button onClick={() => { setCustomEnd(endDate); setWeeks('custom') }}
+                className="px-3 h-8 rounded-lg text-[12px] font-medium"
+                style={{
+                  background: weeks === 'custom' ? `${DS.accent}22` : DS.bgSurface2,
+                  color: weeks === 'custom' ? DS.accent : DS.text2,
+                  border: `1px solid ${weeks === 'custom' ? DS.accent : DS.border}`,
+                }}>
+                Personalizado
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: `1px solid ${DS.border}` }}>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg text-[12px] font-semibold"
+            style={{ background: DS.bgSurface2, color: DS.text2, border: `1px solid ${DS.border}` }}>
+            Cancelar
+          </button>
+          <button
+            disabled={!valid}
+            onClick={() => onConfirm({ name: name.trim(), goal: goal.trim(), startDate, endDate })}
+            className="h-9 px-4 rounded-lg text-[12px] font-semibold text-white"
+            style={{ background: DS.accent, opacity: valid ? 1 : 0.5, cursor: valid ? 'pointer' : 'not-allowed' }}>
+            Criar sprint
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountProp }: StartSprintModalProps) {
   const [name, setName]         = useState(sprint.name)
   const [durType, setDurType]   = useState<'weeks' | 'days'>('weeks')
