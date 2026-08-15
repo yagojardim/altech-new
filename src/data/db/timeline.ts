@@ -8,7 +8,7 @@ import { T } from '../../components/ds/tokens'
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001'
 
 type Tables = Database['public']['Tables']
-export type ProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name' | 'period_start' | 'period_end' | 'status' | 'metadata' | 'created_at'>
+export type ProjectRow = Pick<Tables['projects']['Row'], 'id' | 'name' | 'period_start' | 'period_end' | 'status' | 'metadata'> & { created_at?: string | null }
 export type EpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'name' | 'color'>
 export type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'project_id' | 'name' | 'start_date' | 'end_date' | 'state'>
 export type WorkItemRow = Pick<
