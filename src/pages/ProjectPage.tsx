@@ -1821,6 +1821,11 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
   const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
 
+  function handleOpenItem(key: string) {
+    const found = issues.find(i => i.key === key)
+    if (found) setOpenIssue(found)
+  }
+
   function toggleExpand(id: string) {
     setExpanded(prev => {
       const n = new Set(prev)
