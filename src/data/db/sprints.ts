@@ -148,21 +148,29 @@ export async function startSprint(
   return data as SprintRow
 }
 
+export interface SprintItemDecision {
+  workItemId: string
+  destination: 'next-sprint' | 'backlog'
+}
+
 export interface CompleteSprintResult {
   velocity: number
   doneCount: number
-  movedCount: number
-  destination: 'next-sprint' | 'backlog'
+  movedToNext: number
+  movedToBacklog: number
+  /** true when items asked for 'next-sprint' but no planned sprint existed. */
+  fellBackToBacklog: boolean
   destinationSprint: SprintRow | null
 }
 
 /**
  * Closes a sprint: computes the velocity from the 'done' items, marks it completed
- * and really moves the unfinished items to the next planned sprint or to the backlog.
+ * and moves each unfinished item to the destination chosen for it (next planned
+ * sprint or backlog).
  */
 export async function completeSprint(
   sprintId: string,
-  moveRemaining: 'next-sprint' | 'backlog',
+  decisions: SprintItemDecision[],
   actorName = 'Sistema',
 ): Promise<CompleteSprintResult> {
   const sprintRes = await supabase.from('sprints').select(SPRINT_FIELDS)
@@ -176,32 +184,45 @@ export async function completeSprint(
   const remaining = items.filter(i => i.status !== 'done')
   const velocity = done.reduce((sum, i) => sum + Number(i.story_points ?? 0), 0)
 
+  const decisionBy = new Map(decisions.map(d => [d.workItemId, d.destination]))
+  const wantsNext = remaining.filter(i => (decisionBy.get(i.id) ?? 'backlog') === 'next-sprint')
+
   // Next planned sprint of the same project (by start date).
   let target: SprintRow | null = null
-  if (moveRemaining === 'next-sprint') {
+  if (wantsNext.length > 0) {
     const planned = (await listSprints(sprint.project_id)).filter(
       s => s.id !== sprintId && normalizeState(s.state) === 'planned',
     )
     target = planned[0] ?? null
   }
-  const destination: 'next-sprint' | 'backlog' = target ? 'next-sprint' : 'backlog'
+  const fellBackToBacklog = wantsNext.length > 0 && !target
+
+  const toNext = target ? wantsNext : []
+  const toNextIds = new Set(toNext.map(i => i.id))
+  const toBacklog = remaining.filter(i => !toNextIds.has(i.id))
 
   if (remaining.length > 0) {
     const ids = remaining.map(i => i.id)
 
-    const updateRes = await supabase.from('work_items')
-      .update({ sprint_id: target?.id ?? null })
-      .in('id', ids).eq('tenant_id', DEFAULT_TENANT_ID)
-    if (updateRes.error) throw new Error(updateRes.error.message)
+    if (toBacklog.length > 0) {
+      const res = await supabase.from('work_items').update({ sprint_id: null })
+        .in('id', toBacklog.map(i => i.id)).eq('tenant_id', DEFAULT_TENANT_ID)
+      if (res.error) throw new Error(res.error.message)
+    }
+    if (target && toNext.length > 0) {
+      const res = await supabase.from('work_items').update({ sprint_id: target.id })
+        .in('id', toNext.map(i => i.id)).eq('tenant_id', DEFAULT_TENANT_ID)
+      if (res.error) throw new Error(res.error.message)
+    }
 
-    // Keep sprint_items in sync with the move.
+    // Keep sprint_items in sync with the moves.
     const delRes = await supabase.from('sprint_items').delete()
       .eq('tenant_id', DEFAULT_TENANT_ID).eq('sprint_id', sprintId).in('work_item_id', ids)
     if (delRes.error) throw new Error(delRes.error.message)
 
-    if (target) {
+    if (target && toNext.length > 0) {
       const insRes = await supabase.from('sprint_items').insert(
-        ids.map(id => ({ tenant_id: DEFAULT_TENANT_ID, sprint_id: target.id, work_item_id: id })),
+        toNext.map(i => ({ tenant_id: DEFAULT_TENANT_ID, sprint_id: target.id, work_item_id: i.id })),
       )
       if (insRes.error) throw new Error(insRes.error.message)
     }
@@ -212,7 +233,7 @@ export async function completeSprint(
         pointsDelta: i.story_points == null ? null : -Number(i.story_points),
       })),
       ...(target
-        ? remaining.map(i => ({
+        ? toNext.map(i => ({
             sprintId: target.id, workItemId: i.id, event: 'added' as const,
             pointsDelta: i.story_points == null ? null : Number(i.story_points),
           }))
@@ -233,15 +254,17 @@ export async function completeSprint(
       velocity,
       completed_at: completedAt,
       done_items: done.length,
-      moved_items: remaining.length,
-      moved_to: target ? target.name : 'backlog',
+      moved_to_next: toNext.length,
+      moved_to_backlog: toBacklog.length,
+      next_sprint: target ? target.name : null,
     })
 
   return {
     velocity,
     doneCount: done.length,
-    movedCount: remaining.length,
-    destination,
+    movedToNext: toNext.length,
+    movedToBacklog: toBacklog.length,
+    fellBackToBacklog,
     destinationSprint: target,
   }
 }
