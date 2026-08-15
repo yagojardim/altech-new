@@ -10,7 +10,8 @@ interface CompleteSprintProps {
   remainingItems?: RemainingItem[]
   nextSprintName?: string
   onClose: () => void
-  onConfirm: (decisions: SprintDecision[], comment: string) => void
+  onConfirm: (decisions: SprintDecision[], comment: string, reason: string) => void
+
 }
 
 const overlay: React.CSSProperties = {
