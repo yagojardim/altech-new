@@ -250,7 +250,7 @@ function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountPr
   const [endDate, setEnd]       = useState(sprint.end)
   const [goal, setGoal]         = useState(sprint.goal ?? '')
 
-  const issueCount = issueCountProp ?? INIT_ISSUES.filter(i => i.sprint === sprint.id).length
+  const issueCount = issueCountProp ?? 0
 
   return (
     <div
