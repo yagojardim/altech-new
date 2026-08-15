@@ -43,7 +43,7 @@ export interface ReportsData {
     /** Rótulo longo por bucket (para tooltip): "27/07 – 02/08" ou "Ago 2025". */
     bucketTitles: string[]
     /** Granularidade do eixo, derivada do tempo de vida do projeto. */
-    unit: 'week' | 'month'
+    unit: 'day' | 'week' | 'month'
     /** Início do eixo (início do projeto), ISO. */
     axisStart: string | null
     created: number[]
@@ -59,7 +59,7 @@ export interface ReportsData {
   epicBurndown: {
     weeks: string[]
     bucketTitles: string[]
-    unit: 'week' | 'month'
+    unit: 'day' | 'week' | 'month'
     axisStart: string | null
     epics: { label: string; color: string; data: number[] }[]
     max: number
@@ -68,7 +68,7 @@ export interface ReportsData {
 }
 
 interface Axis {
-  unit: 'week' | 'month'
+  unit: 'day' | 'week' | 'month'
   labels: string[]
   titles: string[]
   ranges: { from: Date; to: Date }[]
@@ -98,15 +98,27 @@ function projectStartAnchor(
   return new Date(Math.min(min, now.getTime()))
 }
 
-/** Eixo do início do projeto até hoje: semanal até ~14 semanas, mensal acima disso. */
+/** Eixo do início do projeto até hoje: diário (curto), semanal (médio) ou mensal. */
 function buildAxis(anchor: Date | null, now: Date): Axis {
   const start = anchor ?? new Date(now.getTime() - 7 * 7 * DAY)
-  const spanWeeks = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (7 * DAY)))
+  const spanDays = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / DAY))
+  const spanWeeks = Math.max(1, Math.ceil(spanDays / 7))
   const ranges: { from: Date; to: Date }[] = []
   const labels: string[] = []
   const titles: string[] = []
 
-  if (spanWeeks <= 14) {
+  if (spanDays <= 21) {
+    for (let d = 0; d < spanDays; d++) {
+      const from = new Date(start.getTime() + d * DAY)
+      const to = new Date(Math.min(from.getTime() + DAY, now.getTime()))
+      ranges.push({ from, to })
+      labels.push(ddmm(from))
+      titles.push(`Dia ${d + 1} · ${ddmm(from)}`)
+    }
+    return { unit: 'day', labels, titles, ranges }
+  }
+
+  if (spanWeeks <= 16) {
     for (let w = 0; w < spanWeeks; w++) {
       const from = new Date(start.getTime() + w * 7 * DAY)
       const to = new Date(Math.min(from.getTime() + 7 * DAY, now.getTime()))
@@ -307,26 +319,36 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     }).length,
   })).filter(s => s.val > 0)
 
-  // ── Created vs resolved — eixo ancorado no início do projeto ───────────────
+  // ── Created vs resolved — série CUMULATIVA saindo do zero ─────────────────
   const anchor = projectStartAnchor(projectRows, itemRows, now)
   const axis = buildAxis(anchor, now)
-  const weeks = axis.labels
-  const weekRanges = axis.ranges
-  const created = weekRanges.map(({ from, to }) =>
-    itemRows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length)
-  const resolved = weekRanges.map(({ from, to }) =>
-    itemRows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length)
-  const cvrMax = Math.max(1, ...created, ...resolved)
-  const cvrByProject = (scoped ?? []).map(pid => {
-    const rows = itemRows.filter(i => i.project_id === pid)
+  const axisStart = anchor ?? axis.ranges[0].from
+  // Ponto inicial obrigatório (início do projeto, 0/0) + fim de cada bucket.
+  const cutoffs = [axisStart, ...axis.ranges.map(r => r.to)]
+  const weeks = [ddmm(axisStart), ...axis.labels.map((_, i) => ddmm(axis.ranges[i].to))]
+  const bucketTitles = [`Início · ${ddmm(axisStart)}`, ...axis.titles]
+
+  const cumulative = (rows: ItemRow[]) => {
+    const createdAt = rows
+      .map(i => (i.created_at ? new Date(i.created_at).getTime() : null))
+      .filter((t): t is number => t != null && !Number.isNaN(t))
+    const resolvedAt = rows
+      .map(i => doneAt(i)?.getTime() ?? null)
+      .filter((t): t is number => t != null && !Number.isNaN(t))
+      // clamp: concluídos antes do início do projeto contam já no primeiro bucket
+      .map(t => Math.max(t, axisStart.getTime() + 1))
     return {
-      projectId: pid,
-      created: weekRanges.map(({ from, to }) =>
-        rows.filter(i => i.created_at && new Date(i.created_at) > from && new Date(i.created_at) <= to).length),
-      resolved: weekRanges.map(({ from, to }) =>
-        rows.filter(i => { const d = doneAt(i); return d && d > from && d <= to }).length),
+      created: cutoffs.map((c, idx) => (idx === 0 ? 0 : createdAt.filter(t => t <= c.getTime()).length)),
+      resolved: cutoffs.map((c, idx) => (idx === 0 ? 0 : resolvedAt.filter(t => t <= c.getTime()).length)),
     }
-  })
+  }
+
+  const { created, resolved } = cumulative(itemRows)
+  const cvrMax = Math.max(1, ...created, ...resolved)
+  const cvrByProject = (scoped ?? []).map(pid => ({
+    projectId: pid,
+    ...cumulative(itemRows.filter(i => i.project_id === pid)),
+  }))
 
   // ── Workload ───────────────────────────────────────────────────────────────
   const workload = profileRows
@@ -425,7 +447,7 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     cfd: { days: cfdDays, layers: cfdLayers, max: cfdMax * 1.1 },
     bugs,
     createdVsResolved: {
-      weeks, bucketTitles: axis.titles, unit: axis.unit, axisStart: anchor ? anchor.toISOString() : null,
+      weeks, bucketTitles, unit: axis.unit, axisStart: axisStart.toISOString(),
       created, resolved, max: cvrMax * 1.2, byProject: cvrByProject,
     },
     workload,
