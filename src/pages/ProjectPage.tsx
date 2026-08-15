@@ -9,7 +9,7 @@ import { can } from '../data/permissions'
 import { WorkItemDetail, type WorkItemData } from '../components/WorkItemDetail'
 import {
   fetchBoardData, moveWorkItemToColumn, createWorkItem, columnColor,
-  PRIORITY_FROM_DB,
+  PRIORITY_FROM_DB, epicColor,
   type BoardItemRow, type BoardData,
 } from '../data/db/board'
 import {
