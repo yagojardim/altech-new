@@ -332,19 +332,15 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
   ]
   const health = { axes, score: Math.round(axes.reduce((a, b) => a + b.val, 0) / axes.length) }
 
-  // ── Epic burndown (6 weeks, top 3 epics by remaining points) ───────────────
-  const epicWeeks: string[] = []
-  for (let w = 5; w >= 0; w--) epicWeeks.push(`W${6 - w}`)
+  // ── Epic burndown — mesmo eixo ancorado no início do projeto ───────────────
   const epicSeries = epicRows.map(e => {
     const rows = itemRows.filter(i => i.epic_id === e.id)
-    const data = epicWeeks.map((_, idx) => {
-      const at = addDays(now, -(5 - idx) * 7)
-      return rows.reduce((a, i) => {
+    const data = axis.ranges.map(({ to: at }) =>
+      rows.reduce((a, i) => {
         if (i.created_at && new Date(i.created_at) > at) return a
         const dn = doneAt(i)
         return dn && dn <= at ? a : a + pts(i)
-      }, 0)
-    })
+      }, 0))
     return { label: e.name, color: epicColorFor(e.color), data, remaining: data[data.length - 1] }
   })
     .sort((a, b) => b.remaining - a.remaining)
@@ -360,12 +356,19 @@ export async function fetchReportsData(projectIds?: string[]): Promise<ReportsDa
     burndown,
     cfd: { days: cfdDays, layers: cfdLayers, max: cfdMax * 1.1 },
     bugs,
-    createdVsResolved: { weeks, created, resolved, max: cvrMax * 1.2, byProject: cvrByProject },
+    createdVsResolved: {
+      weeks, bucketTitles: axis.titles, unit: axis.unit, axisStart: anchor ? anchor.toISOString() : null,
+      created, resolved, max: cvrMax * 1.2, byProject: cvrByProject,
+    },
     workload,
     aging,
     leadCycle,
     health,
-    epicBurndown: { weeks: epicWeeks, epics: epicSeries, max: epicMax },
+    epicBurndown: {
+      weeks: axis.labels, bucketTitles: axis.titles, unit: axis.unit,
+      axisStart: anchor ? anchor.toISOString() : null,
+      epics: epicSeries, max: epicMax,
+    },
     totals: {
       issues: totalItems,
       velocity: velocitySeries.length ? velocitySeries[velocitySeries.length - 1].value : 0,
