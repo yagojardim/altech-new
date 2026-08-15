@@ -10,7 +10,7 @@ interface CompleteSprintProps {
   remainingItems?: RemainingItem[]
   nextSprintName?: string
   onClose: () => void
-  onConfirm: (decisions: SprintDecision[]) => void
+  onConfirm: (decisions: SprintDecision[], comment: string) => void
 }
 
 const overlay: React.CSSProperties = {
@@ -64,10 +64,13 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
   }
 
   function handleConfirm() {
-    onConfirm(remainingItems.map(i => ({
-      workItemId: i.id,
-      destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
-    })))
+    onConfirm(
+      remainingItems.map(i => ({
+        workItemId: i.id,
+        destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
+      })),
+      comment,
+    )
   }
 
   return (

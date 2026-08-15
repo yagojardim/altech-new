@@ -85,6 +85,7 @@ interface SprintDef {
   startDate?:  string | null
   endDate?:    string | null
   projectId?:  string | null
+  closure?:    SprintClosure | null
 }
 
 // Module-level audit log (session-persistent mock)
@@ -2044,6 +2045,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     startDate: s.start_date,
     endDate: s.end_date,
     projectId: s.project_id,
+    closure: readSprintClosure(s.metadata),
   })), [boardData])
 
   function patchDbIssue(key: string, patch: Partial<Issue>) {
@@ -2110,12 +2112,15 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
 
   // ── Sprint lifecycle — persisted in Supabase (sprints/sprint_items/
   //    sprint_scope_events/audit_logs) and re-read so Board and Timeline follow.
-  async function handleCompleteSprint(decisions: { workItemId: string; destination: 'next-sprint' | 'backlog' }[]) {
+  async function handleCompleteSprint(
+    decisions: { workItemId: string; destination: 'next-sprint' | 'backlog' }[],
+    comment: string,
+  ) {
     if (!completingSprint) return
     const sprint = completingSprint
     setCompletingSprint(null)
     try {
-      const result = await dbCompleteSprint(sprint.id, decisions, activeUser.name)
+      const result = await dbCompleteSprint(sprint.id, decisions, comment, activeUser.name)
       await loadBoard()
       const parts: string[] = []
       if (result.movedToNext > 0) parts.push(`${result.movedToNext} para ${result.destinationSprint?.name ?? 'próxima sprint'}`)
@@ -2342,7 +2347,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           remainingItems={remainingItems}
           nextSprintName={dbSprints.find(s => s.state === 'planned')?.name}
           onClose={() => setCompletingSprint(null)}
-          onConfirm={m => { void handleCompleteSprint(m) }}
+          onConfirm={(m, c) => { void handleCompleteSprint(m, c) }}
         />
       )
     })()}
