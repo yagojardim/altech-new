@@ -121,6 +121,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     supabase.from('epics').select('id, project_id, key, name, color')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null),
     supabase.from('profiles').select('id, name, avatar_initials, avatar_color').eq('tenant_id', tid),
+    supabase.from('projects').select('id, name').eq('id', board.project_id).eq('tenant_id', tid).maybeSingle(),
   ])
 
   const failed = [
