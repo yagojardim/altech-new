@@ -918,7 +918,7 @@ function BoardTab({
         </select>
         {/* Encerrar sprint */}
         {(() => {
-          const currentSprint = (activeSprints ?? SPRINTS).find(s => s.id === activeSprint)
+          const currentSprint = activeSprints.find(s => s.id === activeSprint)
           const isActive = currentSprint?.state === 'active'
           const disabled = !canManageSprint || !isActive
           return (
