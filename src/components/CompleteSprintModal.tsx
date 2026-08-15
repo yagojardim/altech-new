@@ -10,7 +10,8 @@ interface CompleteSprintProps {
   remainingItems?: RemainingItem[]
   nextSprintName?: string
   onClose: () => void
-  onConfirm: (decisions: SprintDecision[], comment: string) => void
+  onConfirm: (decisions: SprintDecision[], comment: string, reason: string) => void
+
 }
 
 const overlay: React.CSSProperties = {
@@ -56,6 +57,10 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
     Object.fromEntries(remainingItems.map(i => [i.id, hasNext ? 'next-sprint' : 'backlog'])),
   )
   const [comment, setComment] = useState('')
+  const [reason, setReason] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  const commentMissing = comment.trim().length === 0
 
   const velocity = stats.done * 3
 
@@ -64,14 +69,17 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
   }
 
   function handleConfirm() {
+    if (commentMissing) { setTouched(true); return }
     onConfirm(
       remainingItems.map(i => ({
         workItemId: i.id,
         destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
       })),
-      comment,
+      comment.trim(),
+      reason.trim(),
     )
   }
+
 
   return (
     <div style={overlay} onClick={onClose}>
@@ -223,19 +231,43 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
             </div>
           )}
 
-          {/* Comment */}
+          {/* Comment (required) */}
           <div>
             <label style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 6, display: 'block' }}>
-              Comentário de conclusão (opcional)
+              Comentário de conclusão <span style={{ color: T.warn }}>*</span>
             </label>
             <textarea
               rows={2}
               value={comment}
               onChange={e => setComment(e.target.value)}
+              onBlur={() => setTouched(true)}
               placeholder="Resumo do sprint, aprendizados..."
+              style={{
+                ...inputStyle,
+                border: `1px solid ${touched && commentMissing ? T.warn : T.border}`,
+              }}
+            />
+            {touched && commentMissing && (
+              <p style={{ fontSize: 11, color: T.warn, marginTop: 6 }}>
+                Descreva o encerramento / motivo do transbordo
+              </p>
+            )}
+          </div>
+
+          {/* Overflow reason (optional) */}
+          <div>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.text2, marginBottom: 6, display: 'block' }}>
+              Motivo do transbordo (opcional)
+            </label>
+            <textarea
+              rows={2}
+              value={reason}
+              onChange={e => setReason(e.target.value)}
+              placeholder="Por que as demandas não foram concluídas?"
               style={inputStyle}
             />
           </div>
+
 
           {/* Velocity */}
           <div style={{
@@ -279,19 +311,22 @@ export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSp
           >Cancelar</button>
           <button
             onClick={handleConfirm}
+            disabled={commentMissing}
+            title={commentMissing ? 'Descreva o encerramento / motivo do transbordo' : undefined}
             style={{
               padding: '9px 20px',
               borderRadius: 8,
               border: 'none',
-              background: T.warn,
-              color: '#fff',
+              background: commentMissing ? T.bgSurface2 : T.warn,
+              color: commentMissing ? T.text3 : '#fff',
               fontSize: 13,
               fontWeight: 600,
-              cursor: 'pointer',
+              cursor: commentMissing ? 'not-allowed' : 'pointer',
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.1)' }}
+            onMouseEnter={e => { if (!commentMissing) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.1)' }}
             onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.filter = 'none' }}
           >Concluir Sprint</button>
+
         </div>
       </div>
     </div>

@@ -16,6 +16,16 @@ export type SprintRow = Pick<
   'id' | 'project_id' | 'name' | 'goal' | 'state' | 'start_date' | 'end_date' | 'velocity' | 'completed_at' | 'metadata'
 >
 
+/** Outcome of each committed item at sprint closure. */
+export type SprintClosureOutcome = 'done' | 'next' | 'backlog'
+
+export interface SprintClosureItem {
+  key: string
+  title: string
+  points: number
+  outcome: SprintClosureOutcome
+}
+
 /** Snapshot persisted in sprints.metadata.closure when a sprint is completed. */
 export interface SprintClosure {
   committedCount: number
@@ -26,7 +36,9 @@ export interface SprintClosure {
   deliveredPctPoints: number
   movedToNext: string[]
   movedToBacklog: string[]
+  items: SprintClosureItem[]
   comment: string | null
+  reason: string | null
   closedAt: string
 }
 
@@ -38,6 +50,25 @@ export function readSprintClosure(metadata: unknown): SprintClosure | null {
   const c = closure as Record<string, unknown>
   const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
   const keys = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [])
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  const items: SprintClosureItem[] = Array.isArray(c.items)
+    ? c.items.flatMap(raw => {
+        if (!raw || typeof raw !== 'object') return []
+        const r = raw as Record<string, unknown>
+        const key = typeof r.key === 'string' ? r.key : ''
+        if (!key) return []
+        const outcome: SprintClosureOutcome =
+          r.outcome === 'next' || r.outcome === 'backlog' || r.outcome === 'done'
+            ? r.outcome
+            : 'done'
+        return [{
+          key,
+          title: typeof r.title === 'string' ? r.title : '',
+          points: num(r.points),
+          outcome,
+        }]
+      })
+    : []
   return {
     committedCount: num(c.committedCount),
     committedPoints: num(c.committedPoints),
@@ -47,10 +78,13 @@ export function readSprintClosure(metadata: unknown): SprintClosure | null {
     deliveredPctPoints: num(c.deliveredPctPoints),
     movedToNext: keys(c.movedToNext),
     movedToBacklog: keys(c.movedToBacklog),
-    comment: typeof c.comment === 'string' && c.comment.trim() ? c.comment : null,
+    items,
+    comment: str(c.comment),
+    reason: str(c.reason),
     closedAt: typeof c.closedAt === 'string' ? c.closedAt : '',
   }
 }
+
 
 export type SprintItemRow = Pick<
   Tables['work_items']['Row'],
@@ -210,6 +244,8 @@ export async function completeSprint(
   decisions: SprintItemDecision[],
   comment?: string,
   actorName = 'Sistema',
+  reason?: string,
+
 ): Promise<CompleteSprintResult> {
   const sprintRes = await supabase.from('sprints').select(SPRINT_FIELDS)
     .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', sprintId).maybeSingle()
@@ -286,6 +322,13 @@ export async function completeSprint(
   }
 
   const completedAt = new Date().toISOString()
+  const nextIds = new Set(toNext.map(i => i.id))
+  const closureItems: SprintClosureItem[] = items.map(i => ({
+    key: i.key,
+    title: i.title ?? '',
+    points: Number(i.story_points ?? 0),
+    outcome: i.status === 'done' ? 'done' : nextIds.has(i.id) ? 'next' : 'backlog',
+  }))
   const closure: SprintClosure = {
     committedCount,
     committedPoints,
@@ -295,9 +338,12 @@ export async function completeSprint(
     deliveredPctPoints: pct(donePoints, committedPoints),
     movedToNext: toNext.map(i => i.key),
     movedToBacklog: toBacklog.map(i => i.key),
+    items: closureItems,
     comment: comment?.trim() ? comment.trim() : null,
+    reason: reason?.trim() ? reason.trim() : null,
     closedAt: completedAt,
   }
+
   const existingMeta =
     sprint.metadata && typeof sprint.metadata === 'object' && !Array.isArray(sprint.metadata)
       ? (sprint.metadata as Record<string, unknown>)
@@ -329,6 +375,9 @@ export async function completeSprint(
       moved_to_backlog: toBacklog.length,
       next_sprint: target ? target.name : null,
       comment: closure.comment,
+      reason: closure.reason,
+      items: closure.items.map(i => `${i.key}:${i.outcome}:${i.points}`).join(', '),
+
     })
 
   return {

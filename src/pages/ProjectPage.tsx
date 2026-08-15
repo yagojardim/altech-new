@@ -1708,48 +1708,79 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
   )
 }
 
-/** Closure snapshot of a completed sprint (overflow lists + comment). */
+/** Closure snapshot of a completed sprint (per-item outcome + comment + reason). */
 function SprintClosureSummary({ closure }: { closure: SprintClosure }) {
   const [open, setOpen] = useState(false)
+  const hasItems = closure.items.length > 0
   const hasOverflow = closure.movedToNext.length > 0 || closure.movedToBacklog.length > 0
-  if (!hasOverflow && !closure.comment) return null
+  if (!hasItems && !hasOverflow && !closure.comment && !closure.reason) return null
+
+  const badge = (outcome: 'done' | 'next' | 'backlog') => {
+    if (outcome === 'done') return { label: 'Concluído', color: '#35C9AE', bg: 'rgba(53,201,174,0.14)' }
+    if (outcome === 'next') return { label: '→ Próxima sprint', color: '#4C8DFF', bg: 'rgba(76,141,255,0.14)' }
+    return { label: '↩ Backlog', color: S.t3, bg: S.surface }
+  }
 
   return (
     <div className="mb-3 rounded-lg px-3 py-2" style={{ background: S.surface2, border: `1px solid ${S.border}` }}
       onClick={e => e.stopPropagation()}>
-      {hasOverflow && (
-        <div className="flex items-center gap-3 text-[10px]" style={{ color: S.t3 }}>
-          <span>→ Próxima sprint: <b style={{ color: S.t2 }}>{closure.movedToNext.length}</b></span>
-          <span>↩ Backlog: <b style={{ color: S.t2 }}>{closure.movedToBacklog.length}</b></span>
+      <div className="flex items-center gap-3 text-[10px]" style={{ color: S.t3 }}>
+        <span>✓ Concluídas: <b style={{ color: S.t2 }}>{closure.doneCount}</b></span>
+        <span>→ Próxima sprint: <b style={{ color: S.t2 }}>{closure.movedToNext.length}</b></span>
+        <span>↩ Backlog: <b style={{ color: S.t2 }}>{closure.movedToBacklog.length}</b></span>
+        {(hasItems || hasOverflow) && (
           <button
             onClick={() => setOpen(o => !o)}
             className="ml-auto text-[10px] underline"
             style={{ color: S.t3, background: 'transparent', border: 'none', cursor: 'pointer' }}
           >{open ? 'ocultar' : 'ver demandas'}</button>
+        )}
+      </div>
+
+      {open && hasItems && (
+        <div className="mt-2 space-y-1">
+          {closure.items.map(item => {
+            const b = badge(item.outcome)
+            return (
+              <div key={item.key} className="flex items-center gap-2 text-[10px]">
+                <span style={{ color: S.t3, fontWeight: 600, minWidth: 58 }}>{item.key}</span>
+                <span className="truncate" style={{ color: S.t2, flex: 1, minWidth: 0 }}>{item.title}</span>
+                <span style={{
+                  color: b.color, background: b.bg, borderRadius: 6,
+                  padding: '2px 6px', fontWeight: 600, whiteSpace: 'nowrap',
+                }}>{b.label}</span>
+              </div>
+            )
+          })}
         </div>
       )}
-      {open && hasOverflow && (
+
+      {/* Fallback for older closures without the per-item snapshot */}
+      {open && !hasItems && hasOverflow && (
         <div className="mt-2 space-y-1">
           {closure.movedToNext.length > 0 && (
-            <p className="text-[10px]" style={{ color: S.t3 }}>
-              → {closure.movedToNext.join(', ')}
-            </p>
+            <p className="text-[10px]" style={{ color: S.t3 }}>→ {closure.movedToNext.join(', ')}</p>
           )}
           {closure.movedToBacklog.length > 0 && (
-            <p className="text-[10px]" style={{ color: S.t3 }}>
-              ↩ {closure.movedToBacklog.join(', ')}
-            </p>
+            <p className="text-[10px]" style={{ color: S.t3 }}>↩ {closure.movedToBacklog.join(', ')}</p>
           )}
         </div>
       )}
+
       {closure.comment && (
         <p className="text-[10px] mt-2" style={{ color: S.t2 }}>
           Comentário de encerramento: <span style={{ color: S.t3 }}>{closure.comment}</span>
         </p>
       )}
+      {closure.reason && (
+        <p className="text-[10px] mt-1" style={{ color: S.t2 }}>
+          Motivo do transbordo: <span style={{ color: S.t3 }}>{closure.reason}</span>
+        </p>
+      )}
     </div>
   )
 }
+
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
 function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies }: {
@@ -2175,12 +2206,14 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   async function handleCompleteSprint(
     decisions: { workItemId: string; destination: 'next-sprint' | 'backlog' }[],
     comment: string,
+    reason: string,
   ) {
     if (!completingSprint) return
     const sprint = completingSprint
     setCompletingSprint(null)
     try {
-      const result = await dbCompleteSprint(sprint.id, decisions, comment, activeUser.name)
+      const result = await dbCompleteSprint(sprint.id, decisions, comment, activeUser.name, reason)
+
       await loadBoard()
       const parts: string[] = []
       if (result.movedToNext > 0) parts.push(`${result.movedToNext} para ${result.destinationSprint?.name ?? 'próxima sprint'}`)
@@ -2407,7 +2440,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           remainingItems={remainingItems}
           nextSprintName={dbSprints.find(s => s.state === 'planned')?.name}
           onClose={() => setCompletingSprint(null)}
-          onConfirm={(m, c) => { void handleCompleteSprint(m, c) }}
+          onConfirm={(m, c, r) => { void handleCompleteSprint(m, c, r) }}
         />
       )
     })()}
