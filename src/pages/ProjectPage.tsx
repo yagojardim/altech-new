@@ -1540,7 +1540,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
                   ) : (
                     <div className="divide-y" style={{ borderColor: S.border }}>
                       {sprintIssues.map(issue => (
-                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
+                        <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epicId)} onOpen={()=>setOpenIssue(issue)} />
                       ))}
                     </div>
                   )}
@@ -1595,7 +1595,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
               ) : (
                 <div className="divide-y" style={{ borderColor: S.border }}>
                   {backlogIssues.map(issue => (
-                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epic)} onOpen={()=>setOpenIssue(issue)} />
+                    <BacklogRow key={issue.key} issue={issue} epicColor={getEpicColor(issue.epicId)} onOpen={()=>setOpenIssue(issue)} />
                   ))}
                 </div>
               )}
@@ -1976,7 +1976,7 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                           <span className="text-[10px] cursor-grab" style={{ color:S.t3, opacity:0.3 }} onClick={e=>e.stopPropagation()}>⠿</span>
                           <TypeIcon t={issue.type} />
                           <span className="text-[10px] font-mono w-14 flex-shrink-0" style={{ color:S.t3 }}>{issue.key}</span>
-                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:getEpicColor(issue.epic) }}/>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background:getEpicColor(issue.epicId) }}/>
                           <span className="flex-1 text-[12px] truncate" style={{ color:S.t1 }}>{issue.title}</span>
                           {/* Status badge */}
                           <span className="w-16 text-right flex-shrink-0">
