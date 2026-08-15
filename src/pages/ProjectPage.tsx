@@ -1624,6 +1624,9 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
             onUpdateIssue(updated)
             setOpenIssue(updated)
           }}
+          availableSprints={sprints}
+          availableEpics={availableEpics}
+          availableMembers={availableMembers}
         />
       )}
     </div>
