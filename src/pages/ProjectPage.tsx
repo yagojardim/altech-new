@@ -1730,7 +1730,7 @@ function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure;
 
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1741,10 +1741,12 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   onCompleteSprint: (sprint: SprintDef) => void
   onGenerateCeremonies: (sprint: SprintDef) => void
   generatingCeremonies: string | null
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const [openIssue, setOpenIssue]   = useState<Issue | null>(null)
   const [expanded, setExpanded]     = useState<Set<string>>(new Set(['s14']))
-  const getEpicColor = (epicId?: string) => EPICS.find(e => e.id === epicId)?.color ?? DS.text3
+  const getEpicColor = (epicId?: string) => availableEpics.find(e => e.id === epicId)?.color ?? DS.text3
 
   function handleOpenItem(key: string) {
     const found = issues.find(i => i.key === key)
