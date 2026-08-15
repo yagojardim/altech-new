@@ -67,6 +67,74 @@ export interface ReportsData {
   totals: { issues: number; velocity: number; leadAvg: number; bugRate: number }
 }
 
+interface Axis {
+  unit: 'week' | 'month'
+  labels: string[]
+  titles: string[]
+  ranges: { from: Date; to: Date }[]
+}
+
+const MONTH_ABBR_PT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+const ddmm = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+
+/** Início do projeto: period_start → created_at do projeto → created_at mais antigo das demandas. */
+function projectStartAnchor(
+  projects: { period_start: string | null; created_at: string | null }[],
+  items: { created_at: string | null }[],
+  now: Date,
+): Date | null {
+  const candidates: number[] = []
+  for (const p of projects) {
+    const raw = p.period_start ?? p.created_at
+    if (raw) { const t = new Date(raw).getTime(); if (!Number.isNaN(t)) candidates.push(t) }
+  }
+  if (candidates.length === 0) {
+    for (const i of items) {
+      if (i.created_at) { const t = new Date(i.created_at).getTime(); if (!Number.isNaN(t)) candidates.push(t) }
+    }
+  }
+  if (candidates.length === 0) return null
+  const min = Math.min(...candidates)
+  return new Date(Math.min(min, now.getTime()))
+}
+
+/** Eixo do início do projeto até hoje: semanal até ~14 semanas, mensal acima disso. */
+function buildAxis(anchor: Date | null, now: Date): Axis {
+  const start = anchor ?? new Date(now.getTime() - 7 * 7 * DAY)
+  const spanWeeks = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (7 * DAY)))
+  const ranges: { from: Date; to: Date }[] = []
+  const labels: string[] = []
+  const titles: string[] = []
+
+  if (spanWeeks <= 14) {
+    for (let w = 0; w < spanWeeks; w++) {
+      const from = new Date(start.getTime() + w * 7 * DAY)
+      const to = new Date(Math.min(from.getTime() + 7 * DAY, now.getTime()))
+      ranges.push({ from, to })
+      labels.push(ddmm(from))
+      titles.push(`Sem ${w + 1} · ${ddmm(from)} – ${ddmm(new Date(to.getTime() - DAY))}`)
+    }
+    return { unit: 'week', labels, titles, ranges }
+  }
+
+  let cursor = new Date(start.getFullYear(), start.getMonth(), 1)
+  while (cursor.getTime() <= now.getTime()) {
+    const next = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1)
+    const from = new Date(Math.max(cursor.getTime(), start.getTime()))
+    const to = new Date(Math.min(next.getTime(), now.getTime()))
+    ranges.push({ from, to })
+    labels.push(`${MONTH_ABBR_PT[cursor.getMonth()]}/${String(cursor.getFullYear()).slice(2)}`)
+    titles.push(`${MONTH_ABBR_PT[cursor.getMonth()]} ${cursor.getFullYear()}`)
+    cursor = next
+  }
+  if (ranges.length === 0) {
+    ranges.push({ from: start, to: now })
+    labels.push(ddmm(start))
+    titles.push(`${ddmm(start)} – ${ddmm(now)}`)
+  }
+  return { unit: 'month', labels, titles, ranges }
+}
+
 function missingTableMessage(table: string, message: string): string {
   if (/does not exist|schema cache|Could not find the table/i.test(message)) {
     return `A tabela "${table}" não existe no Supabase conectado. Rode a migration do schema canônico antes de usar os relatórios.`
