@@ -35,7 +35,8 @@ begin
   end loop;
 end $$;
 
-revoke usage on schema public from anon;
+revoke usage on schema public from public, anon;
+grant usage on schema public to authenticated, service_role;
 alter default privileges in schema public revoke execute on functions from anon;
 
 -- 3) Toda tabela com tenant_id que ficou sem policy volta ao escopo de tenant
