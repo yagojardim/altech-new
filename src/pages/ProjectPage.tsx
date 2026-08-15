@@ -1359,13 +1359,15 @@ function BacklogRow({ issue, epicColor, onOpen }: { issue: Issue; epicColor: str
 }
 
 // ─── Backlog tab ──────────────────────────────────────────────────────────────
-function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint, onUpdateIssue }: {
+function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onCompleteSprint, onUpdateIssue, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   canManageSprint: boolean
   onCreateIssue: () => void
   onCompleteSprint: (sprint: SprintDef) => void
   onUpdateIssue: (updated: Issue) => void
+  availableEpics: { id: string; label: string; color: string }[]
+  availableMembers: { id: string; initials: string; name: string }[]
 }) {
   const [collapsed, setCollapsed]       = useState<Set<string>>(new Set())
   const [startingSprint, setStarting]   = useState<SprintDef | null>(null)
