@@ -50,14 +50,24 @@ const inputStyle: React.CSSProperties = {
   fontFamily: 'inherit',
 }
 
-export function CompleteSprintModal({ sprint, stats, nextSprintName, onClose, onConfirm }: CompleteSprintProps) {
-  const [move, setMove] = useState<'next-sprint' | 'backlog'>('next-sprint')
+export function CompleteSprintModal({ sprint, stats, remainingItems = [], nextSprintName, onClose, onConfirm }: CompleteSprintProps) {
+  const hasNext = Boolean(nextSprintName)
+  const [decisions, setDecisions] = useState<Record<string, 'next-sprint' | 'backlog'>>(() =>
+    Object.fromEntries(remainingItems.map(i => [i.id, hasNext ? 'next-sprint' : 'backlog'])),
+  )
   const [comment, setComment] = useState('')
 
   const velocity = stats.done * 3
 
+  function setAll(dest: 'next-sprint' | 'backlog') {
+    setDecisions(Object.fromEntries(remainingItems.map(i => [i.id, dest])))
+  }
+
   function handleConfirm() {
-    onConfirm(move)
+    onConfirm(remainingItems.map(i => ({
+      workItemId: i.id,
+      destination: decisions[i.id] ?? (hasNext ? 'next-sprint' : 'backlog'),
+    })))
   }
 
   return (
