@@ -739,24 +739,12 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
           </button>
         </div>
 
-        {/* Filter row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: px(10), flexWrap: 'wrap', marginBottom: px(16) }}>
-          <ProjectMultiSelect projects={projects} selected={selected} onChange={onSelected} />
-          {data?.burndown.sprintName && (
-            <div style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), border: `1px solid ${T.accentBorder}`, background: T.accentDim, color: T.accent, fontSize: px(12), fontWeight: 500 }}>
-              {data.burndown.sprintName}
-            </div>
-          )}
-          {loading && !data && (
-            <span style={{ fontSize: px(12), color: T.text3 }}>Carregando agregados…</span>
-          )}
-          {kpis.map((k, i) => (
-            <div key={i} style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), background: T.bgSurface2, border: `1px solid ${T.border}`, fontSize: px(12), color: T.text2, display: 'flex', alignItems: 'center', gap: px(6) }}>
-              <span>{k.label}:</span>
-              <span style={{ fontWeight: 700, color: k.color }}>{k.value}</span>
-            </div>
-          ))}
-        </div>
+        {loading && !data && (
+          <div style={{ fontSize: px(12), color: T.text3, marginBottom: px(16) }}>
+            Carregando agregados…
+          </div>
+        )}
+
       </div>
 
       {/* ── Error banner ── */}
