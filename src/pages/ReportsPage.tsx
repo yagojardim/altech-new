@@ -2,18 +2,23 @@ import React, { useState, useRef, useEffect, type CSSProperties } from 'react'
 import { takeReportNav } from '@/lib/reportNav'
 import { T } from '../components/ds/tokens'
 import { can } from '../data/permissions'
-import { getActiveUser, MOCK_TENANT } from '../data/session'
+import { getActiveUser, MOCK_TENANT, DEFAULT_DASHBOARD_BY_ROLE, type MockUser } from '../data/session'
 import {
   ASSIGNMENT_TARGETS, getAssignment, getAllAssignments,
   upsertAssignment, removeAssignment, useDashboardAssignments,
+  hydrateAssignments,
   type AssignmentTarget,
 } from '../data/dashboardAssignments'
+import * as assignmentsApi from '../data/db/dashboardAssignments'
+import { fetchTenantPersonas } from '../data/db/tenantPersonas'
+import { Avatar } from '../components/ds/Avatar'
 import {
   REPORT_REGISTRY, REPORT_CARDS_LIST,
   ReportsDataProvider, useReportsData,
 } from '../data/reportRegistry'
 import { ProjectMultiSelect } from '../components/ds/DashboardKit'
 import { listDashboardProjects, type DashboardProjectOption } from '../data/db/dashboards'
+
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 const px = (n: number) => `${n}px`
