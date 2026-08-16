@@ -16,7 +16,8 @@ import {
 } from '../components/ds/DashboardKit'
 import {
   MOCK_TENANT, MOCK_USERS,
-  DASHBOARD_CATALOG, type MockUser, type UserScope, type DashboardType,
+  DASHBOARD_CATALOG, roleChoiceLabel,
+  type MockUser, type UserScope, type DashboardType,
 } from '../data/session'
 // MOCK_TENANT used in ProductOwnerPanel for client feed scoping
 import {
@@ -1845,27 +1846,6 @@ function UnifiedMural({ dashId, tenantId, nativeCards, onNav }: {
 
       {/* Mural toolbar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-        <button
-          onClick={() => {
-            const grid = document.getElementById(`comp-grid-${dashId}`)
-            grid?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            setTimeout(() => {
-              const addBtn = document.getElementById(`comp-grid-add-${dashId}`) as HTMLButtonElement | null
-              if (addBtn && !addBtn.disabled) addBtn.click()
-            }, 380)
-          }}
-          style={{
-            fontSize: 11, color: T.accent, background: T.accentDim,
-            border: `1px solid ${T.accentBorder}`, borderRadius: 6,
-            padding: '4px 10px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}
-        >
-          <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M5 1v8M1 5h8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          Adicionar card
-        </button>
         {totalCount > 0 && (
           <span style={{ fontSize: 10, color: T.text3 }}>{totalCount} card{totalCount !== 1 ? 's' : ''} no mural</span>
         )}
@@ -1943,6 +1923,54 @@ function InspectionSwitcher({ onUserChange }: { onUserChange: () => void }) {
                 <div style={{ fontSize: 12, color: T.text1 }}>{u.name}</div>
                 <div style={{ fontSize: 10, color: T.text3 }}>{u.role_context} · {u.assigned_dashboards.length} dash</div>
               </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Seletor de papéis (usuários multi-papel) ─────────────────────────────────
+function RoleSwitcher({ onRoleChange }: { onRoleChange: () => void }) {
+  const { availableRoles, roleChoice, setRoleChoice } = useSession()
+  const [open, setOpen] = useState(false)
+  if (availableRoles.length < 2) return null
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        fontSize: 11, color: T.text2, background: T.bgSurface,
+        border: `1px solid ${T.border}`, borderRadius: 6, padding: '4px 10px',
+        cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <span style={{ color: T.text3 }}>Papel:</span>
+        <strong style={{ color: T.text1 }}>{roleChoiceLabel(roleChoice)}</strong>
+        <span style={{ opacity: 0.5 }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 500,
+          background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: 8,
+          boxShadow: T.shadowModal, minWidth: 210, padding: 6,
+        }}>
+          <div style={{ fontSize: 10, color: T.text3, padding: '4px 10px 6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+            Meus papéis
+          </div>
+          {availableRoles.map((r, i) => (
+            <button
+              key={r}
+              onClick={() => { setRoleChoice(r); setOpen(false); onRoleChange() }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                width: '100%', padding: '7px 10px', borderRadius: 6, border: 'none',
+                cursor: 'pointer', textAlign: 'left',
+                background: r === roleChoice ? `${T.accent}14` : 'transparent',
+                color: r === roleChoice ? T.accent : T.text1, fontSize: 12,
+              }}
+            >
+              <span>{roleChoiceLabel(r)}</span>
+              {i === 0 && <span style={{ fontSize: 9, color: T.text3 }}>principal</span>}
             </button>
           ))}
         </div>
@@ -2086,7 +2114,7 @@ function DashboardHomeInner({ onNav, onInvite }: Props) {
     const s = sessionScope(user)
     setScope(s)
     setActiveDash(s?.default_dashboard.dashboard_id as DashboardType ?? null)
-  }, [rev, user.user_id])
+  }, [rev, user.user_id, user.role_context])
 
   const activeDef = activeDashId ? DASHBOARD_CATALOG[activeDashId] : null
 
@@ -2126,6 +2154,7 @@ function DashboardHomeInner({ onNav, onInvite }: Props) {
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <RoleSwitcher onRoleChange={() => { setScope(null); setActiveDash(null); setRev(r => r + 1) }} />
           {INSPECTION_MODE_ENABLED && (
             <InspectionSwitcher onUserChange={() => { setScope(null); setActiveDash(null); setRev(r => r + 1) }} />
           )}
