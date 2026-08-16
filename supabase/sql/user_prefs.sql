@@ -4,7 +4,7 @@
 create table if not exists public.user_prefs (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null,
-  user_id uuid not null,
+  user_id text not null,
   pref_key text not null,
   value jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
