@@ -124,6 +124,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [modules,  setModules]  = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState('')
+  const [homonym, setHomonym] = useState<{ name: string; email: string } | null>(null)
 
   useEffect(() => {
     let alive = true
