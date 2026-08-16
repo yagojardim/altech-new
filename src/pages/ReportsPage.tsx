@@ -16,12 +16,10 @@ import {
   REPORT_REGISTRY, REPORT_CARDS_LIST,
   ReportsDataProvider, useReportsData,
 } from '../data/reportRegistry'
-import { ProjectMultiSelect } from '../components/ds/DashboardKit'
 import { listDashboardProjects, type DashboardProjectOption } from '../data/db/dashboards'
 import { fetchAssignedProjects } from '../data/db/projects'
 import {
   useReportsGovernance, saveReportsGovernance, isCardReleased, isTenantOwner,
-  REPORTS_OPTIONAL_ROLES, REPORTS_ROLE_LABEL,
 } from '../data/db/reportsGovernance'
 
 
@@ -648,25 +646,14 @@ export default function ReportsPage() {
 
   return (
     <ReportsDataProvider projectIds={projectIds}>
-      <ReportsPageInner
-        projects={projects}
-        selected={selected}
-        onSelected={setSelected}
-        projError={projError}
-      />
+      <ReportsPageInner projError={projError} />
     </ReportsDataProvider>
   )
 }
 
-function ReportsPageInner({ projects, selected, onSelected, projError }: {
-  projects: DashboardProjectOption[]
-  selected: Set<string>
-  onSelected: (s: Set<string>) => void
-  projError: string | null
-}) {
+function ReportsPageInner({ projError }: { projError: string | null }) {
   const user      = getActiveUser()
   const canManage = can(user.permissions, 'manage:dashboard-cards') || isTenantOwner(user.permissions)
-  const isOwner   = isTenantOwner(user.permissions)
 
   const [batchOpen,  setBatchOpen] = useState(false)
   const [popCard,    setPopCard]   = useState<ReportCardDef | null>(null)
