@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { T } from './ds/tokens'
+import { roleSupportsReportsAccess, saveProfileReportsAccessByEmail } from '../data/db/reportsGovernance'
 import { MOCK_TENANT, addMockUser, type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
 import {
   derivePermissions, getCompatibleDashboards, DEFAULT_DASHBOARD,
@@ -112,6 +113,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [extraDashes, setExtraDashes] = useState<DashboardType[]>([])
 
   // Step 4 — conditional opt-ins
+  const [reportsAccess, setReportsAccess] = useState(false)
   const [optIns, setOptIns] = useState<Set<Capability>>(new Set())
   const [approvedSquads, setApprovedSquads] = useState<string[]>([])
 
@@ -131,6 +133,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   // ── Auto-configure on role select ──────────────────────────────────────────
   function selectRole(r: RoleContext) {
     setRole(r)
+    if (!roleSupportsReportsAccess(r)) setReportsAccess(false)
     setDefaultDash(DEFAULT_DASHBOARD[r])
     setExtraDashes([])
     setOptIns(new Set())
@@ -223,6 +226,9 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     }
 
     addMockUser(user)
+    if (roleSupportsReportsAccess(role)) {
+      void saveProfileReportsAccessByEmail(email.trim(), reportsAccess)
+    }
     markPasswordMustChange(newId)
     setGeneratedPwd(pwd)
     setStep(6)
@@ -443,6 +449,36 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div style={{ fontSize: 12, color: T.text2 }}>
                 Opt-ins começam desligados (menor privilégio). Capacidades travadas em ✅ são concedidas automaticamente pelo papel.
               </div>
+
+              {roleSupportsReportsAccess(role) && (
+                <div style={{
+                  padding: '13px 15px', borderRadius: 9,
+                  background: reportsAccess ? `${T.accent}0A` : T.bgPage,
+                  border: `1px solid ${reportsAccess ? T.accent : T.border}`,
+                  display: 'flex', alignItems: 'flex-start', gap: 12,
+                }}>
+                  <button
+                    onClick={() => setReportsAccess(v => !v)}
+                    style={{
+                      width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                      background: reportsAccess ? T.accent : T.border2,
+                      border: `1.5px solid ${reportsAccess ? T.accent : T.border2}`,
+                      cursor: 'pointer', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', marginTop: 1,
+                    }}
+                  >
+                    {reportsAccess && <span style={{ color: '#fff', fontSize: 10 }}>✓</span>}
+                  </button>
+                  <div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: T.text1 }}>
+                      Acesso a Relatórios e Insights
+                    </span>
+                    <div style={{ fontSize: 11, color: T.text3, marginTop: 3 }}>
+                      Libera a tela "Relatórios e Insights" no menu deste usuário.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {STEP4_CAPABILITIES.map(({ cap, label, desc }) => {
                 const vis = capabilityVisibility(role, cap)
