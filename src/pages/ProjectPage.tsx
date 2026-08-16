@@ -1625,14 +1625,8 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {editingSprint && (
-      <EditSprintModal
-        sprint={editingSprint}
-        onClose={() => setEditingSprint(null)}
-        onConfirm={input => { void handleEditSprint(input) }}
-      />
-    )}
-    {startingSprint && (
+      {startingSprint && (
+
         <StartSprintModal
           sprint={startingSprint}
           onConfirm={handleStartSprint}
