@@ -755,7 +755,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               )}
 
               {homonym && (
-                <div style={{ padding: '10px 12px', borderRadius: 7, background: `${T.warn ?? '#f5a524'}14`, border: `1px solid ${T.warn ?? '#f5a524'}50`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ padding: '10px 12px', borderRadius: 7, background: `${T.warn}14`, border: `1px solid ${T.warn}50`, display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <div style={{ fontSize: 11, color: T.text1 }}>
                     Já existe um usuário chamado <strong>{homonym.name}</strong> cadastrado (e-mail: {homonym.email}).
                     Deseja seguir com o cadastro ou modificar?
