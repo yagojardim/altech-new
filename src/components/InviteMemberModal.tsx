@@ -30,21 +30,12 @@ const INVITABLE_ROLES: { role: RoleContext; label: string; desc: string }[] = [
   { role: 'UX',             label: 'UX / UI',          desc: 'Design ativo, validações e handoffs' },
 ]
 
-const ALL_MODULES = ['board','reports','roadmap','portfolio','analytics','releases','integrations','deployments','config','team']
 const MODULE_LABELS: Record<string, string> = {
   board: 'Board & Sprint', reports: 'Relatórios', roadmap: 'Roadmap',
   portfolio: 'Portfólio / PMO', analytics: 'Analytics', releases: 'Releases',
   integrations: 'Integrações', deployments: 'Deployments', config: 'Configurações', team: 'Gestão de Time',
 }
-const PROJECTS = [
-  { id: 'proj_001', name: 'Website Relaunch' },
-  { id: 'proj_002', name: 'Infra Migration' },
-]
-const SQUADS = [
-  { id: 'squad_growth', name: 'Growth' },
-  { id: 'squad_platform', name: 'Platform' },
-  { id: 'squad_design', name: 'Design' },
-]
+
 
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('')
