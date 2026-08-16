@@ -83,13 +83,20 @@ export function getTenantSettings(): Promise<TenantSettings> {
 export function getTenantIdentity(): Promise<TenantIdentity | null> {
   return safeCall('tenant.getTenantIdentity', async () => {
     const { data, error } = await tbl('tenants')
-      .select('name, slug, slug_status, status, type, document_last4, document_verification_status')
+      .select('name, slug, slug_status, status, type, document_verification_status')
       .eq('id', DEFAULT_TENANT_ID).maybeSingle()
     if (error) throw error
     if (!data) return null
-    return data as TenantIdentity
+    // Dados de documento só são liberados a admins do tenant (RPC SECURITY DEFINER).
+    const { data: doc } = await (supabase as any).rpc('get_tenant_document_info')
+    const docRow = Array.isArray(doc) ? doc[0] : doc
+    return {
+      ...(data as Omit<TenantIdentity, 'document_last4'>),
+      document_last4: (docRow?.document_last4 as string | null) ?? null,
+    } as TenantIdentity
   }, null)
 }
+
 
 /** Nome do tenant real (tenants.name), usado no seletor de workspace. */
 export function getTenantName(): Promise<string> {
