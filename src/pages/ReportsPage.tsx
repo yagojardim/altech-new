@@ -379,50 +379,6 @@ function ReleaseToggle({ cardId }: { cardId: string }) {
   )
 }
 
-// ── Quem acessa Relatórios e Insights (Admin Master) ─────────────────────────
-function ReportsAccessPanel() {
-  const gov = useReportsGovernance()
-  const [saving, setSaving] = useState(false)
-
-  async function toggleRole(role: string) {
-    setSaving(true)
-    const has = (gov.accessRoles as string[]).includes(role)
-    const next = has
-      ? gov.accessRoles.filter(r => r !== role)
-      : [...gov.accessRoles, role as (typeof gov.accessRoles)[number]]
-    await saveReportsGovernance({ accessRoles: next })
-    setSaving(false)
-  }
-
-  return (
-    <div style={{
-      margin: `${px(16)} ${px(24)} 0`, padding: px(16),
-      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: px(12),
-    }}>
-      <div style={{ fontSize: px(13), fontWeight: 700, color: T.text1 }}>
-        Quem acessa Relatórios e Insights
-      </div>
-      <div style={{ fontSize: px(12), color: T.text3, marginTop: px(2) }}>
-        O Admin Master sempre tem acesso. Libere abaixo os papéis adicionais.
-      </div>
-      <div style={{ display: 'flex', gap: px(16), flexWrap: 'wrap', marginTop: px(10) }}>
-        {REPORTS_OPTIONAL_ROLES.map(role => (
-          <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: px(12), color: T.text2, cursor: saving ? 'wait' : 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={gov.accessRoles.includes(role)}
-              disabled={saving}
-              onChange={() => { void toggleRole(role) }}
-              style={{ accentColor: T.accent, width: 14, height: 14 }}
-            />
-            {REPORTS_ROLE_LABEL[role] ?? role}
-          </label>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Report Card wrapper ───────────────────────────────────────────────────────
 interface ReportCardProps {
   def:        ReportCardDef
@@ -750,12 +706,6 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
     toast(`Atribuições salvas. ${total} vínculo${total !== 1 ? 's' : ''} ativo${total !== 1 ? 's' : ''}.`)
   }
 
-  const kpis = [
-    { label: 'Total Issues',   value: data ? String(data.totals.issues) : '—',        color: T.text1 },
-    { label: 'Velocity atual', value: data ? `${data.totals.velocity} pts` : '—',      color: T.accent },
-    { label: 'Avg Lead Time',  value: data ? `${data.totals.leadAvg} d` : '—',         color: T.warn },
-    { label: 'Bug rate',       value: data ? `${data.totals.bugRate}%` : '—',          color: T.crit },
-  ]
 
 
   return (
@@ -808,8 +758,6 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
           ))}
         </div>
       </div>
-
-      {isOwner && <ReportsAccessPanel />}
 
       {/* ── Error banner ── */}
       {(error || projError) && (
