@@ -16,6 +16,7 @@ import {
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
   createSprint as dbCreateSprint,
+  updateSprint as dbUpdateSprint,
   readSprintClosure,
   sortSprintsByStartDate,
   type SprintClosure,
@@ -1624,7 +1625,14 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
 
   return (
     <div className="flex-1 overflow-y-auto">
-      {startingSprint && (
+      {editingSprint && (
+      <EditSprintModal
+        sprint={editingSprint}
+        onClose={() => setEditingSprint(null)}
+        onConfirm={input => { void handleEditSprint(input) }}
+      />
+    )}
+    {startingSprint && (
         <StartSprintModal
           sprint={startingSprint}
           onConfirm={handleStartSprint}
@@ -2300,6 +2308,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
   const [creatingSprint, setCreatingSprint] = useState(false)
+  const [editingSprint, setEditingSprint]   = useState<SprintDef | null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
   // ── Board (Kanban) — real data from Supabase ────────────────────────────
@@ -2534,6 +2543,25 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     setTimeout(() => setToast(null), 4500)
   }
 
+  async function handleEditSprint(input: { name: string; goal: string; startDate: string; endDate: string }) {
+    const sprint = editingSprint
+    if (!sprint) return
+    setEditingSprint(null)
+    try {
+      await dbUpdateSprint(sprint.id, {
+        name: input.name,
+        goal: input.goal || null,
+        startDate: input.startDate || null,
+        endDate: input.endDate || null,
+      }, activeUser.name)
+      await loadBoard()
+      setToast(`${input.name} atualizada`)
+    } catch (err) {
+      setToast(`Falha ao editar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 3500)
+  }
+
   async function handleStartSprintDb(sprintId: string, goal: string, name: string) {
     setStartingSprint(null)
     try {
@@ -2691,6 +2719,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onStartSprint={s=>setStartingSprint(s)}
           onCompleteSprint={s=>setCompletingSprint(s)}
           onCreateSprint={()=>setCreatingSprint(true)}
+          onEditSprint={s=>setEditingSprint(s)}
           onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
