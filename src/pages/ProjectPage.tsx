@@ -2747,6 +2747,13 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         onConfirm={input => { void handleCreateSprint(input) }}
       />
     )}
+    {editingSprint && (
+      <EditSprintModal
+        sprint={editingSprint}
+        onClose={() => setEditingSprint(null)}
+        onConfirm={input => { void handleEditSprint(input) }}
+      />
+    )}
     {startingSprint && (
       <StartSprintModal
         sprint={startingSprint}
