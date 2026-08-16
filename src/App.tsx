@@ -474,7 +474,7 @@ function ShellWithRole({
             )}
             {view === "reports" && (
               <div className="h-full min-w-0 w-full overflow-y-auto dark-shell">
-                <ReportsPage />
+                <ReportsRouteGuard />
               </div>
             )}
             {view === "automations" && (
