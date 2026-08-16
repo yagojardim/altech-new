@@ -596,8 +596,9 @@ function ShellWithRole({
 // Rota "Relatórios e Insights": apenas Admin Master + papéis liberados por ele.
 function ReportsRouteGuard() {
   const { activeUser } = useSession()
-  const gov = useReportsGovernance()
-  if (!canAccessReports(activeUser.role_context, activeUser.permissions, gov)) {
+  const hasReportsFlag = useProfileReportsAccess(activeUser.user_id)
+  if (!canAccessReports(activeUser.permissions, hasReportsFlag)) {
+
     return (
       <div style={{ padding: 48, color: '#94a3b8', fontSize: 14 }}>
         Você não tem acesso a Relatórios e Insights. Peça liberação ao Admin Master do tenant.
