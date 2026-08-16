@@ -3,7 +3,7 @@ import { T } from './ds/tokens'
 import { roleSupportsReportsAccess } from '../data/db/reportsGovernance'
 import { type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
 import {
-  fetchInviteOptions, createMember, ROLE_BY_DASHBOARD,
+  fetchInviteOptions, createMember, checkMemberIdentity, ROLE_BY_DASHBOARD,
   type OptionRow, type ModuleOption,
 } from '../data/db/invite'
 import { DEFAULT_TENANT_ID } from '../data/db/timeline'
@@ -124,6 +124,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [modules,  setModules]  = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState('')
+  const [homonym, setHomonym] = useState<{ name: string; email: string } | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -191,10 +192,25 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   }
 
   // ── Submit (step 5 → step 6) — persiste no banco real ──────────────────────
-  async function handleSubmit() {
+  async function handleSubmit(skipHomonymCheck = false) {
     if (!role || !defaultDash || saving) return
     setSaving(true)
     setSaveErr('')
+    setHomonym(null)
+
+    // Identidade: e-mail duplicado bloqueia; nome repetido apenas avisa.
+    const check = await checkMemberIdentity(fullName, email)
+    if (check.emailTaken) {
+      setSaving(false)
+      setSaveErr('Já existe um usuário com este e-mail neste tenant.')
+      return
+    }
+    if (!skipHomonymCheck && check.sameName) {
+      setSaving(false)
+      setHomonym(check.sameName)
+      return
+    }
+
 
     const allDashes: DashboardType[] = [defaultDash, ...extraDashes.filter(d => d !== defaultDash)]
     const homeRoles: RoleContext[] = [
@@ -735,6 +751,29 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               {saveErr && (
                 <div style={{ padding: '8px 12px', borderRadius: 7, background: `${T.crit}14`, border: `1px solid ${T.crit}50`, fontSize: 11, color: T.crit }}>
                   ✗ {saveErr}
+                </div>
+              )}
+
+              {homonym && (
+                <div style={{ padding: '10px 12px', borderRadius: 7, background: `${T.warn}14`, border: `1px solid ${T.warn}50`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: T.text1 }}>
+                    Já existe um usuário chamado <strong>{homonym.name}</strong> cadastrado (e-mail: {homonym.email}).
+                    Deseja seguir com o cadastro ou modificar?
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => void handleSubmit(true)} style={{
+                      padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      background: T.accent, color: '#fff', fontSize: 11, fontWeight: 600,
+                    }}>
+                      Seguir mesmo assim
+                    </button>
+                    <button onClick={() => { setHomonym(null); setStep(0) }} style={{
+                      padding: '6px 14px', borderRadius: 7, border: `1px solid ${T.border}`,
+                      background: 'none', color: T.text2, fontSize: 11, cursor: 'pointer',
+                    }}>
+                      Modificar
+                    </button>
+                  </div>
                 </div>
               )}
 

@@ -52,6 +52,34 @@ export function fetchInviteOptions(): Promise<InviteOptions> {
   }, { projects: [], squads: [], modules: [] })
 }
 
+// ─── Identidade: e-mail é único por tenant; nome pode repetir ────────────────
+export interface IdentityCheck {
+  /** Já existe profile com o mesmo e-mail no tenant → bloqueia. */
+  emailTaken: boolean
+  /** Homônimo com e-mail diferente → apenas avisa. */
+  sameName: { name: string; email: string } | null
+}
+
+export function checkMemberIdentity(name: string, email: string): Promise<IdentityCheck> {
+  return safeCall<IdentityCheck>('invite.checkIdentity', async () => {
+    const mail = email.trim().toLowerCase()
+    const nm = name.trim()
+    const { data } = await tbl('profiles')
+      .select('id, name, email')
+      .eq('tenant_id', DEFAULT_TENANT_ID)
+      .is('archived_at', null)
+    const rows = (data ?? []) as any[]
+    const emailTaken = rows.some(r => String(r.email ?? '').trim().toLowerCase() === mail)
+    const hit = rows.find(r => String(r.name ?? '').trim().toLowerCase() === nm.toLowerCase()
+      && String(r.email ?? '').trim().toLowerCase() !== mail)
+    return {
+      emailTaken,
+      sameName: hit ? { name: hit.name ?? nm, email: hit.email ?? '' } : null,
+    }
+  }, { emailTaken: false, sameName: null })
+}
+
+
 // ─── Papéis ↔ dashboards ─────────────────────────────────────────────────────
 export const ROLE_BY_DASHBOARD: Record<string, RoleContext> = Object.entries(DEFAULT_DASHBOARD_BY_ROLE)
   .reduce((acc, [role, dash]) => { acc[dash] = role as RoleContext; return acc }, {} as Record<string, RoleContext>)
