@@ -5,6 +5,7 @@ export interface NewProjectInput {
   name: string
   key: string
   description: string
+  clientName: string | null
   boardType: 'scrum' | 'kanban'
   leadId: string | null
 }
@@ -18,9 +19,9 @@ interface Props {
   leads?: { id: string; name: string; initials: string }[]
   /** Keys already used in the database (duplicate guard). */
   existingKeys?: string[]
+  /** Nome do tenant atual — exibido como rótulo read-only. */
+  tenantName?: string
 }
-
-const FALLBACK_KEYS = ['ALT', 'PM', 'SB', 'INT']
 
 const overlay: React.CSSProperties = {
   position: 'fixed',
@@ -65,20 +66,20 @@ const labelStyle: React.CSSProperties = {
   display: 'block',
 }
 
-export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingKeys }: Props) {
-  const [workspace, setWorkspace] = useState('Altech Agency')
+export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingKeys, tenantName }: Props) {
   const [name, setName] = useState('')
+  const [client, setClient] = useState('')
   const [key, setKey] = useState('')
   const [keyManual, setKeyManual] = useState(false)
   const [type, setType] = useState<'scrum' | 'kanban'>('scrum')
-  const [lead, setLead] = useState(leads?.[0]?.id ?? 'AL')
+  const [lead, setLead] = useState<string>(leads?.[0]?.id ?? '')
   const [desc, setDesc] = useState('')
   const [success, setSuccess] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const takenKeys = existingKeys ?? FALLBACK_KEYS
-  const isDuplicate = takenKeys.includes(key) && key.length > 0
+  const takenKeys = (existingKeys ?? []).map(k => k.toUpperCase())
+  const isDuplicate = key.length > 0 && takenKeys.includes(key.toUpperCase())
   const canCreate = name.trim().length > 0 && key.length > 0 && !isDuplicate && !saving
 
   function handleNameChange(val: string) {
@@ -107,7 +108,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
     if (!onCreate) { setSuccess(true); return }
     setSaving(true)
     try {
-      await onCreate({ name: name.trim(), key, description: desc.trim(), boardType: type, leadId: lead || null })
+      await onCreate({ name: name.trim(), key, description: desc.trim(), clientName: client.trim() || null, boardType: type, leadId: lead || null })
       setSuccess(true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Não foi possível criar o projeto.')
@@ -117,12 +118,12 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
   }
 
   function handleReset() {
-    setWorkspace('Altech Agency')
     setName('')
+    setClient('')
     setKey('')
     setKeyManual(false)
     setType('scrum')
-    setLead(leads?.[0]?.id ?? 'AL')
+    setLead(leads?.[0]?.id ?? '')
     setDesc('')
     setSuccess(false)
     setError(null)
@@ -206,18 +207,12 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
           <>
             {/* Body */}
             <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto' }}>
-              {/* Workspace */}
+              {/* Tenant (read-only) */}
               <div>
                 <label style={labelStyle}>Workspace</label>
-                <select
-                  value={workspace}
-                  onChange={e => setWorkspace(e.target.value)}
-                  style={{ ...inputStyle, cursor: 'pointer' }}
-                >
-                  <option>Altech Agency</option>
-                  <option>Altech Internal</option>
-                  <option>Sandbox</option>
-                </select>
+                <div style={{ ...inputStyle, color: T.text2, background: T.bgSurface, cursor: 'default' }}>
+                  {tenantName || 'Tenant atual'}
+                </div>
               </div>
 
               {/* Name */}
@@ -228,6 +223,18 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
                   placeholder="Ex: Website Relaunch"
                   value={name}
                   onChange={e => handleNameChange(e.target.value)}
+                  style={inputStyle}
+                />
+              </div>
+
+              {/* Client */}
+              <div>
+                <label style={labelStyle}>Cliente</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Cobasi"
+                  value={client}
+                  onChange={e => setClient(e.target.value)}
                   style={inputStyle}
                 />
               </div>
@@ -307,14 +314,8 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
                   onChange={e => setLead(e.target.value)}
                   style={{ ...inputStyle, cursor: 'pointer' }}
                 >
-                  {(leads ?? [
-                    { id: 'AL', name: 'Ana Lima', initials: 'AL' },
-                    { id: 'NM', name: 'Nuno Matos', initials: 'NM' },
-                    { id: 'JN', name: 'João Neves', initials: 'JN' },
-                    { id: 'CS', name: 'Carla Silva', initials: 'CS' },
-                    { id: 'RM', name: 'Rui Melo', initials: 'RM' },
-                    { id: 'LF', name: 'Lucas Ferreira', initials: 'LF' },
-                  ]).map(l => (
+                  {(leads ?? []).length === 0 && <option value="">Sem responsável</option>}
+                  {(leads ?? []).map(l => (
                     <option key={l.id} value={l.id}>{l.name} ({l.initials})</option>
                   ))}
                 </select>
