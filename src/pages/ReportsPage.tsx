@@ -709,7 +709,8 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
   projError: string | null
 }) {
   const user      = getActiveUser()
-  const canManage = can(user.permissions, 'manage:dashboard-cards')
+  const canManage = can(user.permissions, 'manage:dashboard-cards') || isTenantOwner(user.permissions)
+  const isOwner   = isTenantOwner(user.permissions)
 
   const [batchOpen,  setBatchOpen] = useState(false)
   const [popCard,    setPopCard]   = useState<ReportCardDef | null>(null)
@@ -807,6 +808,8 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
           ))}
         </div>
       </div>
+
+      {isOwner && <ReportsAccessPanel />}
 
       {/* ── Error banner ── */}
       {(error || projError) && (
