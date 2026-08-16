@@ -117,6 +117,17 @@ export function saveProfileReportsAccess(profileId: string, value: boolean): Pro
   }, false)
 }
 
+/** Grava o flag localizando o profile pelo e-mail (fluxo de convite). */
+export function saveProfileReportsAccessByEmail(email: string, value: boolean): Promise<boolean> {
+  return safeCall<boolean>('reportsGovernance.saveProfileAccessByEmail', async () => {
+    const { error } = await (supabase as any)
+      .from('profiles').update({ reports_access: value })
+      .eq('tenant_id', DEFAULT_TENANT_ID).ilike('email', email)
+    if (error) throw error
+    return true
+  }, false)
+}
+
 /** Hook — flag individual do usuário informado. */
 export function useProfileReportsAccess(profileId: string | null | undefined): boolean {
   const [allowed, setAllowed] = useState<boolean>(
