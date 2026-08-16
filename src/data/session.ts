@@ -58,6 +58,10 @@ export interface MockUser {
   assigned_dashboards: UserDashboard[]
   password_must_change?: boolean
   approved_squads?: string[]
+  /** Dono do tenant (Admin Master). Sempre possui capacidades administrativas. */
+  tenant_owner?: boolean
+  /** Papel principal + secundários do usuário (o primeiro é o principal). */
+  available_roles?: RoleContext[]
 }
 
 // ─── Catalog of all 10 dashboards ────────────────────────────────────────────
