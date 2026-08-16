@@ -46,6 +46,7 @@ import {
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
 import { fetchAssignedProjects } from '../data/db/projects'
+import { useReportsGovernance, isCardReleased } from '../data/db/reportsGovernance'
 import { can } from '../data/permissions'
 import { countActiveModules, listModules, type ModuleView } from '../data/db/modules'
 import { getMembers, setMemberStatus, type MemberRow, type MemberStatus } from '@/data/db/members'
