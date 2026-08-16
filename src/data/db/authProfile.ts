@@ -97,8 +97,10 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
 
     if (!row) return null
 
-    const roleContext = await resolveRole(row.id, row.tenant_id, row.primary_role)
+    const roles = await resolveRoles(row.id, row.tenant_id, row.primary_role)
+    const roleContext: RoleContext = roles[0] ?? 'Dev'
     const isAdmin = roleContext === 'Admin'
+    const isOwner = !!row.tenant_owner
     const defaultDash = ROLE_DASHBOARD[roleContext]
 
     return {
@@ -115,6 +117,8 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
       permissions: isAdmin ? ['*'] : derivePermissions(roleContext),
       assigned_dashboards: [dash(row.id, row.tenant_id, defaultDash, true)],
       password_must_change: !!row.password_must_change,
+      tenant_owner: isOwner,
+      available_roles: roles,
     }
   }, null)
 }
