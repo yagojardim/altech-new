@@ -191,10 +191,25 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   }
 
   // ── Submit (step 5 → step 6) — persiste no banco real ──────────────────────
-  async function handleSubmit() {
+  async function handleSubmit(skipHomonymCheck = false) {
     if (!role || !defaultDash || saving) return
     setSaving(true)
     setSaveErr('')
+    setHomonym(null)
+
+    // Identidade: e-mail duplicado bloqueia; nome repetido apenas avisa.
+    const check = await checkMemberIdentity(fullName, email)
+    if (check.emailTaken) {
+      setSaving(false)
+      setSaveErr('Já existe um usuário com este e-mail neste tenant.')
+      return
+    }
+    if (!skipHomonymCheck && check.sameName) {
+      setSaving(false)
+      setHomonym(check.sameName)
+      return
+    }
+
 
     const allDashes: DashboardType[] = [defaultDash, ...extraDashes.filter(d => d !== defaultDash)]
     const homeRoles: RoleContext[] = [
