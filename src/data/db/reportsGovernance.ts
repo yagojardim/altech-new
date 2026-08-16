@@ -90,14 +90,63 @@ export function isTenantOwner(permissions: string[] | undefined | null): boolean
   return !!permissions?.includes('*')
 }
 
-export function canAccessReports(
-  role: RoleContext,
-  permissions: string[] | undefined | null,
-  gov: ReportsGovernance,
-): boolean {
-  if (isTenantOwner(permissions)) return true
-  return gov.accessRoles.includes(role)
+// ── Acesso individual (profiles.reports_access) ──────────────────────────────
+const accessCache = new Map<string, boolean>()
+
+export function fetchProfileReportsAccess(profileId: string): Promise<boolean> {
+  return safeCall<boolean>('reportsGovernance.fetchProfileAccess', async () => {
+    const { data, error } = await (supabase as any)
+      .from('profiles').select('reports_access')
+      .eq('id', profileId).eq('tenant_id', DEFAULT_TENANT_ID).maybeSingle()
+    if (error) throw error
+    const val = !!data?.reports_access
+    accessCache.set(profileId, val)
+    return val
+  }, accessCache.get(profileId) ?? false)
 }
+
+/** Grava profiles.reports_access (usado no cadastro/edição de membro). */
+export function saveProfileReportsAccess(profileId: string, value: boolean): Promise<boolean> {
+  return safeCall<boolean>('reportsGovernance.saveProfileAccess', async () => {
+    const { error } = await (supabase as any)
+      .from('profiles').update({ reports_access: value })
+      .eq('id', profileId).eq('tenant_id', DEFAULT_TENANT_ID)
+    if (error) throw error
+    accessCache.set(profileId, value)
+    return true
+  }, false)
+}
+
+/** Hook — flag individual do usuário informado. */
+export function useProfileReportsAccess(profileId: string | null | undefined): boolean {
+  const [allowed, setAllowed] = useState<boolean>(
+    profileId ? accessCache.get(profileId) ?? false : false,
+  )
+  useEffect(() => {
+    if (!profileId) { setAllowed(false); return }
+    let alive = true
+    void fetchProfileReportsAccess(profileId).then(v => { if (alive) setAllowed(v) })
+    return () => { alive = false }
+  }, [profileId])
+  return allowed
+}
+
+/**
+ * Acesso à tela "Relatórios e Insights":
+ * Admin Master sempre; demais apenas com profiles.reports_access = true.
+ */
+export function canAccessReports(
+  permissions: string[] | undefined | null,
+  hasReportsAccess: boolean,
+): boolean {
+  return isTenantOwner(permissions) || hasReportsAccess
+}
+
+/** Papéis para os quais o toggle de acesso faz sentido no cadastro. */
+export function roleSupportsReportsAccess(role: string): boolean {
+  return (REPORTS_OPTIONAL_ROLES as string[]).includes(role)
+}
+
 
 /** Cards liberados para o Board de Composição. */
 export function isCardReleased(gov: ReportsGovernance, cardId: string): boolean {
