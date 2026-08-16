@@ -271,6 +271,49 @@ export async function startSprint(
   return data as SprintRow
 }
 
+export interface UpdateSprintPatch {
+  name?: string
+  goal?: string | null
+  startDate?: string | null
+  endDate?: string | null
+}
+
+/** Edits name/goal/dates of a planned or active sprint (completed sprints are read-only). */
+export async function updateSprint(
+  sprintId: string,
+  patch: UpdateSprintPatch,
+  actorName = 'Sistema',
+): Promise<SprintRow> {
+  const beforeRes = await supabase.from('sprints').select(SPRINT_FIELDS)
+    .eq('tenant_id', DEFAULT_TENANT_ID).eq('id', sprintId).maybeSingle()
+  if (beforeRes.error) throw new Error(missingTableMessage('sprints', beforeRes.error.message))
+  const before = beforeRes.data as SprintRow | null
+  if (!before) throw new Error('Sprint não encontrada')
+  if (normalizeState(before.state) === 'completed') {
+    throw new Error('Sprint encerrada não pode ser editada')
+  }
+
+  const update: Tables['sprints']['Update'] = {}
+  if (patch.name !== undefined && patch.name.trim()) update.name = patch.name.trim()
+  if (patch.goal !== undefined) update.goal = patch.goal?.trim() ? patch.goal.trim() : null
+  if (patch.startDate !== undefined) update.start_date = patch.startDate || null
+  if (patch.endDate !== undefined) update.end_date = patch.endDate || null
+  if (Object.keys(update).length === 0) return before
+
+  const { data, error } = await supabase.from('sprints').update(update)
+    .eq('id', sprintId).eq('tenant_id', DEFAULT_TENANT_ID)
+    .select(SPRINT_FIELDS).single()
+  if (error) throw new Error(error.message)
+
+  const row = data as SprintRow
+  await writeSprintAudit(sprintId, 'sprint.updated', actorName,
+    { name: before.name, goal: before.goal, start_date: before.start_date, end_date: before.end_date },
+    { name: row.name, goal: row.goal, start_date: row.start_date, end_date: row.end_date })
+
+  return row
+}
+
+
 export interface SprintItemDecision {
   workItemId: string
   destination: 'next-sprint' | 'backlog'

@@ -16,6 +16,7 @@ import {
   startSprint as dbStartSprint,
   completeSprint as dbCompleteSprint,
   createSprint as dbCreateSprint,
+  updateSprint as dbUpdateSprint,
   readSprintClosure,
   sortSprintsByStartDate,
   type SprintClosure,
@@ -373,6 +374,104 @@ function NewSprintModal({ suggestedName, onConfirm, onClose }: NewSprintModalPro
     </div>
   )
 }
+
+interface EditSprintModalProps {
+  sprint: SprintDef
+  onConfirm: (input: { name: string; goal: string; startDate: string; endDate: string }) => void
+  onClose: () => void
+}
+
+/** Modal "Editar sprint": nome, objetivo e datas de uma sprint planejada ou ativa. */
+function EditSprintModal({ sprint, onConfirm, onClose }: EditSprintModalProps) {
+  const [name, setName]       = useState(sprint.name)
+  const [goal, setGoal]       = useState(sprint.goal ?? '')
+  const [startDate, setStart] = useState(sprint.startDate ?? '')
+  const [endDate, setEnd]     = useState(sprint.endDate ?? '')
+
+  const valid = name.trim().length > 0
+  const inputStyle = {
+    background: DS.bgSurface2, border: `1px solid ${DS.border}`, color: DS.text1,
+  } as const
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center fade-rise"
+      style={{ background: 'rgba(8,10,14,0.72)', backdropFilter: 'blur(4px)' }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="rounded-2xl overflow-hidden flex flex-col"
+        style={{ width: 520, background: DS.bgSurface, border: `1px solid ${DS.border2}`, boxShadow: DS.shadowModal }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${DS.border}` }}>
+          <div>
+            <p className="text-[15px] font-bold" style={{ color: DS.text1 }}>Editar sprint</p>
+            <p className="text-[12px] mt-0.5" style={{ color: DS.text3 }}>{sprint.name}</p>
+          </div>
+          <button onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-lg leading-none"
+            style={{ color: DS.text3 }}>×</button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Nome da sprint</label>
+            <input value={name} onChange={e => setName(e.target.value)}
+              className="h-9 px-3 text-[13px] rounded-lg border outline-none" style={inputStyle} />
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Objetivo da sprint</label>
+            <textarea value={goal} onChange={e => setGoal(e.target.value)} rows={2}
+              placeholder="O que esta sprint pretende entregar..."
+              className="px-3 py-2 text-[13px] rounded-lg border outline-none resize-none" style={inputStyle} />
+          </div>
+
+          <div className="flex gap-3">
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Data de início</label>
+              <input type="date" value={startDate} onChange={e => setStart(e.target.value)}
+                className="h-9 px-3 text-[13px] rounded-lg border outline-none" style={inputStyle} />
+            </div>
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-[11px] font-semibold" style={{ color: DS.text3 }}>Data de fim</label>
+              <input type="date" value={endDate} onChange={e => setEnd(e.target.value)}
+                className="h-9 px-3 text-[13px] rounded-lg border outline-none" style={inputStyle} />
+            </div>
+          </div>
+
+          <div className="flex gap-2 flex-wrap">
+            {([1, 2, 3, 4] as const).map(w => (
+              <button key={w} onClick={() => { if (startDate) setEnd(addDaysISO(startDate, w * 7 - 1)) }}
+                disabled={!startDate}
+                className="px-3 h-8 rounded-lg text-[12px] font-medium"
+                style={{
+                  background: DS.bgSurface2, color: DS.text2,
+                  border: `1px solid ${DS.border}`, opacity: startDate ? 1 : 0.5,
+                }}>
+                {w} semana{w > 1 ? 's' : ''}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-4" style={{ borderTop: `1px solid ${DS.border}` }}>
+          <button onClick={onClose} className="h-9 px-4 rounded-lg text-[12px] font-semibold"
+            style={{ background: DS.bgSurface2, color: DS.text2, border: `1px solid ${DS.border}` }}>
+            Cancelar
+          </button>
+          <button
+            disabled={!valid}
+            onClick={() => onConfirm({ name: name.trim(), goal: goal.trim(), startDate, endDate })}
+            className="h-9 px-4 rounded-lg text-[12px] font-semibold text-white"
+            style={{ background: DS.accent, opacity: valid ? 1 : 0.5, cursor: valid ? 'pointer' : 'not-allowed' }}>
+            Salvar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 
 function StartSprintModal({ sprint, onConfirm, onClose, issueCount: issueCountProp }: StartSprintModalProps) {
   const [name, setName]         = useState(sprint.name)
@@ -1527,6 +1626,7 @@ function BacklogTab({ issues, sprints, canManageSprint, onCreateIssue, onComplet
   return (
     <div className="flex-1 overflow-y-auto">
       {startingSprint && (
+
         <StartSprintModal
           sprint={startingSprint}
           onConfirm={handleStartSprint}
@@ -1863,7 +1963,7 @@ function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure;
 
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onCreateSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onCreateSprint, onEditSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1873,7 +1973,9 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   onStartSprint: (sprint: SprintDef) => void
   onCompleteSprint: (sprint: SprintDef) => void
   onCreateSprint: () => void
+  onEditSprint: (sprint: SprintDef) => void
   onGenerateCeremonies: (sprint: SprintDef) => void
+
   generatingCeremonies: string | null
   availableEpics: { id: string; label: string; color: string }[]
   availableMembers: { id: string; initials: string; name: string }[]
@@ -2000,6 +2102,20 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                     {sprint.state !== 'completed' && (
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                         {canManageSprint && (
+                          <button
+                            onClick={() => onEditSprint(sprint)}
+                            title={`Editar ${sprint.name}`}
+                            aria-label={`Editar ${sprint.name}`}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                            style={{ border: `1px solid ${S.border}`, color: S.t2, cursor: 'pointer' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M8.2 1.8l2 2L4.4 9.6l-2.6.6.6-2.6 5.8-5.8z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
+                        {canManageSprint && (
+
                           <button
                             onClick={() => onGenerateCeremonies(sprint)}
                             disabled={generatingCeremonies === sprint.id}
@@ -2186,6 +2302,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
   const [completingSprint, setCompletingSprint] = useState<SprintDef|null>(null)
   const [startingSprint, setStartingSprint] = useState<SprintDef|null>(null)
   const [creatingSprint, setCreatingSprint] = useState(false)
+  const [editingSprint, setEditingSprint]   = useState<SprintDef | null>(null)
   const [toast, setToast] = useState<string|null>(null)
 
   // ── Board (Kanban) — real data from Supabase ────────────────────────────
@@ -2420,6 +2537,25 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     setTimeout(() => setToast(null), 4500)
   }
 
+  async function handleEditSprint(input: { name: string; goal: string; startDate: string; endDate: string }) {
+    const sprint = editingSprint
+    if (!sprint) return
+    setEditingSprint(null)
+    try {
+      await dbUpdateSprint(sprint.id, {
+        name: input.name,
+        goal: input.goal || null,
+        startDate: input.startDate || null,
+        endDate: input.endDate || null,
+      }, activeUser.name)
+      await loadBoard()
+      setToast(`${input.name} atualizada`)
+    } catch (err) {
+      setToast(`Falha ao editar a sprint: ${err instanceof Error ? err.message : 'erro desconhecido'}`)
+    }
+    setTimeout(() => setToast(null), 3500)
+  }
+
   async function handleStartSprintDb(sprintId: string, goal: string, name: string) {
     setStartingSprint(null)
     try {
@@ -2577,6 +2713,7 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
           onStartSprint={s=>setStartingSprint(s)}
           onCompleteSprint={s=>setCompletingSprint(s)}
           onCreateSprint={()=>setCreatingSprint(true)}
+          onEditSprint={s=>setEditingSprint(s)}
           onGenerateCeremonies={s=>setCeremonyTarget(s)}
           generatingCeremonies={ceremonySprintId}
           onUpdateIssue={updated=>patchDbIssue(updated.key, updated)}
@@ -2608,6 +2745,13 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
         suggestedName={`Sprint ${dbSprints.length + 1}`}
         onClose={() => setCreatingSprint(false)}
         onConfirm={input => { void handleCreateSprint(input) }}
+      />
+    )}
+    {editingSprint && (
+      <EditSprintModal
+        sprint={editingSprint}
+        onClose={() => setEditingSprint(null)}
+        onConfirm={input => { void handleEditSprint(input) }}
       />
     )}
     {startingSprint && (
