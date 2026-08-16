@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { T } from './ds/tokens'
-import { roleSupportsReportsAccess, saveProfileReportsAccessByEmail } from '../data/db/reportsGovernance'
-import { MOCK_TENANT, addMockUser, type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
+import { roleSupportsReportsAccess } from '../data/db/reportsGovernance'
+import { type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
+import {
+  fetchInviteOptions, createMember, ROLE_BY_DASHBOARD,
+  type OptionRow, type ModuleOption,
+} from '../data/db/invite'
+import { DEFAULT_TENANT_ID } from '../data/db/timeline'
 import {
   derivePermissions, getCompatibleDashboards, DEFAULT_DASHBOARD,
   capabilityVisibility, STEP4_CAPABILITIES, type Capability,
 } from '../data/permissions'
-import { generateTempPassword, markPasswordMustChange } from '../data/security'
+import { generateTempPassword } from '../data/security'
 import { copyToClipboard } from '../utils/copyToClipboard'
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#6366F1','#A78BFA','#34d399','#f5a524','#e879f9','#60a5fa']
