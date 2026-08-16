@@ -1,13 +1,19 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { T } from './ds/tokens'
-import { roleSupportsReportsAccess, saveProfileReportsAccessByEmail } from '../data/db/reportsGovernance'
-import { MOCK_TENANT, addMockUser, type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
+import { roleSupportsReportsAccess } from '../data/db/reportsGovernance'
+import { type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
+import {
+  fetchInviteOptions, createMember, ROLE_BY_DASHBOARD,
+  type OptionRow, type ModuleOption,
+} from '../data/db/invite'
+import { DEFAULT_TENANT_ID } from '../data/db/timeline'
 import {
   derivePermissions, getCompatibleDashboards, DEFAULT_DASHBOARD,
   capabilityVisibility, STEP4_CAPABILITIES, type Capability,
 } from '../data/permissions'
-import { generateTempPassword, markPasswordMustChange } from '../data/security'
+import { generateTempPassword } from '../data/security'
 import { copyToClipboard } from '../utils/copyToClipboard'
+
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 const AVATAR_COLORS = ['#3B82F6','#10B981','#F59E0B','#EF4444','#6366F1','#A78BFA','#34d399','#f5a524','#e879f9','#60a5fa']
@@ -24,21 +30,12 @@ const INVITABLE_ROLES: { role: RoleContext; label: string; desc: string }[] = [
   { role: 'UX',             label: 'UX / UI',          desc: 'Design ativo, validações e handoffs' },
 ]
 
-const ALL_MODULES = ['board','reports','roadmap','portfolio','analytics','releases','integrations','deployments','config','team']
 const MODULE_LABELS: Record<string, string> = {
   board: 'Board & Sprint', reports: 'Relatórios', roadmap: 'Roadmap',
   portfolio: 'Portfólio / PMO', analytics: 'Analytics', releases: 'Releases',
   integrations: 'Integrações', deployments: 'Deployments', config: 'Configurações', team: 'Gestão de Time',
 }
-const PROJECTS = [
-  { id: 'proj_001', name: 'Website Relaunch' },
-  { id: 'proj_002', name: 'Infra Migration' },
-]
-const SQUADS = [
-  { id: 'squad_growth', name: 'Growth' },
-  { id: 'squad_platform', name: 'Platform' },
-  { id: 'squad_design', name: 'Design' },
-]
+
 
 function initials(name: string): string {
   return name.split(' ').filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('')
@@ -117,10 +114,30 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [optIns, setOptIns] = useState<Set<Capability>>(new Set())
   const [approvedSquads, setApprovedSquads] = useState<string[]>([])
 
-  // Step 5 — links
-  const [projects, setProjects] = useState<string[]>(['proj_001'])
-  const [squads,   setSquads]   = useState<string[]>(['squad_growth'])
-  const [modules,  setModules]  = useState<string[]>(['board', 'reports'])
+  // Step 5 — links (opções reais do tenant)
+  const [projectOpts, setProjectOpts] = useState<OptionRow[]>([])
+  const [squadOpts, setSquadOpts]     = useState<OptionRow[]>([])
+  const [moduleOpts, setModuleOpts]   = useState<ModuleOption[]>([])
+  const [optsLoading, setOptsLoading] = useState(true)
+  const [projects, setProjects] = useState<string[]>([])
+  const [squads,   setSquads]   = useState<string[]>([])
+  const [modules,  setModules]  = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    void fetchInviteOptions().then(opts => {
+      if (!alive) return
+      setProjectOpts(opts.projects)
+      setSquadOpts(opts.squads)
+      setModuleOpts(opts.modules)
+      setModules(opts.modules.map(m => m.key))
+      setOptsLoading(false)
+    })
+    return () => { alive = false }
+  }, [])
+
 
   // Step 6 — status
   const [status, setStatus] = useState<'active' | 'invited'>('invited')
@@ -137,19 +154,8 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     setDefaultDash(DEFAULT_DASHBOARD[r])
     setExtraDashes([])
     setOptIns(new Set())
-    const base: Record<RoleContext, string[]> = {
-      Admin: ['board','reports','portfolio','roadmap','config','team','modules','audit'],
-      PMO: ['board','reports','portfolio','roadmap'],
-      ProjectManager: ['board','reports','roadmap','releases'],
-      ProductManager: ['board','reports','roadmap','analytics'],
-      ProductOwner: ['board','reports','roadmap'],
-      ScrumMaster: ['board','reports'],
-      TechLead: ['board','reports','integrations','deployments'],
-      Dev: ['board','reports'],
-      QA: ['board','reports'],
-      UX: ['board','reports'],
-    }
-    setModules(base[r] ?? ['board'])
+    // Módulos habilitados vêm do tenant (tenant_modules) — todos marcados por padrão.
+    setModules(moduleOpts.map(m => m.key))
   }
 
   // ── Toggle extra dashboard ─────────────────────────────────────────────────
@@ -184,56 +190,66 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     }
   }
 
-  // ── Submit (step 5 → step 6) ───────────────────────────────────────────────
-  function handleSubmit() {
-    if (!role || !defaultDash) return
+  // ── Submit (step 5 → step 6) — persiste no banco real ──────────────────────
+  async function handleSubmit() {
+    if (!role || !defaultDash || saving) return
+    setSaving(true)
+    setSaveErr('')
 
-    const newId = `u_${Date.now()}`
-    const dashes = [
-      {
-        id: `ud_${newId}_${defaultDash}`, tenant_id: MOCK_TENANT.tenant_id,
-        user_id: newId, dashboard_id: defaultDash, is_default: true,
-        status: 'active' as const, created_at: new Date().toISOString(),
-        created_by: 'invite', updated_at: new Date().toISOString(), updated_by: 'invite',
-      },
-      ...extraDashes.map(d => ({
-        id: `ud_${newId}_${d}`, tenant_id: MOCK_TENANT.tenant_id,
-        user_id: newId, dashboard_id: d, is_default: false,
-        status: 'active' as const, created_at: new Date().toISOString(),
-        created_by: 'invite', updated_at: new Date().toISOString(), updated_by: 'invite',
-      })),
-    ]
+    const allDashes: DashboardType[] = [defaultDash, ...extraDashes.filter(d => d !== defaultDash)]
+    const homeRoles: RoleContext[] = [
+      role,
+      ...allDashes.map(d => ROLE_BY_DASHBOARD[d]).filter((r): r is RoleContext => !!r),
+    ].filter((r, i, arr) => arr.indexOf(r) === i)
 
-    const pwd = generateTempPassword()
-
-    const hasApproveHours = capabilityVisibility(role, 'approve:hours') === 'on' || optIns.has('approve:hours' as Capability)
-
-    const user: MockUser = {
-      user_id: newId,
-      tenant_id: MOCK_TENANT.tenant_id,
+    const profileId = await createMember({
       name: fullName.trim(),
       email: email.trim(),
+      phone,
+      locale: lang,
+      avatarColor,
+      avatarInitials: initials(fullName),
+      role,
+      homeRoles,
+      dashboards: allDashes,
+      defaultDashboard: defaultDash,
+      projectIds: projects,
+      squadIds: squads,
+      modules,
+      status,
+      reportsAccess: roleSupportsReportsAccess(role) ? reportsAccess : false,
+    })
+
+    setSaving(false)
+    if (!profileId) {
+      setSaveErr('Não foi possível criar o membro. Verifique os dados e tente novamente.')
+      return
+    }
+
+    const hasApproveHours = capabilityVisibility(role, 'approve:hours') === 'on' || optIns.has('approve:hours' as Capability)
+    const user: MockUser = {
+      user_id: profileId,
+      tenant_id: DEFAULT_TENANT_ID,
+      name: fullName.trim(),
+      email: email.trim().toLowerCase(),
       avatar_initials: initials(fullName),
       avatar_color: avatarColor,
       role_context: role,
-      project_id: projects[0] ?? 'proj_001',
-      squad_id: squads[0] ?? 'squad_growth',
+      project_id: projects[0] ?? '*',
+      squad_id: squads[0] ?? '*',
       modules_enabled: modules,
       permissions: derivePermissions(role, [...optIns]),
-      assigned_dashboards: dashes,
+      assigned_dashboards: [],
       password_must_change: true,
+      available_roles: homeRoles,
       approved_squads: hasApproveHours ? approvedSquads : undefined,
     }
 
-    addMockUser(user)
-    if (roleSupportsReportsAccess(role)) {
-      void saveProfileReportsAccessByEmail(email.trim(), reportsAccess)
-    }
-    markPasswordMustChange(newId)
-    setGeneratedPwd(pwd)
+    setGeneratedPwd(generateTempPassword())
     setStep(6)
     onSuccess?.(user)
   }
+
 
   function handleFinish() {
     setGeneratedPwd('')
@@ -551,7 +567,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                     <div style={{ fontSize: 12, fontWeight: 600, color: T.text1, marginBottom: 4 }}>Squads que aprova</div>
                     <div style={{ fontSize: 11, color: T.text3, marginBottom: 10 }}>Selecione os squads cujos lançamentos este usuário poderá revisar. Pode ser alterado depois.</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {SQUADS.map(s => {
+                      {squadOpts.map(s => {
                         const on = approvedSquads.includes(s.id)
                         return (
                           <button key={s.id} onClick={() => setApprovedSquads(prev => on ? prev.filter(x => x !== s.id) : [...prev, s.id])} style={{
@@ -588,7 +604,11 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Projetos</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {PROJECTS.map(p => {
+{!optsLoading && projectOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum projeto cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
+                  {projectOpts.map(p => {
                     const on = projects.includes(p.id)
                     return (
                       <button key={p.id} onClick={() => toggleMulti(p.id, projects, setProjects)} style={{
@@ -610,7 +630,11 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Squads</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {SQUADS.map(s => {
+{!optsLoading && squadOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum squad cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
+                  {squadOpts.map(s => {
                     const on = squads.includes(s.id)
                     return (
                       <button key={s.id} onClick={() => toggleMulti(s.id, squads, setSquads)} style={{
@@ -632,7 +656,11 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Módulos habilitados</SLabel>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ALL_MODULES.map(m => {
+{!optsLoading && moduleOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum módulo habilitado cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
+                  {moduleOpts.map(({ key: m, name: mName }) => {
                     const on = modules.includes(m)
                     return (
                       <button key={m} onClick={() => toggleMulti(m, modules, setModules)} style={{
@@ -641,7 +669,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                         border: `1px solid ${on ? T.indigo : T.border}`,
                         color: on ? T.indigo : T.text3, cursor: 'pointer', transition: 'all 0.15s',
                       }}>
-                        {MODULE_LABELS[m] ?? m}
+                        {MODULE_LABELS[m] ?? mName}
                       </button>
                     )
                   })}
@@ -673,7 +701,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                     { k: 'Papel', v: INVITABLE_ROLES.find(r => r.role === role)?.label ?? '—' },
                     { k: 'Dashboard padrão', v: defaultDash ? (DASHBOARD_CATALOG[defaultDash]?.label ?? defaultDash) : '—' },
                     { k: 'Adicionais', v: extraDashes.length > 0 ? `${extraDashes.length} dashboard(s)` : 'Nenhum' },
-                    { k: 'Projetos', v: PROJECTS.filter(p => projects.includes(p.id)).map(p => p.name).join(', ') || '—' },
+                    { k: 'Projetos', v: projectOpts.filter(p => projects.includes(p.id)).map(p => p.name).join(', ') || '—' },
                     { k: 'Permissões geradas', v: `${derivePermissions(role!, [...optIns]).length} cap.` },
                   ].map(row => (
                     <div key={row.k} style={{ fontSize: 11 }}>
@@ -703,6 +731,13 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                   ))}
                 </div>
               </div>
+
+              {saveErr && (
+                <div style={{ padding: '8px 12px', borderRadius: 7, background: `${T.crit}14`, border: `1px solid ${T.crit}50`, fontSize: 11, color: T.crit }}>
+                  ✗ {saveErr}
+                </div>
+              )}
+
             </div>
           )}
           {/* ── Step 6: Senha temporária (exibida uma única vez) ─── */}
@@ -820,12 +855,12 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                 Próximo →
               </button>
             ) : step === 5 ? (
-              <button onClick={handleSubmit} style={{
-                padding: '8px 22px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                background: status === 'active' ? T.success : T.accent,
+              <button onClick={() => void handleSubmit()} disabled={saving} style={{
+                padding: '8px 22px', borderRadius: 7, border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
+                background: saving ? T.border2 : status === 'active' ? T.success : T.accent,
                 color: '#fff', fontSize: 12, fontWeight: 600,
               }}>
-                {status === 'active' ? '✓ Criar perfil' : '✉ Enviar convite'}
+                {saving ? 'Salvando…' : status === 'active' ? '✓ Criar perfil' : '✉ Enviar convite'}
               </button>
             ) : (
               <button onClick={handleFinish} style={{
