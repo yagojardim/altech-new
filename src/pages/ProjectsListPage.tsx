@@ -252,7 +252,7 @@ interface Props {
 }
 
 export default function ProjectsListPage({ onNav }: Props) {
-  const { activeUser } = useSession()
+  const { activeUser, tenantName } = useSession()
   const canEdit = can(activeUser.permissions, 'edit:workitem')
 
   const [newProjOpen, setNewProjOpen] = useState(false)
