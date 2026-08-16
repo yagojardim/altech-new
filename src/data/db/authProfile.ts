@@ -5,6 +5,7 @@ import { supabase } from '../../integrations/supabase/client'
 import { safeCall, logger } from '../../utils/logger'
 import { derivePermissions } from '../permissions'
 import type { MockUser, RoleContext, UserDashboard, DashboardType } from '../session'
+import { homeRolesFromMetadata } from './invite'
 
 function tbl(name: string): any {
   return (supabase as unknown as { from: (t: string) => any }).from(name)
@@ -52,9 +53,11 @@ function dash(userId: string, tenantId: string, id: DashboardType, isDefault: bo
 }
 
 /** Todos os papéis do profile (principal primeiro, depois secundários). */
-async function resolveRoles(profileId: string, tenantId: string, fallback: string | null): Promise<RoleContext[]> {
+async function resolveRoles(
+  profileId: string, tenantId: string, fallback: string | null, metadata?: unknown,
+): Promise<RoleContext[]> {
   const primary = fallback ? normalizeRole(fallback) : null
-  const found: RoleContext[] = []
+  const found: RoleContext[] = [...homeRolesFromMetadata(metadata)]
   try {
     const { data: urs } = await tbl('user_roles')
       .select('role_id').eq('profile_id', profileId).eq('tenant_id', tenantId)
@@ -80,14 +83,14 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
   return safeCall<MockUser | null>('authProfile.load', async () => {
     let row: any = null
     const byAuth = await tbl('profiles')
-      .select('id, tenant_id, name, email, status, primary_role, tenant_owner, password_must_change')
+      .select('id, tenant_id, name, email, status, primary_role, tenant_owner, password_must_change, metadata')
       .eq('auth_user_id', authUserId).limit(1)
     row = (byAuth.data ?? [])[0] ?? null
 
     // Fallback por e-mail (profiles ainda não vinculados) — vincula na primeira entrada.
     if (!row && email) {
       const byEmail = await tbl('profiles')
-        .select('id, tenant_id, name, email, status, primary_role, tenant_owner, password_must_change')
+        .select('id, tenant_id, name, email, status, primary_role, tenant_owner, password_must_change, metadata')
         .ilike('email', email).limit(1)
       row = (byEmail.data ?? [])[0] ?? null
       if (row) {
@@ -97,7 +100,7 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
 
     if (!row) return null
 
-    const roles = await resolveRoles(row.id, row.tenant_id, row.primary_role)
+    const roles = await resolveRoles(row.id, row.tenant_id, row.primary_role, row.metadata)
     const roleContext: RoleContext = roles[0] ?? 'Dev'
     const isAdmin = roleContext === 'Admin'
     const isOwner = !!row.tenant_owner

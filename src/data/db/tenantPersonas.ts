@@ -4,6 +4,7 @@ import { supabase } from '../../integrations/supabase/client'
 import { safeCall } from '../../utils/logger'
 import { DEFAULT_TENANT_ID } from './timeline'
 import { buildPersona, type MockUser, type RoleContext } from '../session'
+import { homeRolesFromMetadata } from './invite'
 
 interface ProfileLite {
   id: string
@@ -12,6 +13,7 @@ interface ProfileLite {
   status: string | null
   primary_role: string | null
   tenant_owner: boolean | null
+  metadata?: unknown
 }
 
 interface UserRoleLite { profile_id: string | null; role_id: string | null }
@@ -52,7 +54,7 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
   return safeCall<MockUser[]>('tenantPersonas.fetch', async () => {
     const { data: profileRows, error } = await supabase
       .from('profiles')
-      .select('id, name, email, status, primary_role, tenant_owner')
+      .select('id, name, email, status, primary_role, tenant_owner, metadata')
       .eq('tenant_id', DEFAULT_TENANT_ID)
       .is('archived_at', null)
     if (error) throw error
@@ -88,7 +90,8 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
     const personas = active.map(p => {
       const name = p.name ?? p.email ?? 'Sem nome'
       const override = NAME_OVERRIDES.find(o => o.match.test(name))?.role
-      const dbRoles = rolesByProfile.get(p.id) ?? []
+      const metaRoles = homeRolesFromMetadata(p.metadata)
+      const dbRoles = [...metaRoles, ...(rolesByProfile.get(p.id) ?? []).filter(r => !metaRoles.includes(r))]
       const role: RoleContext =
         override ?? normalizeRole(p.primary_role) ?? dbRoles[0] ?? 'Dev'
       return buildPersona({
