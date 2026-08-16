@@ -576,21 +576,37 @@ function CardContent({ id }: { id: string }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ReportsPage() {
-  useDashboardAssignments(getActiveUser().name)
+  const activeUser = getActiveUser()
+  useDashboardAssignments(activeUser.name)
   const [projects, setProjects] = useState<DashboardProjectOption[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [projError, setProjError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    listDashboardProjects()
-      .then(list => { if (alive) { setProjects(list); setSelected(new Set(list.map(p => p.id))) } })
+    // Escopo = projetos AMARRADOS ao perfil do usuário (mesma fonte do HomeFilterProvider).
+    Promise.all([
+      listDashboardProjects(),
+      fetchAssignedProjects({
+        tenantId: MOCK_TENANT.tenant_id,
+        profileId: activeUser.user_id,
+        permissions: activeUser.permissions,
+      }),
+    ])
+      .then(([list, assigned]) => {
+        if (!alive) return
+        const allowed = new Set(assigned.map(p => p.id))
+        const mine = list.filter(p => allowed.has(p.id))
+        setProjects(mine)
+        setSelected(new Set(mine.map(p => p.id)))
+      })
       .catch((e: Error) => { if (alive) setProjError(e.message) })
     return () => { alive = false }
-  }, [])
+  }, [activeUser.user_id, activeUser.permissions.join(',')])
 
-  const all = projects.length > 0 && selected.size === projects.length
-  const projectIds = all || selected.size === 0 ? undefined : [...selected]
+  // Nunca escopo global: sempre limita aos projetos do perfil.
+  const projectIds = [...selected]
+
 
   return (
     <ReportsDataProvider projectIds={projectIds}>
