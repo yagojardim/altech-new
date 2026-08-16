@@ -686,8 +686,9 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
 
   const { activeUser } = useSession()
   const permissions    = activeUser.permissions
-  const gov            = useReportsGovernance()
-  const reportsAllowed = canAccessReports(activeUser.role_context, permissions, gov)
+  const hasReportsFlag = useProfileReportsAccess(activeUser.user_id)
+  const reportsAllowed = canAccessReports(permissions, hasReportsFlag)
+
   const groups         = getGroups(activeUser.role_context, permissions)
     .map(g => ({ ...g, items: g.items.filter(i => i.id !== 'reports' || reportsAllowed) }))
     .filter(g => g.items.length > 0)
