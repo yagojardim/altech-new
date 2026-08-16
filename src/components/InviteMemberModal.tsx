@@ -114,10 +114,30 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
   const [optIns, setOptIns] = useState<Set<Capability>>(new Set())
   const [approvedSquads, setApprovedSquads] = useState<string[]>([])
 
-  // Step 5 — links
-  const [projects, setProjects] = useState<string[]>(['proj_001'])
-  const [squads,   setSquads]   = useState<string[]>(['squad_growth'])
-  const [modules,  setModules]  = useState<string[]>(['board', 'reports'])
+  // Step 5 — links (opções reais do tenant)
+  const [projectOpts, setProjectOpts] = useState<OptionRow[]>([])
+  const [squadOpts, setSquadOpts]     = useState<OptionRow[]>([])
+  const [moduleOpts, setModuleOpts]   = useState<ModuleOption[]>([])
+  const [optsLoading, setOptsLoading] = useState(true)
+  const [projects, setProjects] = useState<string[]>([])
+  const [squads,   setSquads]   = useState<string[]>([])
+  const [modules,  setModules]  = useState<string[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saveErr, setSaveErr] = useState('')
+
+  useEffect(() => {
+    let alive = true
+    void fetchInviteOptions().then(opts => {
+      if (!alive) return
+      setProjectOpts(opts.projects)
+      setSquadOpts(opts.squads)
+      setModuleOpts(opts.modules)
+      setModules(opts.modules.map(m => m.key))
+      setOptsLoading(false)
+    })
+    return () => { alive = false }
+  }, [])
+
 
   // Step 6 — status
   const [status, setStatus] = useState<'active' | 'invited'>('invited')
