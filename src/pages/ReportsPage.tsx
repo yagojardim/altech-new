@@ -16,12 +16,10 @@ import {
   REPORT_REGISTRY, REPORT_CARDS_LIST,
   ReportsDataProvider, useReportsData,
 } from '../data/reportRegistry'
-import { ProjectMultiSelect } from '../components/ds/DashboardKit'
 import { listDashboardProjects, type DashboardProjectOption } from '../data/db/dashboards'
 import { fetchAssignedProjects } from '../data/db/projects'
 import {
   useReportsGovernance, saveReportsGovernance, isCardReleased, isTenantOwner,
-  REPORTS_OPTIONAL_ROLES, REPORTS_ROLE_LABEL,
 } from '../data/db/reportsGovernance'
 
 
@@ -379,50 +377,6 @@ function ReleaseToggle({ cardId }: { cardId: string }) {
   )
 }
 
-// ── Quem acessa Relatórios e Insights (Admin Master) ─────────────────────────
-function ReportsAccessPanel() {
-  const gov = useReportsGovernance()
-  const [saving, setSaving] = useState(false)
-
-  async function toggleRole(role: string) {
-    setSaving(true)
-    const has = (gov.accessRoles as string[]).includes(role)
-    const next = has
-      ? gov.accessRoles.filter(r => r !== role)
-      : [...gov.accessRoles, role as (typeof gov.accessRoles)[number]]
-    await saveReportsGovernance({ accessRoles: next })
-    setSaving(false)
-  }
-
-  return (
-    <div style={{
-      margin: `${px(16)} ${px(24)} 0`, padding: px(16),
-      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: px(12),
-    }}>
-      <div style={{ fontSize: px(13), fontWeight: 700, color: T.text1 }}>
-        Quem acessa Relatórios e Insights
-      </div>
-      <div style={{ fontSize: px(12), color: T.text3, marginTop: px(2) }}>
-        O Admin Master sempre tem acesso. Libere abaixo os papéis adicionais.
-      </div>
-      <div style={{ display: 'flex', gap: px(16), flexWrap: 'wrap', marginTop: px(10) }}>
-        {REPORTS_OPTIONAL_ROLES.map(role => (
-          <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: px(12), color: T.text2, cursor: saving ? 'wait' : 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={gov.accessRoles.includes(role)}
-              disabled={saving}
-              onChange={() => { void toggleRole(role) }}
-              style={{ accentColor: T.accent, width: 14, height: 14 }}
-            />
-            {REPORTS_ROLE_LABEL[role] ?? role}
-          </label>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ── Report Card wrapper ───────────────────────────────────────────────────────
 interface ReportCardProps {
   def:        ReportCardDef
@@ -692,25 +646,14 @@ export default function ReportsPage() {
 
   return (
     <ReportsDataProvider projectIds={projectIds}>
-      <ReportsPageInner
-        projects={projects}
-        selected={selected}
-        onSelected={setSelected}
-        projError={projError}
-      />
+      <ReportsPageInner projError={projError} />
     </ReportsDataProvider>
   )
 }
 
-function ReportsPageInner({ projects, selected, onSelected, projError }: {
-  projects: DashboardProjectOption[]
-  selected: Set<string>
-  onSelected: (s: Set<string>) => void
-  projError: string | null
-}) {
+function ReportsPageInner({ projError }: { projError: string | null }) {
   const user      = getActiveUser()
   const canManage = can(user.permissions, 'manage:dashboard-cards') || isTenantOwner(user.permissions)
-  const isOwner   = isTenantOwner(user.permissions)
 
   const [batchOpen,  setBatchOpen] = useState(false)
   const [popCard,    setPopCard]   = useState<ReportCardDef | null>(null)
@@ -750,12 +693,6 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
     toast(`Atribuições salvas. ${total} vínculo${total !== 1 ? 's' : ''} ativo${total !== 1 ? 's' : ''}.`)
   }
 
-  const kpis = [
-    { label: 'Total Issues',   value: data ? String(data.totals.issues) : '—',        color: T.text1 },
-    { label: 'Velocity atual', value: data ? `${data.totals.velocity} pts` : '—',      color: T.accent },
-    { label: 'Avg Lead Time',  value: data ? `${data.totals.leadAvg} d` : '—',         color: T.warn },
-    { label: 'Bug rate',       value: data ? `${data.totals.bugRate}%` : '—',          color: T.crit },
-  ]
 
 
   return (
@@ -789,27 +726,13 @@ function ReportsPageInner({ projects, selected, onSelected, projError }: {
           </button>
         </div>
 
-        {/* Filter row */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: px(10), flexWrap: 'wrap', marginBottom: px(16) }}>
-          <ProjectMultiSelect projects={projects} selected={selected} onChange={onSelected} />
-          {data?.burndown.sprintName && (
-            <div style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), border: `1px solid ${T.accentBorder}`, background: T.accentDim, color: T.accent, fontSize: px(12), fontWeight: 500 }}>
-              {data.burndown.sprintName}
-            </div>
-          )}
-          {loading && !data && (
-            <span style={{ fontSize: px(12), color: T.text3 }}>Carregando agregados…</span>
-          )}
-          {kpis.map((k, i) => (
-            <div key={i} style={{ padding: `${px(6)} ${px(14)}`, borderRadius: px(20), background: T.bgSurface2, border: `1px solid ${T.border}`, fontSize: px(12), color: T.text2, display: 'flex', alignItems: 'center', gap: px(6) }}>
-              <span>{k.label}:</span>
-              <span style={{ fontWeight: 700, color: k.color }}>{k.value}</span>
-            </div>
-          ))}
-        </div>
-      </div>
+        {loading && !data && (
+          <div style={{ fontSize: px(12), color: T.text3, marginBottom: px(16) }}>
+            Carregando agregados…
+          </div>
+        )}
 
-      {isOwner && <ReportsAccessPanel />}
+      </div>
 
       {/* ── Error banner ── */}
       {(error || projError) && (

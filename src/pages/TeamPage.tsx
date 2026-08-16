@@ -10,6 +10,9 @@ import {
   capabilityVisibility,
 } from '../data/permissions'
 import { getTenantOwnerEmails, getMembers } from '../data/db/members'
+import {
+  fetchProfileReportsAccess, saveProfileReportsAccess, roleSupportsReportsAccess,
+} from '../data/db/reportsGovernance'
 import { issueToken, setPasswordMustChange, auditPasswordResetRequested, activationLink } from '../data/db/activationTokens'
 import { copyToClipboard } from '../utils/copyToClipboard'
 import { useSession } from '../data/SessionContext'
@@ -171,6 +174,7 @@ function TabBar({ active, onChange, pendingCount }: { active:Tab; onChange:(t:Ta
 interface EditDraft {
   role: RoleContext; squad: string; status: 'active'|'inactive'|'blocked'
   modules: string[]; dashboards: DashboardType[]; defaultDash: DashboardType|null; optIns: Capability[]
+  reportsAccess: boolean
 }
 
 // ─── Edit User Modal ──────────────────────────────────────────────────────────
@@ -202,13 +206,23 @@ function EditUserModal({
     dashboards:  [...currentDashIds],
     defaultDash: currentDefault,
     optIns:      existingOptIns,
+    reportsAccess: false,
   })
+
+  // Carrega o flag atual de acesso a Relatórios (profiles.reports_access).
+  useEffect(() => {
+    let alive = true
+    void fetchProfileReportsAccess(user.user_id).then(v => {
+      if (alive) setDraft(d => ({ ...d, reportsAccess: v }))
+    })
+    return () => { alive = false }
+  }, [user.user_id])
 
   function patch(p: Partial<EditDraft>) { setDraft(d=>({...d,...p})) }
 
   // When role changes, reset opt-ins to empty and suggest dashboards reset
   function changeRole(r: RoleContext) {
-    patch({ role:r, optIns:[] })
+    patch({ role:r, optIns:[], reportsAccess: roleSupportsReportsAccess(r) ? draft.reportsAccess : false })
   }
 
   function toggleModule(m: string) {
@@ -316,6 +330,34 @@ function EditUserModal({
                       }}>{m}</button>
                   ))}
                 </div>
+              </Field>
+
+              <Field label="Acesso a Relatórios e Insights">
+                {roleSupportsReportsAccess(draft.role) ? (
+                  <button onClick={()=>patch({ reportsAccess: !draft.reportsAccess })}
+                    style={{
+                      display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:8,
+                      background:draft.reportsAccess?T.accentDim:'transparent',
+                      border:`1px solid ${draft.reportsAccess?T.accentBorder:T.border}`,
+                      cursor:'pointer', width:'100%', textAlign:'left',
+                    }}>
+                    <span style={{
+                      width:16, height:16, borderRadius:4, flexShrink:0,
+                      background:draft.reportsAccess?T.accent:T.border2,
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      color:'#fff', fontSize:10,
+                    }}>{draft.reportsAccess?'✓':''}</span>
+                    <span style={{ fontSize:12, color:T.text1 }}>
+                      Liberar a tela "Relatórios e Insights" para este usuário
+                    </span>
+                  </button>
+                ) : (
+                  <p style={{ fontSize:11, color:T.text3, margin:0 }}>
+                    {isAdmin
+                      ? 'Admin Master sempre tem acesso a Relatórios e Insights.'
+                      : 'Disponível apenas para PMO, Project Manager, Product Owner e Tech Lead.'}
+                  </p>
+                )}
               </Field>
             </>
           )}
@@ -510,6 +552,11 @@ function MembersTab({ onInvite, canManage }: { onInvite:()=>void; canManage:bool
       modules_enabled:draft.modules, permissions:newPerms,
       assigned_dashboards:newDashes, status:draft.status,
     }:u))
+
+    void saveProfileReportsAccess(
+      userId,
+      roleSupportsReportsAccess(draft.role) ? draft.reportsAccess : false,
+    )
 
     setEditingUser(null)
     showToast(`${target.name} atualizado com sucesso`)
