@@ -48,12 +48,50 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
   const user  = getActiveUser()
   const existing = getAssignment(tid, card.id)
 
-  // Map<target, slot> — tracks both which targets are checked and which slot they use
+  const EXEC_TARGETS = ASSIGNMENT_TARGETS.filter(t => t.group === 'Executivos')
+  const EXEC_IDS = new Set(EXEC_TARGETS.map(t => t.id))
+
+  // Map<target, slot> — executive (shared) dashboards only
   const [selected, setSelected] = useState<Map<AssignmentTarget, 'mural' | 'grid'>>(
-    new Map((existing?.targets ?? []).map(t => [t, existing?.slots?.[t] ?? 'mural']))
+    new Map((existing?.targets ?? []).filter(t => EXEC_IDS.has(t)).map(t => [t, existing?.slots?.[t] ?? 'mural']))
   )
   const [query, setQuery] = useState('')
   const popoverRef = useRef<HTMLDivElement>(null)
+
+  // ── Per-user targets ────────────────────────────────────────────────────────
+  const [users, setUsers] = useState<MockUser[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(true)
+  const [userSel, setUserSel] = useState<Set<string>>(new Set())
+  const initialUserSel = useRef<Set<string>>(new Set())
+
+  const dashOf = (u: MockUser) => DEFAULT_DASHBOARD_BY_ROLE[u.role_context]
+
+  useEffect(() => {
+    let alive = true
+    void (async () => {
+      const personas = await fetchTenantPersonas()
+      if (!alive) return
+      setUsers(personas)
+      const checked = new Set<string>()
+      await Promise.all(personas.map(async p => {
+        const cards = await assignmentsApi.getAssignedCards(p.user_id, dashOf(p))
+        if (cards.some(c => c.cardId === card.id)) checked.add(p.user_id)
+      }))
+      if (!alive) return
+      initialUserSel.current = new Set(checked)
+      setUserSel(checked)
+      setLoadingUsers(false)
+    })()
+    return () => { alive = false }
+  }, [card.id])
+
+  function toggleUser(id: string) {
+    setUserSel(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   const [pos, setPos] = useState({ top: 0, left: 0 })
   useEffect(() => {
@@ -84,7 +122,8 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
     setSelected(prev => { const next = new Map(prev); next.set(id, slot); return next })
   }
 
-  function save() {
+  async function save() {
+    // Executive (shared) dashboards — existing tenant-level store
     const targets = [...selected.keys()]
     const slots: Partial<Record<AssignmentTarget, 'mural' | 'grid'>> = {}
     selected.forEach((slot, target) => { slots[target] = slot })
@@ -93,20 +132,45 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
     } else {
       upsertAssignment(tid, card.id, card.title, targets, user.user_id, slots)
     }
-    onSaved(targets.length)
+
+    // Per-user assignments — dashboard_assignments is already keyed by user_id
+    const before = initialUserSel.current
+    const ops: Promise<unknown>[] = []
+    for (const u of users) {
+      const dash = dashOf(u)
+      const now  = userSel.has(u.user_id)
+      const was  = before.has(u.user_id)
+      if (now && !was) {
+        ops.push(assignmentsApi.assign({
+          profileId: u.user_id, dashboard: dash,
+          cardId: card.id, cardTitle: card.title, slot: 'mural',
+        }))
+      } else if (!now && was) {
+        ops.push(assignmentsApi.remove(u.user_id, dash, card.id, 'mural'))
+      }
+    }
+    await Promise.all(ops)
+    initialUserSel.current = new Set(userSel)
+    // Refresh the local cache if the active user was affected
+    if (users.some(u => u.user_id === user.user_id)) void hydrateAssignments(user.name)
+
+    onSaved(targets.length + userSel.size)
     onClose()
   }
 
-  const filtered = ASSIGNMENT_TARGETS.filter(t =>
-    t.label.toLowerCase().includes(query.toLowerCase())
-  )
-  const groups = ['Executivos', 'Por perfil'] as const
-  const grouped = groups.map(g => ({ group: g, targets: filtered.filter(t => t.group === g) }))
+  const q = query.trim().toLowerCase()
+  const filteredExec  = EXEC_TARGETS.filter(t => t.label.toLowerCase().includes(q))
+  const filteredUsers = users.filter(u => u.name.toLowerCase().includes(q))
+  const totalSelected = selected.size + userSel.size
 
   const inpS: CSSProperties = {
     width: '100%', background: T.bgSurface2, border: `1px solid ${T.border}`,
     borderRadius: 7, padding: '7px 10px', fontSize: 12, color: T.text1,
     outline: 'none', boxSizing: 'border-box',
+  }
+  const groupLabelS: CSSProperties = {
+    fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase',
+    letterSpacing: '0.07em', padding: '6px 14px 3px',
   }
 
   return (
@@ -128,19 +192,17 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
           autoFocus
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="Buscar destino…"
+          placeholder="Buscar dashboard ou pessoa…"
           style={inpS}
         />
       </div>
 
       {/* List */}
-      <div style={{ maxHeight: 300, overflowY: 'auto', padding: '8px 0' }}>
-        {grouped.map(({ group, targets }) => targets.length === 0 ? null : (
-          <div key={group}>
-            <div style={{ fontSize: 10, fontWeight: 700, color: T.text3, textTransform: 'uppercase', letterSpacing: '0.07em', padding: '6px 14px 3px' }}>
-              {group}
-            </div>
-            {targets.map(t => {
+      <div style={{ maxHeight: 320, overflowY: 'auto', padding: '8px 0' }}>
+        {filteredExec.length > 0 && (
+          <div>
+            <div style={groupLabelS}>Executivos</div>
+            {filteredExec.map(t => {
               const checked = selected.has(t.id)
               const slot    = selected.get(t.id) ?? 'mural'
               return (
@@ -184,12 +246,39 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
               )
             })}
           </div>
-        ))}
-        {filtered.length === 0 && (
-          <div style={{ padding: '16px 14px', fontSize: 12, color: T.text3, textAlign: 'center' }}>
-            Nenhum destino encontrado.
-          </div>
         )}
+
+        <div>
+          <div style={groupLabelS}>Por usuário</div>
+          {loadingUsers && (
+            <div style={{ padding: '10px 14px', fontSize: 12, color: T.text3 }}>Carregando pessoas…</div>
+          )}
+          {!loadingUsers && filteredUsers.length === 0 && (
+            <div style={{ padding: '10px 14px', fontSize: 12, color: T.text3 }}>Nenhuma pessoa encontrada.</div>
+          )}
+          {filteredUsers.map(u => {
+            const checked = userSel.has(u.user_id)
+            return (
+              <label key={u.user_id} style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '6px 14px',
+                cursor: 'pointer', background: checked ? `${T.accent}10` : 'transparent',
+                transition: 'background 0.1s',
+              }}>
+                <input
+                  type="checkbox" checked={checked} onChange={() => toggleUser(u.user_id)}
+                  style={{ accentColor: T.accent, width: 14, height: 14, flexShrink: 0 }}
+                />
+                <Avatar name={u.name} size="sm" />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12, color: checked ? T.text1 : T.text2, fontWeight: checked ? 600 : 400, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {u.name}
+                  </span>
+                  <span style={{ display: 'block', fontSize: 10, color: T.text3 }}>{u.role_context}</span>
+                </span>
+              </label>
+            )
+          })}
+        </div>
       </div>
 
       {/* Footer */}
@@ -198,16 +287,17 @@ function AssignPopover({ card, anchorRef, onClose, onSaved }: AssignPopoverProps
           flex: 1, padding: '7px', borderRadius: 7, fontSize: 12,
           background: 'transparent', color: T.text2, border: `1px solid ${T.border}`, cursor: 'pointer',
         }}>Cancelar</button>
-        <button onClick={save} style={{
+        <button onClick={() => { void save() }} style={{
           flex: 2, padding: '7px', borderRadius: 7, fontSize: 12, fontWeight: 700,
           background: T.accent, color: '#fff', border: 'none', cursor: 'pointer',
         }}>
-          Salvar{selected.size > 0 ? ` (${selected.size})` : ''}
+          Salvar{totalSelected > 0 ? ` (${totalSelected})` : ''}
         </button>
       </div>
     </div>
   )
 }
+
 
 // ── Assignment badge ──────────────────────────────────────────────────────────
 function AssignBadge({ count, onClick }: { count: number; onClick: (e: React.MouseEvent) => void }) {
