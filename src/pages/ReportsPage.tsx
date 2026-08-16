@@ -398,6 +398,7 @@ function ReportCard({ def, canManage, tick, onAssign, children, focused = false 
 
         {/* Assignment controls — always visible; disabled when no permission */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+          {canManage && <ReleaseToggle cardId={def.id} />}
           {count > 0 && canManage && (
             <AssignBadge count={count} onClick={handleAssign} />
           )}
