@@ -46,6 +46,7 @@ import {
 } from '../data/reportRegistry'
 import { getBoardsForScope } from '../data/boards'
 import { fetchAssignedProjects } from '../data/db/projects'
+import { useReportsGovernance, isCardReleased } from '../data/db/reportsGovernance'
 import { can } from '../data/permissions'
 import { countActiveModules, listModules, type ModuleView } from '../data/db/modules'
 import { getMembers, setMemberStatus, type MemberRow, type MemberStatus } from '@/data/db/members'
@@ -1676,9 +1677,11 @@ function CompositionGrid({ dashId, tenantId, selProj }: {
   const [showAddModal, setShowAdd] = useState(false)
   void tick
 
+  const gov       = useReportsGovernance()
   const slots     = getGridCards(tenantId, dashId as AssignmentTarget, activeUser.user_id)
   const gridIds   = new Set(slots.map(s => s.cardId))
-  const available = REPORT_CARDS_LIST.filter(r => !gridIds.has(r.id))
+  // Só os cards LIBERADOS na tela de Relatórios e Insights podem ser adicionados.
+  const available = REPORT_CARDS_LIST.filter(r => !gridIds.has(r.id) && isCardReleased(gov, r.id))
   const canAdd    = available.length > 0
 
   // Real sprint data for charts that support extra props

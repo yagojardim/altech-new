@@ -8,6 +8,7 @@ import { useVisibleBoards } from '@/data/db/boards'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
+import { useReportsGovernance, canAccessReports } from '../data/db/reportsGovernance'
 import {
   DashboardIcon as AltechDashboard, ProjectsIcon as AltechProjects, DiscoveryIcon as AltechDiscovery,
   BacklogIcon as AltechBacklog, RoadmapIcon as AltechRoadmap, ReportsAltIcon as AltechReports,
@@ -685,7 +686,11 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
 
   const { activeUser } = useSession()
   const permissions    = activeUser.permissions
+  const gov            = useReportsGovernance()
+  const reportsAllowed = canAccessReports(activeUser.role_context, permissions, gov)
   const groups         = getGroups(activeUser.role_context, permissions)
+    .map(g => ({ ...g, items: g.items.filter(i => i.id !== 'reports' || reportsAllowed) }))
+    .filter(g => g.items.length > 0)
   const canLogHours      = can(permissions, 'log:hours')
   const canApproveHours  = can(permissions, 'approve:hours')
 

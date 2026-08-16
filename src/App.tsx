@@ -17,6 +17,7 @@ import ReleasesPage from "./pages/ReleasesPage"
 import FiltersPage from "./pages/FiltersPage"
 import IssueNavigatorPage from "./pages/IssueNavigatorPage"
 import ReportsPage from "./pages/ReportsPage"
+import { useReportsGovernance, canAccessReports } from "./data/db/reportsGovernance"
 import AutomationsPage from "./pages/AutomationsPage"
 import ConfigPage from "./pages/ConfigPage"
 import { CreateIssueModal } from "./components/CreateIssueModal"
@@ -474,7 +475,7 @@ function ShellWithRole({
             )}
             {view === "reports" && (
               <div className="h-full min-w-0 w-full overflow-y-auto dark-shell">
-                <ReportsPage />
+                <ReportsRouteGuard />
               </div>
             )}
             {view === "automations" && (
@@ -590,4 +591,18 @@ function ShellWithRole({
       </>
     </ErrorBoundary>
   )
+}
+
+// Rota "Relatórios e Insights": apenas Admin Master + papéis liberados por ele.
+function ReportsRouteGuard() {
+  const { activeUser } = useSession()
+  const gov = useReportsGovernance()
+  if (!canAccessReports(activeUser.role_context, activeUser.permissions, gov)) {
+    return (
+      <div style={{ padding: 48, color: '#94a3b8', fontSize: 14 }}>
+        Você não tem acesso a Relatórios e Insights. Peça liberação ao Admin Master do tenant.
+      </div>
+    )
+  }
+  return <ReportsPage />
 }
