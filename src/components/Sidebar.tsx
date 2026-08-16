@@ -8,7 +8,7 @@ import { useVisibleBoards } from '@/data/db/boards'
 import { INSPECTION_MODE_ENABLED } from '../lib/auth'
 import { can, type Capability, PERMISSION_MATRIX } from '../data/permissions'
 import { MOCK_USERS, type RoleContext } from '../data/session'
-import { useReportsGovernance, canAccessReports } from '../data/db/reportsGovernance'
+import { useProfileReportsAccess, canAccessReports } from '../data/db/reportsGovernance'
 import {
   DashboardIcon as AltechDashboard, ProjectsIcon as AltechProjects, DiscoveryIcon as AltechDiscovery,
   BacklogIcon as AltechBacklog, RoadmapIcon as AltechRoadmap, ReportsAltIcon as AltechReports,
