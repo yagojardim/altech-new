@@ -754,6 +754,29 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                 </div>
               )}
 
+              {homonym && (
+                <div style={{ padding: '10px 12px', borderRadius: 7, background: `${T.warn ?? '#f5a524'}14`, border: `1px solid ${T.warn ?? '#f5a524'}50`, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 11, color: T.text1 }}>
+                    Já existe um usuário chamado <strong>{homonym.name}</strong> cadastrado (e-mail: {homonym.email}).
+                    Deseja seguir com o cadastro ou modificar?
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => void handleSubmit(true)} style={{
+                      padding: '6px 14px', borderRadius: 7, border: 'none', cursor: 'pointer',
+                      background: T.accent, color: '#fff', fontSize: 11, fontWeight: 600,
+                    }}>
+                      Seguir mesmo assim
+                    </button>
+                    <button onClick={() => { setHomonym(null); setStep(0) }} style={{
+                      padding: '6px 14px', borderRadius: 7, border: `1px solid ${T.border}`,
+                      background: 'none', color: T.text2, fontSize: 11, cursor: 'pointer',
+                    }}>
+                      Modificar
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
           )}
           {/* ── Step 6: Senha temporária (exibida uma única vez) ─── */}
