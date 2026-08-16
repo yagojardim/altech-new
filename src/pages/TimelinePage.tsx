@@ -4,11 +4,43 @@ import {
   fetchTimelineData, updateWorkItemDates, projectColor, epicColor, DB_STATUS_CFG,
   type TimelineData, type WorkItemRow,
 } from '../data/db/timeline'
+import { getUserPref, saveUserPref } from '../data/db/userPrefs'
+import { useSession } from '../data/SessionContext'
 
-const DAY_PX = 28
 const ROW_H = 52
 const HEADER_H = 48
 const MS_DAY = 86_400_000
+const PREF_KEY = 'timeline.view'
+
+// ─── Zoom ─────────────────────────────────────────────────────────────────────
+type Zoom = 'week' | 'month' | 'quarter'
+const ZOOM_PX: Record<Zoom, number> = { week: 28, month: 9, quarter: 3.4 }
+const ZOOM_LABEL: Record<Zoom, string> = { week: 'Semana', month: 'Mês', quarter: 'Quarter' }
+
+type GroupBy = 'project-epic' | 'sprint' | 'assignee' | 'epic'
+const GROUP_LABEL: Record<GroupBy, string> = {
+  'project-epic': 'Projeto → Épico',
+  sprint: 'Sprint',
+  assignee: 'Responsável',
+  epic: 'Épico',
+}
+
+interface Filters {
+  status: string
+  type: string
+  assignee: string
+  sprint: string
+  epic: string
+}
+const EMPTY_FILTERS: Filters = { status: '', type: '', assignee: '', sprint: '', epic: '' }
+
+interface TimelinePrefs {
+  zoom: Zoom
+  groupBy: GroupBy
+  filters: Filters
+  collapsed: string[]
+  projects: string[]
+}
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 function toDate(iso: string): Date {
@@ -94,7 +126,7 @@ function ProjectDropdown({
         }}
       >
         <div style={{ display: 'flex', gap: 3 }}>
-          {options.filter(o => selected.has(o.id)).map(o => (
+          {options.filter(o => selected.has(o.id)).slice(0, 6).map(o => (
             <span key={o.id} style={{ width: 7, height: 7, borderRadius: 2, background: o.color }} />
           ))}
         </div>
@@ -172,6 +204,29 @@ function ProjectDropdown({
   )
 }
 
+// ─── Small native-select filter ───────────────────────────────────────────────
+function FilterSelect({
+  label, value, options, onChange,
+}: { label: string; value: string; options: { value: string; label: string }[]; onChange: (v: string) => void }) {
+  const active = value !== ''
+  return (
+    <select
+      value={value}
+      onChange={e => onChange(e.target.value)}
+      title={label}
+      style={{
+        height: 28, padding: '0 8px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+        background: active ? T.accentDim : T.bgPage,
+        border: `1px solid ${active ? T.accent : T.border}`,
+        color: active ? T.accent : T.text2, outline: 'none', maxWidth: 170,
+      }}
+    >
+      <option value="">{label}: todos</option>
+      {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
+  )
+}
+
 // ─── Skeleton ─────────────────────────────────────────────────────────────────
 function TimelineSkeleton() {
   return (
@@ -193,11 +248,13 @@ function TimelineSkeleton() {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 type Row =
-  | { kind: 'project'; id: string; label: string; color: string; count: number }
-  | { kind: 'epic'; id: string; label: string; color: string; count: number }
+  | { kind: 'group'; id: string; level: 0 | 1; label: string; color: string; count: number }
   | { kind: 'item'; id: string; item: WorkItemRow; color: string }
 
 export default function TimelinePage() {
+  const { activeUser } = useSession()
+  const profileId = activeUser?.user_id ?? ''
+
   const [data, setData] = useState<TimelineData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -208,7 +265,16 @@ export default function TimelinePage() {
   const [dragging, setDragging] = useState<{ id: string; startX: number; orig: Span } | null>(null)
   const [saving, setSaving] = useState<Set<string>>(new Set())
 
-  // ── Load ────────────────────────────────────────────────────────────────────
+  // View preferences (persisted in the database, per user)
+  const [zoom, setZoom] = useState<Zoom>('month')
+  const [groupBy, setGroupBy] = useState<GroupBy>('project-epic')
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [prefsReady, setPrefsReady] = useState(false)
+
+  const DAY_PX = ZOOM_PX[zoom]
+
+  // ── Load data ───────────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
     const timer = setTimeout(() => {
@@ -220,7 +286,7 @@ export default function TimelinePage() {
         if (cancelled) return
         setData(d)
         setSpans(buildSpans(d))
-        setSelectedProjects(new Set(d.projects.map(p => p.id)))
+        setSelectedProjects(prev => prev ?? new Set(d.projects.map(p => p.id)))
         setError(null)
       })
       .catch((e: unknown) => { if (!cancelled) setError(e instanceof Error ? e.message : String(e)) })
@@ -228,6 +294,36 @@ export default function TimelinePage() {
 
     return () => { cancelled = true; clearTimeout(timer) }
   }, [])
+
+  // ── Load saved preferences (database) ───────────────────────────────────────
+  useEffect(() => {
+    if (!profileId) { setPrefsReady(true); return }
+    let cancelled = false
+    void getUserPref<Partial<TimelinePrefs>>(profileId, PREF_KEY).then(p => {
+      if (cancelled) return
+      if (p) {
+        if (p.zoom && p.zoom in ZOOM_PX) setZoom(p.zoom)
+        if (p.groupBy && p.groupBy in GROUP_LABEL) setGroupBy(p.groupBy)
+        if (p.filters) setFilters({ ...EMPTY_FILTERS, ...p.filters })
+        if (Array.isArray(p.collapsed)) setCollapsed(new Set(p.collapsed))
+        if (Array.isArray(p.projects) && p.projects.length > 0) setSelectedProjects(new Set(p.projects))
+      }
+      setPrefsReady(true)
+    })
+    return () => { cancelled = true }
+  }, [profileId])
+
+  // ── Persist preferences (database, debounced) ───────────────────────────────
+  useEffect(() => {
+    if (!prefsReady || !profileId) return
+    const payload: TimelinePrefs = {
+      zoom, groupBy, filters,
+      collapsed: [...collapsed],
+      projects: selectedProjects ? [...selectedProjects] : [],
+    }
+    const t = setTimeout(() => { void saveUserPref(profileId, PREF_KEY, payload) }, 500)
+    return () => clearTimeout(t)
+  }, [prefsReady, profileId, zoom, groupBy, filters, collapsed, selectedProjects])
 
   /** Derives each item's span: own dates → sprint dates → project period. */
   function buildSpans(d: TimelineData): Record<string, Span> {
@@ -257,34 +353,133 @@ export default function TimelinePage() {
     () => new Map((data?.profiles ?? []).map(p => [p.id, p])),
     [data],
   )
+  const epicById = useMemo(() => new Map((data?.epics ?? []).map(e => [e.id, e])), [data])
+  const sprintById = useMemo(() => new Map((data?.sprints ?? []).map(s => [s.id, s])), [data])
 
-  // ── Grouping: project → epic → item (reacts to the project filter) ─────────
-  const rows: Row[] = useMemo(() => {
+  // ── Filter options (always derived from real data) ──────────────────────────
+  const statusOptions = useMemo(() => {
+    const set = new Set((data?.workItems ?? []).map(w => w.status).filter(Boolean) as string[])
+    return [...set].map(s => ({ value: s, label: DB_STATUS_CFG[s]?.label ?? s }))
+  }, [data])
+  const typeOptions = useMemo(() => {
+    const set = new Set((data?.workItems ?? []).map(w => w.type).filter(Boolean) as string[])
+    return [...set].map(t => ({ value: t, label: t }))
+  }, [data])
+  const assigneeOptions = useMemo(() => {
+    const ids = new Set((data?.workItems ?? []).map(w => w.assignee_id).filter(Boolean) as string[])
+    const out = [...ids].map(id => ({ value: id, label: profileById.get(id)?.name ?? 'Sem nome' }))
+    out.push({ value: '__none', label: 'Sem responsável' })
+    return out
+  }, [data, profileById])
+  const sprintOptions = useMemo(() => {
+    const out = (data?.sprints ?? []).map(s => ({ value: s.id, label: s.name }))
+    out.push({ value: '__none', label: 'Sem sprint' })
+    return out
+  }, [data])
+  const epicOptions = useMemo(() => {
+    const out = (data?.epics ?? []).map(e => ({ value: e.id, label: e.name }))
+    out.push({ value: '__none', label: 'Sem épico' })
+    return out
+  }, [data])
+
+  // ── Filtered items ──────────────────────────────────────────────────────────
+  const filteredItems = useMemo(() => {
     if (!data || !selectedProjects) return []
+    return data.workItems.filter(w => {
+      if (!spans[w.id]) return false
+      if (!selectedProjects.has(w.project_id)) return false
+      if (filters.status && w.status !== filters.status) return false
+      if (filters.type && w.type !== filters.type) return false
+      if (filters.assignee) {
+        if (filters.assignee === '__none' ? !!w.assignee_id : w.assignee_id !== filters.assignee) return false
+      }
+      if (filters.sprint) {
+        if (filters.sprint === '__none' ? !!w.sprint_id : w.sprint_id !== filters.sprint) return false
+      }
+      if (filters.epic) {
+        if (filters.epic === '__none' ? !!w.epic_id : w.epic_id !== filters.epic) return false
+      }
+      return true
+    })
+  }, [data, selectedProjects, spans, filters])
+
+  const toggleGroup = useCallback((id: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }, [])
+
+  // ── Row building per grouping mode ──────────────────────────────────────────
+  const rows: Row[] = useMemo(() => {
+    if (!data) return []
     const out: Row[] = []
-    data.projects.forEach(project => {
-      if (!selectedProjects.has(project.id)) return
-      const items = data.workItems.filter(w => w.project_id === project.id && spans[w.id])
-      const color = projectColorById.get(project.id) ?? T.accent
-      out.push({ kind: 'project', id: project.id, label: project.name, color, count: items.length })
 
-      const epics = data.epics.filter(e => e.project_id === project.id)
-      epics.forEach(epic => {
-        const epicItems = items.filter(i => i.epic_id === epic.id)
-        if (epicItems.length === 0) return
-        const ec = epicColor(epic.color)
-        out.push({ kind: 'epic', id: epic.id, label: epic.name, color: ec, count: epicItems.length })
-        epicItems.forEach(item => out.push({ kind: 'item', id: item.id, item, color: ec }))
+    if (groupBy === 'project-epic') {
+      data.projects.forEach(project => {
+        const items = filteredItems.filter(w => w.project_id === project.id)
+        if (items.length === 0) return
+        const color = projectColorById.get(project.id) ?? T.accent
+        const pKey = `project:${project.id}`
+        out.push({ kind: 'group', id: pKey, level: 0, label: project.name, color, count: items.length })
+        if (collapsed.has(pKey)) return
+
+        const epics = data.epics.filter(e => e.project_id === project.id)
+        epics.forEach(epic => {
+          const epicItems = items.filter(i => i.epic_id === epic.id)
+          if (epicItems.length === 0) return
+          const ec = epicColor(epic.color)
+          const eKey = `project:${project.id}:epic:${epic.id}`
+          out.push({ kind: 'group', id: eKey, level: 1, label: epic.name, color: ec, count: epicItems.length })
+          if (collapsed.has(eKey)) return
+          epicItems.forEach(item => out.push({ kind: 'item', id: item.id, item, color: ec }))
+        })
+
+        const orphans = items.filter(i => !i.epic_id || !epics.some(e => e.id === i.epic_id))
+        if (orphans.length > 0) {
+          const oKey = `project:${project.id}:epic:__none`
+          out.push({ kind: 'group', id: oKey, level: 1, label: 'Sem épico', color: T.text3, count: orphans.length })
+          if (!collapsed.has(oKey)) orphans.forEach(item => out.push({ kind: 'item', id: item.id, item, color: T.text3 }))
+        }
       })
+      return out
+    }
 
-      const orphans = items.filter(i => !i.epic_id || !epics.some(e => e.id === i.epic_id))
-      if (orphans.length > 0) {
-        out.push({ kind: 'epic', id: `${project.id}__none`, label: 'Sem épico', color: T.text3, count: orphans.length })
-        orphans.forEach(item => out.push({ kind: 'item', id: item.id, item, color: T.text3 }))
+    // Flat groupings
+    const buckets = new Map<string, { label: string; color: string; items: WorkItemRow[] }>()
+    const ensure = (key: string, label: string, color: string) => {
+      let b = buckets.get(key)
+      if (!b) { b = { label, color, items: [] }; buckets.set(key, b) }
+      return b
+    }
+
+    filteredItems.forEach(item => {
+      if (groupBy === 'sprint') {
+        const s = item.sprint_id ? sprintById.get(item.sprint_id) : null
+        const key = `sprint:${s?.id ?? '__none'}`
+        ensure(key, s?.name ?? 'Sem sprint', s ? T.accent : T.text3).items.push(item)
+      } else if (groupBy === 'assignee') {
+        const p = item.assignee_id ? profileById.get(item.assignee_id) : null
+        const key = `assignee:${p?.id ?? '__none'}`
+        ensure(key, p?.name ?? 'Sem responsável', p?.avatar_color ?? T.text3).items.push(item)
+      } else {
+        const e = item.epic_id ? epicById.get(item.epic_id) : null
+        const key = `epic:${e?.id ?? '__none'}`
+        ensure(key, e?.name ?? 'Sem épico', e ? epicColor(e.color) : T.text3).items.push(item)
       }
     })
+
+    ;[...buckets.entries()]
+      .sort((a, b) => a[1].label.localeCompare(b[1].label))
+      .forEach(([key, b]) => {
+        out.push({ kind: 'group', id: key, level: 0, label: b.label, color: b.color, count: b.items.length })
+        if (collapsed.has(key)) return
+        b.items.forEach(item => out.push({ kind: 'item', id: item.id, item, color: b.color }))
+      })
+
     return out
-  }, [data, selectedProjects, spans, projectColorById])
+  }, [data, filteredItems, groupBy, collapsed, projectColorById, epicById, sprintById, profileById])
 
   const rowIndexById = useMemo(() => {
     const m: Record<string, number> = {}
@@ -296,7 +491,7 @@ export default function TimelinePage() {
 
   // ── Time domain: starts at the PROJECT start (period_start → created_at) ────
   const { domainStart, totalDays } = useMemo(() => {
-    const all = visibleItems.map(r => spans[r.id]).filter(Boolean)
+    const all = filteredItems.map(r => spans[r.id]).filter(Boolean)
     const projectStarts = (data?.projects ?? [])
       .filter(p => !selectedProjects || selectedProjects.has(p.id))
       .map(p => (p.period_start ?? p.created_at ?? null))
@@ -309,14 +504,13 @@ export default function TimelinePage() {
     const ends = [...all.map(s => s.end), today]
     const end = ends.reduce((a, b) => (b > a ? b : a))
     return { domainStart: min, totalDays: Math.max(30, diffDays(min, end) + 4) }
-  }, [visibleItems, spans, data, selectedProjects])
-
+  }, [filteredItems, spans, data, selectedProjects])
 
   const todayIso = toIso(new Date())
   const todayIdx = diffDays(domainStart, todayIso)
 
-  const barLeft = useCallback((iso: string) => diffDays(domainStart, iso) * DAY_PX, [domainStart])
-  const barWidth = useCallback((s: Span) => Math.max(DAY_PX, diffDays(s.start, s.end) * DAY_PX), [])
+  const barLeft = useCallback((iso: string) => diffDays(domainStart, iso) * DAY_PX, [domainStart, DAY_PX])
+  const barWidth = useCallback((s: Span) => Math.max(DAY_PX * 1.5, diffDays(s.start, s.end) * DAY_PX), [DAY_PX])
 
   // Sprint markers for visible projects
   const sprintMarkers = useMemo(() => {
@@ -327,19 +521,45 @@ export default function TimelinePage() {
       .filter(s => s.idx >= 0 && s.idx < totalDays)
   }, [data, selectedProjects, domainStart, totalDays])
 
-  // Week markers relative to the PROJECT start ("Sem 1, Sem 2…" + data curta)
-  const weekMarkers = useMemo(() => {
-    const out: { idx: number; label: string; sub: string }[] = []
-    for (let i = 0; i < totalDays; i += 7) {
-      const d = toDate(addDays(domainStart, i))
+  // ── Ruler ticks per zoom ────────────────────────────────────────────────────
+  interface Tick { idx: number; label: string; sub: string }
+  const ticks: Tick[] = useMemo(() => {
+    const out: Tick[] = []
+    if (zoom === 'week') {
+      for (let i = 0; i < totalDays; i += 7) {
+        const d = toDate(addDays(domainStart, i))
+        out.push({
+          idx: i,
+          label: `Sem ${Math.floor(i / 7) + 1}`,
+          sub: `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+        })
+      }
+      return out
+    }
+    const start = toDate(domainStart)
+    const endIso = addDays(domainStart, totalDays)
+    if (zoom === 'month') {
+      const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1))
+      while (toIso(cursor) < endIso) {
+        const idx = diffDays(domainStart, toIso(cursor))
+        out.push({ idx: Math.max(0, idx), label: MONTHS[cursor.getUTCMonth()], sub: String(cursor.getUTCFullYear()) })
+        cursor.setUTCMonth(cursor.getUTCMonth() + 1)
+      }
+      return out
+    }
+    const qMonth = Math.floor(start.getUTCMonth() / 3) * 3
+    const cursor = new Date(Date.UTC(start.getUTCFullYear(), qMonth, 1))
+    while (toIso(cursor) < endIso) {
+      const idx = diffDays(domainStart, toIso(cursor))
       out.push({
-        idx: i,
-        label: `Sem ${Math.floor(i / 7) + 1}`,
-        sub: `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCMonth() + 1).padStart(2, '0')}`,
+        idx: Math.max(0, idx),
+        label: `Q${Math.floor(cursor.getUTCMonth() / 3) + 1}`,
+        sub: String(cursor.getUTCFullYear()),
       })
+      cursor.setUTCMonth(cursor.getUTCMonth() + 3)
     }
     return out
-  }, [domainStart, totalDays])
+  }, [zoom, domainStart, totalDays])
 
   // ── Dependency curves — recomputed from spans + row map on every render ─────
   const curves = useMemo(() => {
@@ -373,7 +593,7 @@ export default function TimelinePage() {
       if (cur && cur.start === next.start && cur.end === next.end) return prev
       return { ...prev, [dragging.id]: next }
     })
-  }, [dragging])
+  }, [dragging, DAY_PX])
 
   const onMouseUp = useCallback(() => {
     if (!dragging || !data) { setDragging(null); return }
@@ -407,6 +627,12 @@ export default function TimelinePage() {
     ? `${monthLabel(domainStart)} — ${monthLabel(addDays(domainStart, totalDays - 1))}`
     : 'Sem período'
 
+  const sidebarTitle = groupBy === 'project-epic'
+    ? 'PROJETO / ÉPICO / ISSUE'
+    : `${GROUP_LABEL[groupBy].toUpperCase()} / ISSUE`
+
+  const filtersActive = Object.values(filters).some(Boolean)
+
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
     <div style={{ background: T.bgPage, height: '100%', display: 'flex', flexDirection: 'column', fontFamily: 'inherit', overflow: 'hidden' }}>
@@ -418,19 +644,65 @@ export default function TimelinePage() {
         {saveError && <span style={{ color: T.crit, fontSize: 11 }}>Falha ao salvar: {saveError}</span>}
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 12, alignItems: 'center' }}>
-          {/* Status legend */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: T.accent, display: 'inline-block' }} />
-            <span style={{ color: T.text3, fontSize: 11 }}>Em andamento</span>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: T.success, display: 'inline-block', marginLeft: 4 }} />
-            <span style={{ color: T.text3, fontSize: 11 }}>Concluído</span>
-            <span style={{ width: 8, height: 8, borderRadius: 2, background: T.crit, display: 'inline-block', marginLeft: 4 }} />
-            <span style={{ color: T.text3, fontSize: 11 }}>Bloqueado</span>
+          {/* Zoom toggle */}
+          <div style={{ display: 'flex', border: `1px solid ${T.border}`, borderRadius: 8, overflow: 'hidden' }}>
+            {(['week', 'month', 'quarter'] as Zoom[]).map(z => (
+              <button key={z} onClick={() => setZoom(z)}
+                style={{
+                  padding: '5px 11px', fontSize: 12, cursor: 'pointer', border: 'none',
+                  background: zoom === z ? T.accent : T.bgPage,
+                  color: zoom === z ? '#fff' : T.text2,
+                }}>
+                {ZOOM_LABEL[z]}
+              </button>
+            ))}
           </div>
 
           {selectedProjects && projectOptions.length > 0 && (
             <ProjectDropdown options={projectOptions} selected={selectedProjects} onChange={setSelectedProjects} />
           )}
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 20px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface, flexShrink: 0, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 11, color: T.text3, fontWeight: 700 }}>AGRUPAR POR</span>
+        <select
+          value={groupBy}
+          onChange={e => setGroupBy(e.target.value as GroupBy)}
+          style={{
+            height: 28, padding: '0 8px', borderRadius: 8, fontSize: 12, cursor: 'pointer',
+            background: T.bgPage, border: `1px solid ${T.border}`, color: T.text1, outline: 'none',
+          }}
+        >
+          {(Object.keys(GROUP_LABEL) as GroupBy[]).map(g => (
+            <option key={g} value={g}>{GROUP_LABEL[g]}</option>
+          ))}
+        </select>
+
+        <span style={{ width: 1, height: 20, background: T.border, margin: '0 4px' }} />
+
+        <FilterSelect label="Status" value={filters.status} options={statusOptions} onChange={v => setFilters(f => ({ ...f, status: v }))} />
+        <FilterSelect label="Tipo" value={filters.type} options={typeOptions} onChange={v => setFilters(f => ({ ...f, type: v }))} />
+        <FilterSelect label="Responsável" value={filters.assignee} options={assigneeOptions} onChange={v => setFilters(f => ({ ...f, assignee: v }))} />
+        <FilterSelect label="Sprint" value={filters.sprint} options={sprintOptions} onChange={v => setFilters(f => ({ ...f, sprint: v }))} />
+        <FilterSelect label="Épico" value={filters.epic} options={epicOptions} onChange={v => setFilters(f => ({ ...f, epic: v }))} />
+
+        {filtersActive && (
+          <button onClick={() => setFilters(EMPTY_FILTERS)}
+            style={{ fontSize: 11, color: T.accent, background: 'none', border: 'none', cursor: 'pointer' }}>
+            Limpar filtros
+          </button>
+        )}
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ color: T.text3, fontSize: 11 }}>{visibleItems.length} itens</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: T.accent, display: 'inline-block' }} />
+          <span style={{ color: T.text3, fontSize: 11 }}>Em andamento</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: T.success, display: 'inline-block' }} />
+          <span style={{ color: T.text3, fontSize: 11 }}>Concluído</span>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: T.crit, display: 'inline-block' }} />
+          <span style={{ color: T.text3, fontSize: 11 }}>Bloqueado</span>
         </div>
       </div>
 
@@ -449,24 +721,34 @@ export default function TimelinePage() {
       {!loading && !error && (
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Sidebar */}
-          <div style={{ width: 220, flexShrink: 0, borderRight: `1px solid ${T.border}`, background: T.bgSurface, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          <div style={{ width: 240, flexShrink: 0, borderRight: `1px solid ${T.border}`, background: T.bgSurface, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ height: HEADER_H, borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', padding: '0 12px', flexShrink: 0 }}>
-              <span style={{ color: T.text3, fontSize: 11, fontWeight: 700 }}>PROJETO / ÉPICO / ISSUE</span>
+              <span style={{ color: T.text3, fontSize: 11, fontWeight: 700 }}>{sidebarTitle}</span>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {rows.map(row => {
-                if (row.kind === 'project') return (
-                  <div key={`p-${row.id}`} style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px', borderBottom: `1px solid ${T.border}`, background: `${row.color}14`, borderLeft: `3px solid ${row.color}` }}>
-                    <span style={{ color: row.color, fontWeight: 700, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
-                    <span style={{ marginLeft: 'auto', fontSize: 10, color: T.text3 }}>{row.count}</span>
-                  </div>
-                )
-                if (row.kind === 'epic') return (
-                  <div key={`e-${row.id}`} style={{ height: ROW_H, display: 'flex', alignItems: 'center', padding: '0 12px 0 22px', borderBottom: `1px solid ${T.border}`, background: T.bgSurface2 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0, marginRight: 7 }} />
-                    <span style={{ color: row.color, fontWeight: 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
-                  </div>
-                )
+                if (row.kind === 'group') {
+                  const isCollapsed = collapsed.has(row.id)
+                  const top = row.level === 0
+                  return (
+                    <div key={`g-${row.id}`} onClick={() => toggleGroup(row.id)}
+                      style={{
+                        height: ROW_H, display: 'flex', alignItems: 'center', cursor: 'pointer',
+                        padding: top ? '0 12px' : '0 12px 0 22px',
+                        borderBottom: `1px solid ${T.border}`,
+                        background: top ? `${row.color}14` : T.bgSurface2,
+                        borderLeft: top ? `3px solid ${row.color}` : 'none',
+                      }}>
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
+                        style={{ marginRight: 6, flexShrink: 0, color: row.color, transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s' }}>
+                        <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {!top && <span style={{ width: 8, height: 8, borderRadius: '50%', background: row.color, flexShrink: 0, marginRight: 7 }} />}
+                      <span style={{ color: row.color, fontWeight: top ? 700 : 600, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label}</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 10, color: T.text3 }}>{row.count}</span>
+                    </div>
+                  )
+                }
                 const wi = row.item
                 return (
                   <div key={`i-${row.id}`}
@@ -500,7 +782,7 @@ export default function TimelinePage() {
               >
                 {/* Time axis header */}
                 <div style={{ height: HEADER_H, borderBottom: `1px solid ${T.border}`, position: 'relative', background: T.bgSurface }}>
-                  {Array.from({ length: totalDays }, (_, i) => i).map(i => {
+                  {zoom === 'week' && Array.from({ length: totalDays }, (_, i) => i).map(i => {
                     const d = toDate(addDays(domainStart, i))
                     return (
                       <div key={i} style={{ position: 'absolute', left: i * DAY_PX, top: 0, width: DAY_PX, height: HEADER_H, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 4 }}>
@@ -508,31 +790,37 @@ export default function TimelinePage() {
                       </div>
                     )
                   })}
-                  {weekMarkers.map(w => (
-                    <div
-                      key={w.idx}
-                      style={{
-                        position: 'absolute', left: w.idx * DAY_PX, top: 2, paddingLeft: 4,
-                        borderLeft: `1px solid ${T.border}`, lineHeight: 1.2, whiteSpace: 'nowrap',
-                      }}
-                    >
-                      <div style={{ fontSize: 10, color: T.text2, fontWeight: 700 }}>{w.label}</div>
-                      <div style={{ fontSize: 9, color: T.text3 }}>{w.sub}</div>
-                    </div>
-                  ))}
+                  {ticks.map((t, ti) => {
+                    const next = ticks[ti + 1]
+                    const width = ((next ? next.idx : totalDays) - t.idx) * DAY_PX
+                    return (
+                      <div key={`${t.idx}-${t.label}`}
+                        style={{
+                          position: 'absolute', left: t.idx * DAY_PX, top: 2, width, paddingLeft: 4,
+                          borderLeft: `1px solid ${T.border}`, lineHeight: 1.2, whiteSpace: 'nowrap', overflow: 'hidden',
+                          background: zoom === 'quarter' && ti % 2 === 1 ? `${T.bgSurface2}` : 'transparent',
+                        }}
+                      >
+                        <div style={{ fontSize: 10, color: T.text2, fontWeight: 700 }}>{t.label}</div>
+                        <div style={{ fontSize: 9, color: T.text3 }}>{t.sub}</div>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 <div style={{ position: 'relative', height: svgH }}>
-                  {/* Vertical grid lines */}
-                  {Array.from({ length: totalDays }, (_, i) => i).map(i => (
-                    <div key={i} style={{ position: 'absolute', left: i * DAY_PX, top: 0, bottom: 0, width: 1, background: i === todayIdx ? T.accent : T.border, opacity: i === todayIdx ? 0.8 : 0.4, zIndex: i === todayIdx ? 3 : 1 }} />
+                  {/* Vertical grid lines (per tick — evita milhares de nós nos zooms largos) */}
+                  {ticks.map(t => (
+                    <div key={`gl-${t.idx}-${t.label}`} style={{ position: 'absolute', left: t.idx * DAY_PX, top: 0, bottom: 0, width: 1, background: T.border, opacity: 0.4, zIndex: 1 }} />
                   ))}
 
                   {/* Sprint markers */}
                   {sprintMarkers.map(sm => (
                     <div key={sm.id} style={{ position: 'absolute', left: sm.idx * DAY_PX, top: 0, bottom: 0, width: 1, zIndex: 2 }}>
                       <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, borderLeft: `1.5px dashed ${T.accent}`, opacity: 0.4 }} />
-                      <div style={{ position: 'absolute', top: 4, left: 3, fontSize: 9, color: T.accent, background: T.bgPage, padding: '0 3px', borderRadius: 2, fontWeight: 700, opacity: 0.8, whiteSpace: 'nowrap' }}>{sm.label}</div>
+                      {zoom !== 'quarter' && (
+                        <div style={{ position: 'absolute', top: 4, left: 3, fontSize: 9, color: T.accent, background: T.bgPage, padding: '0 3px', borderRadius: 2, fontWeight: 700, opacity: 0.8, whiteSpace: 'nowrap' }}>{sm.label}</div>
+                      )}
                     </div>
                   ))}
 
@@ -546,7 +834,9 @@ export default function TimelinePage() {
                     <div key={`r-${i}`} style={{
                       position: 'absolute', left: 0, right: 0, top: i * ROW_H, height: ROW_H,
                       borderBottom: `1px solid ${T.border}`,
-                      background: row.kind === 'project' ? `${row.color}14` : row.kind === 'epic' ? T.bgSurface2 : i % 2 === 0 ? 'transparent' : `${T.bgSurface}44`,
+                      background: row.kind === 'group'
+                        ? (row.level === 0 ? `${row.color}14` : T.bgSurface2)
+                        : i % 2 === 0 ? 'transparent' : `${T.bgSurface}44`,
                     }} />
                   ))}
 
@@ -588,13 +878,13 @@ export default function TimelinePage() {
                           transition: isDragging ? 'none' : 'box-shadow 0.15s, transform 0.15s',
                         }}
                       >
-                        <span style={{ fontSize: 9, fontWeight: 700, color, flexShrink: 0 }}>{wi.key}</span>
-                        {width > 80 && (
+                        {width > 44 && <span style={{ fontSize: 9, fontWeight: 700, color, flexShrink: 0 }}>{wi.key}</span>}
+                        {width > 140 && (
                           <span style={{ fontSize: 9, color: T.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
                             {wi.title}
                           </span>
                         )}
-                        {width > 110 && initials && (
+                        {width > 180 && initials && (
                           <span style={{ fontSize: 8, fontWeight: 700, background: profile?.avatar_color ?? T.text3, color: '#fff', borderRadius: '50%', width: 14, height: 14, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             {initials.slice(0, 2)}
                           </span>
