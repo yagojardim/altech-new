@@ -578,7 +578,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                     <div style={{ fontSize: 12, fontWeight: 600, color: T.text1, marginBottom: 4 }}>Squads que aprova</div>
                     <div style={{ fontSize: 11, color: T.text3, marginBottom: 10 }}>Selecione os squads cujos lançamentos este usuário poderá revisar. Pode ser alterado depois.</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {SQUADS.map(s => {
+                      {squadOpts.map(s => {
                         const on = approvedSquads.includes(s.id)
                         return (
                           <button key={s.id} onClick={() => setApprovedSquads(prev => on ? prev.filter(x => x !== s.id) : [...prev, s.id])} style={{
@@ -615,7 +615,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Projetos</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {PROJECTS.map(p => {
+                  {projectOpts.map(p => {
                     const on = projects.includes(p.id)
                     return (
                       <button key={p.id} onClick={() => toggleMulti(p.id, projects, setProjects)} style={{
@@ -637,7 +637,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Squads</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {SQUADS.map(s => {
+                  {squadOpts.map(s => {
                     const on = squads.includes(s.id)
                     return (
                       <button key={s.id} onClick={() => toggleMulti(s.id, squads, setSquads)} style={{
@@ -659,7 +659,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Módulos habilitados</SLabel>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                  {ALL_MODULES.map(m => {
+                  {moduleOpts.map(({ key: m, name: mName }) => {
                     const on = modules.includes(m)
                     return (
                       <button key={m} onClick={() => toggleMulti(m, modules, setModules)} style={{
@@ -668,7 +668,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                         border: `1px solid ${on ? T.indigo : T.border}`,
                         color: on ? T.indigo : T.text3, cursor: 'pointer', transition: 'all 0.15s',
                       }}>
-                        {MODULE_LABELS[m] ?? m}
+                        {MODULE_LABELS[m] ?? mName}
                       </button>
                     )
                   })}
@@ -700,7 +700,7 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                     { k: 'Papel', v: INVITABLE_ROLES.find(r => r.role === role)?.label ?? '—' },
                     { k: 'Dashboard padrão', v: defaultDash ? (DASHBOARD_CATALOG[defaultDash]?.label ?? defaultDash) : '—' },
                     { k: 'Adicionais', v: extraDashes.length > 0 ? `${extraDashes.length} dashboard(s)` : 'Nenhum' },
-                    { k: 'Projetos', v: PROJECTS.filter(p => projects.includes(p.id)).map(p => p.name).join(', ') || '—' },
+                    { k: 'Projetos', v: projectOpts.filter(p => projects.includes(p.id)).map(p => p.name).join(', ') || '—' },
                     { k: 'Permissões geradas', v: `${derivePermissions(role!, [...optIns]).length} cap.` },
                   ].map(row => (
                     <div key={row.k} style={{ fontSize: 11 }}>
