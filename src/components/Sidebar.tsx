@@ -692,7 +692,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
     setProjectsOpen(next)
   }
 
-  const { activeUser } = useSession()
+  const { activeUser, isTenantOwner } = useSession()
   const permissions    = activeUser.permissions
   const hasReportsFlag = useProfileReportsAccess(activeUser.user_id)
   const reportsAllowed = canAccessReports(permissions, hasReportsFlag)
