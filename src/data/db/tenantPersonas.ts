@@ -62,7 +62,7 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
     if (!active.length) return []
 
     // Papel oficial via user_roles → roles.
-    const roleByProfile = new Map<string, RoleContext>()
+    const rolesByProfile = new Map<string, RoleContext[]>()
     const { data: urRows } = await supabase
       .from('user_roles')
       .select('profile_id, role_id')
@@ -76,7 +76,10 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
       for (const ur of userRoles) {
         if (!ur.profile_id || !ur.role_id) continue
         const rc = byId.get(ur.role_id)
-        if (rc && !roleByProfile.has(ur.profile_id)) roleByProfile.set(ur.profile_id, rc)
+        if (!rc) continue
+        const list = rolesByProfile.get(ur.profile_id) ?? []
+        if (!list.includes(rc)) list.push(rc)
+        rolesByProfile.set(ur.profile_id, list)
       }
     }
 
@@ -85,14 +88,16 @@ export function fetchTenantPersonas(): Promise<MockUser[]> {
     const personas = active.map(p => {
       const name = p.name ?? p.email ?? 'Sem nome'
       const override = NAME_OVERRIDES.find(o => o.match.test(name))?.role
+      const dbRoles = rolesByProfile.get(p.id) ?? []
       const role: RoleContext =
-        override ?? roleByProfile.get(p.id) ?? normalizeRole(p.primary_role) ?? 'Dev'
+        override ?? normalizeRole(p.primary_role) ?? dbRoles[0] ?? 'Dev'
       return buildPersona({
         user_id: p.id,
         name,
         email: p.email ?? '',
         role_context: role,
         tenant_owner: !!p.tenant_owner,
+        available_roles: [role, ...dbRoles.filter(r => r !== role)],
       })
     })
 
