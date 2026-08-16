@@ -6,6 +6,7 @@
 // access goes through a small untyped shim while the rows stay strongly typed here.
 import { supabase } from '../../integrations/supabase/client'
 import { DEFAULT_TENANT_ID } from './timeline'
+import { sortSprintsByStartDate } from './sprints'
 import { safeCall, logger } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID }
@@ -156,7 +157,8 @@ async function getClientPortal__raw(projectId: string): Promise<ClientPortalScop
     supabase.from('projects').select('id, name, status, period_start, period_end')
       .eq('tenant_id', tid).eq('id', projectId).maybeSingle(),
     supabase.from('sprints').select('id, name, state, start_date, end_date')
-      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null).order('start_date'),
+      .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null)
+      .order('start_date', { ascending: true, nullsFirst: false }),
     tbl('shared_project_items').select('id, shared_entity_type, shared_entity_id, visibility')
       .eq('tenant_id', tid).eq('project_id', projectId).is('archived_at', null),
     supabase.from('epics').select('id, name, quarter, color')
@@ -197,7 +199,7 @@ async function getClientPortal__raw(projectId: string): Promise<ClientPortalScop
 
   return {
     project: (projectRes.data ?? null) as PortalProject | null,
-    sprints: (sprintsRes.data ?? []) as PortalSprint[],
+    sprints: ((sprintsRes.data ?? []) as PortalSprint[]).slice().sort(sortSprintsByStartDate),
     deliveries: clientVisible.map(i => ({
       id: i.id,
       title: i.title,

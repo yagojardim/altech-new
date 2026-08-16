@@ -3,6 +3,7 @@
 import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { T } from '../../components/ds/tokens'
+import { sortSprintsByStartDate } from './sprints'
 
 /** Single tenant of the prototype. With Auth Final Lock this comes from the session. */
 export const DEFAULT_TENANT_ID = '00000000-0000-0000-0000-000000000001'
@@ -75,7 +76,7 @@ export async function fetchTimelineData(): Promise<TimelineData> {
     supabase.from('epics').select('id, project_id, name, color')
       .eq('tenant_id', tid).is('archived_at', null).order('name'),
     supabase.from('sprints').select('id, project_id, name, start_date, end_date, state')
-      .eq('tenant_id', tid).is('archived_at', null),
+      .eq('tenant_id', tid).is('archived_at', null).order('start_date', { ascending: true, nullsFirst: false }),
     supabase.from('work_items').select('id, key, title, type, status, project_id, epic_id, sprint_id, start_date, due_date, assignee_id, is_blocked')
       .eq('tenant_id', tid).is('archived_at', null).order('key'),
     supabase.from('dependencies').select('source_id, target_id, relation_type').eq('tenant_id', tid),
@@ -92,7 +93,7 @@ export async function fetchTimelineData(): Promise<TimelineData> {
   return {
     projects: projects.data ?? [],
     epics: epics.data ?? [],
-    sprints: sprints.data ?? [],
+    sprints: ((sprints.data ?? []) as SprintRow[]).slice().sort(sortSprintsByStartDate),
     workItems: workItems.data ?? [],
     dependencies: dependencies.data ?? [],
     profiles: profiles.data ?? [],
