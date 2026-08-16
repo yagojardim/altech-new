@@ -742,6 +742,13 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                   ))}
                 </div>
               </div>
+
+              {saveErr && (
+                <div style={{ padding: '8px 12px', borderRadius: 7, background: `${T.crit}14`, border: `1px solid ${T.crit}50`, fontSize: 11, color: T.crit }}>
+                  ✗ {saveErr}
+                </div>
+              )}
+
             </div>
           )}
           {/* ── Step 6: Senha temporária (exibida uma única vez) ─── */}
