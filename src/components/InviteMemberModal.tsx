@@ -3,7 +3,7 @@ import { T } from './ds/tokens'
 import { roleSupportsReportsAccess } from '../data/db/reportsGovernance'
 import { type MockUser, type RoleContext, type DashboardType, DASHBOARD_CATALOG } from '../data/session'
 import {
-  fetchInviteOptions, createMember, ROLE_BY_DASHBOARD,
+  fetchInviteOptions, createMember, checkMemberIdentity, ROLE_BY_DASHBOARD,
   type OptionRow, type ModuleOption,
 } from '../data/db/invite'
 import { DEFAULT_TENANT_ID } from '../data/db/timeline'
