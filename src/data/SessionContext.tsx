@@ -4,7 +4,7 @@ import {
   ACTIVE_USER_ID,
   setActiveUser as _setActiveUser,
   hydratePersonas,
-  applyRoleChoice, availableRoleChoices, ADMIN_MASTER_ROLE,
+  applyRoleChoice, availableRoleChoices,
   type RoleChoice,
 } from './session'
 import {
