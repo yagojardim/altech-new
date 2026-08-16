@@ -304,6 +304,7 @@ export default function ProjectsListPage({ onNav }: Props) {
       name: input.name,
       key: input.key,
       description: input.description || null,
+      clientName: input.clientName,
       boardType: input.boardType,
       leadId: input.leadId,
       actorName: activeUser.name,
@@ -406,6 +407,7 @@ export default function ProjectsListPage({ onNav }: Props) {
             initials: p.avatar_initials ?? p.name.slice(0, 2).toUpperCase(),
           }))}
           existingKeys={rows.map(r => r.key)}
+          tenantName={tenantName}
         />
       )}
     </>
