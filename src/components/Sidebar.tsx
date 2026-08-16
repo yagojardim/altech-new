@@ -122,7 +122,13 @@ const ROLE_NAV_MAP: Record<RoleContext, string[]> = {
 function ClockIcon()    { return <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 4v2.5l1.5 1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 function MyTasksIcon()   { return <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3.5h10M2 7h10M2 10.5h5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><circle cx="11" cy="10.5" r="2" stroke="currentColor" strokeWidth="1.2"/><path d="M10 10.5l.75.75L12 9.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"/></svg> }
 
-function getGroups(role: RoleContext, permissions: string[]): NavGroup[] {
+/** Itens administrativos sempre visíveis para o dono do tenant (Admin Master). */
+const TENANT_OWNER_NAV = new Set([
+  'config', 'tenant-settings', 'modules', 'automations',
+  'team', 'login', 'client-login', 'client-access', 'client', 'dashboard',
+])
+
+function getGroups(role: RoleContext, permissions: string[], isTenantOwner = false): NavGroup[] {
   const allowed = new Set(ROLE_NAV_MAP[role] ?? [])
   return ALL_GROUPS
     .map(g => ({
@@ -130,6 +136,8 @@ function getGroups(role: RoleContext, permissions: string[]): NavGroup[] {
       items: g.items.filter(item => {
         // (a) explicitly in this role's nav map
         if (allowed.has(item.id)) return true
+        // (a2) dono do tenant sempre enxerga os menus administrativos
+        if (isTenantOwner && TENANT_OWNER_NAV.has(item.id)) return true
         // (b) capability opt-in: user has the cap AND it's an opt-in for this role
         if (item.cap && can(permissions, item.cap)) {
           return PERMISSION_MATRIX[item.cap]?.optIn.includes(role) ?? false
@@ -689,7 +697,7 @@ export function Sidebar({ collapsed, onToggle, activeNav, onNav }: SidebarProps)
   const hasReportsFlag = useProfileReportsAccess(activeUser.user_id)
   const reportsAllowed = canAccessReports(permissions, hasReportsFlag)
 
-  const groups         = getGroups(activeUser.role_context, permissions)
+  const groups         = getGroups(activeUser.role_context, permissions, isTenantOwner)
     .map(g => ({ ...g, items: g.items.filter(i => i.id !== 'reports' || reportsAllowed) }))
     .filter(g => g.items.length > 0)
   const canLogHours      = can(permissions, 'log:hours')
