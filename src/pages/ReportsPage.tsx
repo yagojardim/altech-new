@@ -347,6 +347,82 @@ function PinButton({ onClick, disabled }: { onClick: (e: React.MouseEvent) => vo
   )
 }
 
+// ── Liberação do card para o Board de Composição ─────────────────────────────
+function ReleaseToggle({ cardId }: { cardId: string }) {
+  const gov = useReportsGovernance()
+  const released = isCardReleased(gov, cardId)
+  const [saving, setSaving] = useState(false)
+
+  async function toggle() {
+    setSaving(true)
+    const base = gov.releasedCards ?? REPORT_CARDS.map(c => c.id)
+    const next = released ? base.filter(id => id !== cardId) : [...new Set([...base, cardId])]
+    await saveReportsGovernance({ releasedCards: next })
+    setSaving(false)
+  }
+
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); void toggle() }}
+      disabled={saving}
+      title="Liberar este card para o Board de Composição dos usuários"
+      style={{
+        fontSize: 10, fontWeight: 700, borderRadius: 99, padding: '3px 9px',
+        cursor: saving ? 'wait' : 'pointer', whiteSpace: 'nowrap',
+        background: released ? `${T.success}18` : `${T.text3}14`,
+        color: released ? T.success : T.text3,
+        border: `1px solid ${released ? `${T.success}55` : T.border}`,
+      }}
+    >
+      {released ? '✓ Liberado' : 'Oculto'}
+    </button>
+  )
+}
+
+// ── Quem acessa Relatórios e Insights (Admin Master) ─────────────────────────
+function ReportsAccessPanel() {
+  const gov = useReportsGovernance()
+  const [saving, setSaving] = useState(false)
+
+  async function toggleRole(role: string) {
+    setSaving(true)
+    const has = (gov.accessRoles as string[]).includes(role)
+    const next = has
+      ? gov.accessRoles.filter(r => r !== role)
+      : [...gov.accessRoles, role as (typeof gov.accessRoles)[number]]
+    await saveReportsGovernance({ accessRoles: next })
+    setSaving(false)
+  }
+
+  return (
+    <div style={{
+      margin: `${px(16)} ${px(24)} 0`, padding: px(16),
+      background: T.bgSurface, border: `1px solid ${T.border}`, borderRadius: px(12),
+    }}>
+      <div style={{ fontSize: px(13), fontWeight: 700, color: T.text1 }}>
+        Quem acessa Relatórios e Insights
+      </div>
+      <div style={{ fontSize: px(12), color: T.text3, marginTop: px(2) }}>
+        O Admin Master sempre tem acesso. Libere abaixo os papéis adicionais.
+      </div>
+      <div style={{ display: 'flex', gap: px(16), flexWrap: 'wrap', marginTop: px(10) }}>
+        {REPORTS_OPTIONAL_ROLES.map(role => (
+          <label key={role} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: px(12), color: T.text2, cursor: saving ? 'wait' : 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={gov.accessRoles.includes(role)}
+              disabled={saving}
+              onChange={() => { void toggleRole(role) }}
+              style={{ accentColor: T.accent, width: 14, height: 14 }}
+            />
+            {REPORTS_ROLE_LABEL[role] ?? role}
+          </label>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ── Report Card wrapper ───────────────────────────────────────────────────────
 interface ReportCardProps {
   def:        ReportCardDef
