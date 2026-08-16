@@ -2101,6 +2101,20 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
                       <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                         {canManageSprint && (
                           <button
+                            onClick={() => onEditSprint(sprint)}
+                            title={`Editar ${sprint.name}`}
+                            aria-label={`Editar ${sprint.name}`}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg transition-colors"
+                            style={{ border: `1px solid ${S.border}`, color: S.t2, cursor: 'pointer' }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                              <path d="M8.2 1.8l2 2L4.4 9.6l-2.6.6.6-2.6 5.8-5.8z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
+                        {canManageSprint && (
+
+                          <button
                             onClick={() => onGenerateCeremonies(sprint)}
                             disabled={generatingCeremonies === sprint.id}
                             title="Gerar daily, planning, pré-review, review e retrospectivas no Calendário"
