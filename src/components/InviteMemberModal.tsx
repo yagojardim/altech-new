@@ -615,6 +615,10 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Projetos</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+{!optsLoading && projectOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum projeto cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
                   {projectOpts.map(p => {
                     const on = projects.includes(p.id)
                     return (
@@ -637,6 +641,10 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Squads</SLabel>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+{!optsLoading && squadOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum squad cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
                   {squadOpts.map(s => {
                     const on = squads.includes(s.id)
                     return (
@@ -659,6 +667,10 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
               <div>
                 <SLabel>Módulos habilitados</SLabel>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+{!optsLoading && moduleOpts.length === 0 && (
+                    <div style={{ fontSize: 11, color: T.text3 }}>Nenhum módulo habilitado cadastrado no tenant.</div>
+                  )}
+                  {optsLoading && <div style={{ fontSize: 11, color: T.text3 }}>Carregando…</div>}
                   {moduleOpts.map(({ key: m, name: mName }) => {
                     const on = modules.includes(m)
                     return (
@@ -847,12 +859,12 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
                 Próximo →
               </button>
             ) : step === 5 ? (
-              <button onClick={handleSubmit} style={{
-                padding: '8px 22px', borderRadius: 7, border: 'none', cursor: 'pointer',
-                background: status === 'active' ? T.success : T.accent,
+              <button onClick={() => void handleSubmit()} disabled={saving} style={{
+                padding: '8px 22px', borderRadius: 7, border: 'none', cursor: saving ? 'not-allowed' : 'pointer',
+                background: saving ? T.border2 : status === 'active' ? T.success : T.accent,
                 color: '#fff', fontSize: 12, fontWeight: 600,
               }}>
-                {status === 'active' ? '✓ Criar perfil' : '✉ Enviar convite'}
+                {saving ? 'Salvando…' : status === 'active' ? '✓ Criar perfil' : '✉ Enviar convite'}
               </button>
             ) : (
               <button onClick={handleFinish} style={{
