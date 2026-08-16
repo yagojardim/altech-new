@@ -4,6 +4,7 @@ import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { T } from '../../components/ds/tokens'
 import { DEFAULT_TENANT_ID, epicColor } from './timeline'
+import { sortSprintsByStartDate } from './sprints'
 
 export { DEFAULT_TENANT_ID }
 
@@ -117,7 +118,8 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null)
       .order('position'),
     supabase.from('sprints').select('id, project_id, name, goal, state, start_date, end_date, velocity, metadata')
-      .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null).order('start_date'),
+      .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null)
+      .order('start_date', { ascending: true, nullsFirst: false }),
     supabase.from('epics').select('id, project_id, key, name, color')
       .eq('tenant_id', tid).eq('project_id', board.project_id).is('archived_at', null),
     supabase.from('profiles').select('id, name, avatar_initials, avatar_color').eq('tenant_id', tid),
@@ -150,7 +152,7 @@ export async function fetchBoardData(projectId?: string, boardId?: string, board
     boards,
     columns,
     items: itemsRes.data ?? [],
-    sprints: sprintsRes.data ?? [],
+    sprints: ((sprintsRes.data ?? []) as BoardSprintRow[]).slice().sort(sortSprintsByStartDate),
     epics: epicsRes.data ?? [],
     profiles: profilesRes.data ?? [],
   }

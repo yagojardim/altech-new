@@ -17,6 +17,7 @@ import {
   completeSprint as dbCompleteSprint,
   createSprint as dbCreateSprint,
   readSprintClosure,
+  sortSprintsByStartDate,
   type SprintClosure,
 } from '../data/db/sprints'
 import { StoryIcon, EpicIcon } from '../components/ds/AltechIcons'
@@ -2230,19 +2231,21 @@ export default function ProjectPage({ boardId, projectId, onBackToBoards }: Proj
     dot: columnColor(c),
   })), [boardData])
 
-  const dbSprints = useMemo<SprintDef[]>(() => (boardData?.sprints ?? []).map(s => ({
-    id: s.id,
-    name: s.name,
-    goal: s.goal ?? undefined,
-    start: fmtDay(s.start_date),
-    end: fmtDay(s.end_date),
-    state: (s.state === 'active' || s.state === 'completed' ? s.state : 'planned') as SprintDef['state'],
-    velocity: s.velocity != null ? Number(s.velocity) : undefined,
-    startDate: s.start_date,
-    endDate: s.end_date,
-    projectId: s.project_id,
-    closure: readSprintClosure(s.metadata),
-  })), [boardData])
+  const dbSprints = useMemo<SprintDef[]>(() => (boardData?.sprints ?? [])
+    .map(s => ({
+      id: s.id,
+      name: s.name,
+      goal: s.goal ?? undefined,
+      start: fmtDay(s.start_date),
+      end: fmtDay(s.end_date),
+      state: (s.state === 'active' || s.state === 'completed' ? s.state : 'planned') as SprintDef['state'],
+      velocity: s.velocity != null ? Number(s.velocity) : undefined,
+      startDate: s.start_date,
+      endDate: s.end_date,
+      projectId: s.project_id,
+      closure: readSprintClosure(s.metadata),
+    }))
+    .sort(sortSprintsByStartDate), [boardData])
 
   const availableEpics = useMemo<{ id: string; label: string; color: string }[]>(() => {
     return (boardData?.epics ?? []).map(e => ({

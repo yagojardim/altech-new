@@ -3,6 +3,7 @@ import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { DEFAULT_TENANT_ID } from './timeline'
 import { epicColor, PRIORITY_FROM_DB, PRIORITY_TO_DB } from './board'
+import { sortSprintsByStartDate } from './sprints'
 import { STATUS_TO_DB, uiStatusFromDb } from './workItem'
 
 export { DEFAULT_TENANT_ID, epicColor, PRIORITY_FROM_DB, PRIORITY_TO_DB, STATUS_TO_DB, uiStatusFromDb }
@@ -101,7 +102,8 @@ export async function listWorkItems(filters: ListFilters = {}): Promise<ListData
     itemsPromise,
     supabase.from('work_item_labels').select('work_item_id, labels(name)').eq('tenant_id', tid),
     supabase.from('epics').select('id, project_id, name, color').eq('tenant_id', tid).is('archived_at', null),
-    supabase.from('sprints').select('id, project_id, name, state').eq('tenant_id', tid).is('archived_at', null),
+    supabase.from('sprints').select('id, project_id, name, state, start_date').eq('tenant_id', tid).is('archived_at', null)
+      .order('start_date', { ascending: true, nullsFirst: false }),
     supabase.from('profiles').select('id, name, avatar_initials, avatar_color').eq('tenant_id', tid),
     supabase.from('projects').select('id, key, name').eq('tenant_id', tid).is('archived_at', null).order('name'),
   ])
@@ -123,7 +125,7 @@ export async function listWorkItems(filters: ListFilters = {}): Promise<ListData
     items: items.data ?? [],
     labels: labelRows,
     epics: epics.data ?? [],
-    sprints: sprints.data ?? [],
+    sprints: ((sprints.data ?? []) as ListSprintRow[]).slice().sort(sortSprintsByStartDate),
     profiles: profiles.data ?? [],
     projects: projects.data ?? [],
   }

@@ -108,6 +108,28 @@ export function normalizeState(state: string | null | undefined): SprintState {
   return state === 'active' || state === 'completed' ? state : 'planned'
 }
 
+/** Extracts the trailing number from a sprint name like "Sprint 5" for tie-breaking. */
+function sprintNameNumber(name: string): number {
+  const match = String(name ?? '').match(/(\d+)$/)
+  return match ? Number(match[1]) : Infinity
+}
+
+/** Sort comparator: start_date/startDate ASC, nulls last; tie-break by trailing name number ASC. */
+export function sortSprintsByStartDate<T extends { start_date?: string | null; startDate?: string | null; name: string }>(a: T, b: T): number {
+  const aRaw = a.start_date ?? a.startDate
+  const bRaw = b.start_date ?? b.startDate
+  const aDate = aRaw ? new Date(aRaw).getTime() : null
+  const bDate = bRaw ? new Date(bRaw).getTime() : null
+  if (aDate !== null && bDate !== null) {
+    if (aDate !== bDate) return aDate - bDate
+  } else if (aDate !== null) {
+    return -1
+  } else if (bDate !== null) {
+    return 1
+  }
+  return sprintNameNumber(a.name) - sprintNameNumber(b.name)
+}
+
 /** Lists the sprints of a project (planned / active / completed), oldest first. */
 export async function listSprints(projectId?: string): Promise<SprintRow[]> {
   let query = supabase
@@ -115,13 +137,13 @@ export async function listSprints(projectId?: string): Promise<SprintRow[]> {
     .select(SPRINT_FIELDS)
     .eq('tenant_id', DEFAULT_TENANT_ID)
     .is('archived_at', null)
-    .order('start_date', { ascending: true })
+    .order('start_date', { ascending: true, nullsFirst: false })
 
   if (projectId) query = query.eq('project_id', projectId)
 
   const { data, error } = await query
   if (error) throw new Error(missingTableMessage('sprints', error.message))
-  return (data ?? []) as SprintRow[]
+  return ((data ?? []) as SprintRow[]).slice().sort(sortSprintsByStartDate)
 }
 
 /** Work items of a sprint, resolved through sprint_items (falling back to work_items.sprint_id). */

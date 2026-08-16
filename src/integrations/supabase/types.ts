@@ -3253,6 +3253,39 @@ export type Database = {
           },
         ]
       }
+      user_prefs: {
+        Row: {
+          created_at: string
+          id: string
+          pref_key: string
+          row_version: number
+          tenant_id: string
+          updated_at: string
+          user_id: string
+          value: Json
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pref_key: string
+          row_version?: number
+          tenant_id: string
+          updated_at?: string
+          user_id: string
+          value?: Json
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pref_key?: string
+          row_version?: number
+          tenant_id?: string
+          updated_at?: string
+          user_id?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

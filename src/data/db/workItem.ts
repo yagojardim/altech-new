@@ -3,6 +3,7 @@
 import { supabase } from '../../integrations/supabase/client'
 import type { Database } from '../../integrations/supabase/types'
 import { DEFAULT_TENANT_ID, PRIORITY_FROM_DB, PRIORITY_TO_DB, epicColor } from './board'
+import { sortSprintsByStartDate } from './sprints'
 import { safeCall } from '../../utils/logger'
 
 export { DEFAULT_TENANT_ID, PRIORITY_FROM_DB, PRIORITY_TO_DB }
@@ -12,7 +13,7 @@ type Tables = Database['public']['Tables']
 export type WorkItemRow = Tables['work_items']['Row']
 export type ProfileRow = Pick<Tables['profiles']['Row'], 'id' | 'name' | 'avatar_initials'>
 export type EpicRow = Pick<Tables['epics']['Row'], 'id' | 'project_id' | 'key' | 'name' | 'color'>
-export type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'name' | 'state'>
+export type SprintRow = Pick<Tables['sprints']['Row'], 'id' | 'name' | 'state' | 'start_date'>
 export type CommentRow = Pick<
   Tables['comments']['Row'],
   'id' | 'work_item_id' | 'author_id' | 'author_kind' | 'body' | 'visibility' | 'created_at'
@@ -99,8 +100,9 @@ export async function getWorkItem(id: string): Promise<WorkItemDetailData> {
     supabase.from('profiles').select('id, name, avatar_initials').eq('tenant_id', tid).is('archived_at', null),
     supabase.from('epics').select('id, project_id, key, name, color')
       .eq('tenant_id', tid).eq('project_id', item.project_id).is('archived_at', null),
-    supabase.from('sprints').select('id, name, state')
-      .eq('tenant_id', tid).eq('project_id', item.project_id).is('archived_at', null).order('start_date'),
+    supabase.from('sprints').select('id, name, state, start_date')
+      .eq('tenant_id', tid).eq('project_id', item.project_id).is('archived_at', null)
+      .order('start_date', { ascending: true, nullsFirst: false }),
     supabase.from('labels').select('id, name').eq('tenant_id', tid),
     supabase.from('work_item_labels').select('label_id').eq('tenant_id', tid).eq('work_item_id', id),
     supabase.from('comments')
@@ -146,10 +148,12 @@ export async function getWorkItem(id: string): Promise<WorkItemDetailData> {
   const profileById = new Map(profiles.map(p => [p.id, p]))
   const epics = (epicsRes.data ?? []) as EpicRow[]
 
+  const sprints = ((sprintsRes.data ?? []) as SprintRow[]).slice().sort(sortSprintsByStartDate)
+
   return {
     item,
     epic: (item.epic_id ? epics.find(e => e.id === item.epic_id) : null) ?? null,
-    sprint: (item.sprint_id ? (sprintsRes.data ?? []).find(s => s.id === item.sprint_id) : null) ?? null,
+    sprint: (item.sprint_id ? sprints.find(s => s.id === item.sprint_id) : null) ?? null,
     assignee: (item.assignee_id ? profileById.get(item.assignee_id) : null) ?? null,
     reporter: (item.reporter_id ? profileById.get(item.reporter_id) : null) ?? null,
     labels,
@@ -167,7 +171,7 @@ export async function getWorkItem(id: string): Promise<WorkItemDetailData> {
     subtasks: (subtasksRes.data ?? []) as RelatedItemRow[],
     profiles,
     epics,
-    sprints: (sprintsRes.data ?? []) as SprintRow[],
+    sprints,
     availableLabels: (labelsRes.data ?? []).map(l => l.name),
     availableVersions: (releasesRes.data ?? []).map(r => r.version),
   }
