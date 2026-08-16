@@ -201,56 +201,66 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     }
   }
 
-  // ── Submit (step 5 → step 6) ───────────────────────────────────────────────
-  function handleSubmit() {
-    if (!role || !defaultDash) return
+  // ── Submit (step 5 → step 6) — persiste no banco real ──────────────────────
+  async function handleSubmit() {
+    if (!role || !defaultDash || saving) return
+    setSaving(true)
+    setSaveErr('')
 
-    const newId = `u_${Date.now()}`
-    const dashes = [
-      {
-        id: `ud_${newId}_${defaultDash}`, tenant_id: MOCK_TENANT.tenant_id,
-        user_id: newId, dashboard_id: defaultDash, is_default: true,
-        status: 'active' as const, created_at: new Date().toISOString(),
-        created_by: 'invite', updated_at: new Date().toISOString(), updated_by: 'invite',
-      },
-      ...extraDashes.map(d => ({
-        id: `ud_${newId}_${d}`, tenant_id: MOCK_TENANT.tenant_id,
-        user_id: newId, dashboard_id: d, is_default: false,
-        status: 'active' as const, created_at: new Date().toISOString(),
-        created_by: 'invite', updated_at: new Date().toISOString(), updated_by: 'invite',
-      })),
-    ]
+    const allDashes: DashboardType[] = [defaultDash, ...extraDashes.filter(d => d !== defaultDash)]
+    const homeRoles: RoleContext[] = [
+      role,
+      ...allDashes.map(d => ROLE_BY_DASHBOARD[d]).filter((r): r is RoleContext => !!r),
+    ].filter((r, i, arr) => arr.indexOf(r) === i)
 
-    const pwd = generateTempPassword()
-
-    const hasApproveHours = capabilityVisibility(role, 'approve:hours') === 'on' || optIns.has('approve:hours' as Capability)
-
-    const user: MockUser = {
-      user_id: newId,
-      tenant_id: MOCK_TENANT.tenant_id,
+    const profileId = await createMember({
       name: fullName.trim(),
       email: email.trim(),
+      phone,
+      locale: lang,
+      avatarColor,
+      avatarInitials: initials(fullName),
+      role,
+      homeRoles,
+      dashboards: allDashes,
+      defaultDashboard: defaultDash,
+      projectIds: projects,
+      squadIds: squads,
+      modules,
+      status,
+      reportsAccess: roleSupportsReportsAccess(role) ? reportsAccess : false,
+    })
+
+    setSaving(false)
+    if (!profileId) {
+      setSaveErr('Não foi possível criar o membro. Verifique os dados e tente novamente.')
+      return
+    }
+
+    const hasApproveHours = capabilityVisibility(role, 'approve:hours') === 'on' || optIns.has('approve:hours' as Capability)
+    const user: MockUser = {
+      user_id: profileId,
+      tenant_id: DEFAULT_TENANT_ID,
+      name: fullName.trim(),
+      email: email.trim().toLowerCase(),
       avatar_initials: initials(fullName),
       avatar_color: avatarColor,
       role_context: role,
-      project_id: projects[0] ?? 'proj_001',
-      squad_id: squads[0] ?? 'squad_growth',
+      project_id: projects[0] ?? '*',
+      squad_id: squads[0] ?? '*',
       modules_enabled: modules,
       permissions: derivePermissions(role, [...optIns]),
-      assigned_dashboards: dashes,
+      assigned_dashboards: [],
       password_must_change: true,
+      available_roles: homeRoles,
       approved_squads: hasApproveHours ? approvedSquads : undefined,
     }
 
-    addMockUser(user)
-    if (roleSupportsReportsAccess(role)) {
-      void saveProfileReportsAccessByEmail(email.trim(), reportsAccess)
-    }
-    markPasswordMustChange(newId)
-    setGeneratedPwd(pwd)
+    setGeneratedPwd(generateTempPassword())
     setStep(6)
     onSuccess?.(user)
   }
+
 
   function handleFinish() {
     setGeneratedPwd('')
