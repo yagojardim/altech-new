@@ -4,6 +4,8 @@ import {
   ACTIVE_USER_ID,
   setActiveUser as _setActiveUser,
   hydratePersonas,
+  applyRoleChoice, availableRoleChoices,
+  type RoleChoice,
 } from './session'
 import {
   getSession, onAuthStateChange, signOut as authSignOut,
@@ -44,6 +46,13 @@ interface SessionCtx {
   enterInspection: () => void
   mustChangePassword: boolean
   clearMustChangePassword: () => void
+  /** Papéis que o usuário pode assumir (principal primeiro; Admin Master no fim). */
+  availableRoles: RoleChoice[]
+  /** Papel ativo escolhido na Home (null = papel principal). */
+  roleChoice: RoleChoice
+  setRoleChoice: (r: RoleChoice) => void
+  /** Dono do tenant — capacidades administrativas sempre disponíveis. */
+  isTenantOwner: boolean
 }
 
 const SessionContext = createContext<SessionCtx>(null!)
@@ -63,6 +72,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [, setPersonasVersion] = useState(0)
   const [tenantName, setTenantName] = useState('')
   const [personaOverride, setPersonaOverride] = useState<string | null>(null)
+  const [roleOverride, setRoleOverride] = useState<RoleChoice | null>(null)
 
   useEffect(() => {
     let alive = true
@@ -93,6 +103,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     _setActiveUser(id)   // keep module var in sync (for non-hook callers)
     setUserId(id)        // trigger React re-render
     setPersonaOverride(id) // Inspection: persona escolhida vence o profile autenticado
+    setRoleOverride(null)  // nova persona volta ao papel principal
   }
 
   useEffect(() => {
@@ -188,6 +199,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setMustChange(false)
     setUserId(ACTIVE_USER_ID)
     setPersonaOverride(null)
+    setRoleOverride(null)
     setStatus('anonymous')
   }
 
@@ -203,13 +215,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const overrideUser = personaOverride
     ? MOCK_USERS.find(u => u.user_id === personaOverride) ?? null
     : null
-  const activeUser = overrideUser ?? dbUser ?? mockUser
+  const baseUser = overrideUser ?? dbUser ?? mockUser
+  const availableRoles = availableRoleChoices(baseUser)
+  const roleChoice: RoleChoice =
+    roleOverride && availableRoles.includes(roleOverride) ? roleOverride : baseUser.role_context
+  const activeUser = applyRoleChoice(baseUser, roleChoice)
+  const isTenantOwner = !!baseUser.tenant_owner
 
   return (
     <SessionContext.Provider value={{
       activeUser, setActiveUser, status, authUser,
       inspectionEnabled: INSPECTION_MODE_ENABLED, tenantName, signOut, enterInspection,
       mustChangePassword, clearMustChangePassword: () => setMustChange(false),
+      availableRoles, roleChoice, setRoleChoice: setRoleOverride, isTenantOwner,
     }}>
       {children}
     </SessionContext.Provider>

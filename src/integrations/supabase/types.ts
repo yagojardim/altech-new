@@ -1974,6 +1974,7 @@ export type Database = {
           password_must_change: boolean
           phone: string | null
           primary_role: string | null
+          reports_access: boolean
           row_version: number
           status: string
           tenant_id: string
@@ -2004,6 +2005,7 @@ export type Database = {
           password_must_change?: boolean
           phone?: string | null
           primary_role?: string | null
+          reports_access?: boolean
           row_version?: number
           status?: string
           tenant_id: string
@@ -2034,6 +2036,7 @@ export type Database = {
           password_must_change?: boolean
           phone?: string | null
           primary_role?: string | null
+          reports_access?: boolean
           row_version?: number
           status?: string
           tenant_id?: string

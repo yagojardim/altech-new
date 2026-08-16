@@ -58,6 +58,10 @@ export interface MockUser {
   assigned_dashboards: UserDashboard[]
   password_must_change?: boolean
   approved_squads?: string[]
+  /** Dono do tenant (Admin Master). Sempre possui capacidades administrativas. */
+  tenant_owner?: boolean
+  /** Papel principal + secundários do usuário (o primeiro é o principal). */
+  available_roles?: RoleContext[]
 }
 
 // ─── Catalog of all 10 dashboards ────────────────────────────────────────────
@@ -119,6 +123,69 @@ export function personaInitials(name: string): string {
 
 const BASE_MODULES = ['board', 'reports', 'roadmap']
 
+/** Capacidades administrativas garantidas ao dono do tenant (Admin Master). */
+export const TENANT_OWNER_CAPABILITIES = [
+  'users:manage', 'project:create', 'module:request',
+  'manage:dashboard-cards', 'access:dashview', 'access:client-portal',
+]
+
+/** Papel especial disponível apenas para o dono do tenant. */
+export const ADMIN_MASTER_ROLE = 'AdminMaster'
+export type RoleChoice = RoleContext | typeof ADMIN_MASTER_ROLE
+
+export const ROLE_LABEL: Record<RoleContext, string> = {
+  Admin: 'Admin', PMO: 'PMO', ProjectManager: 'Project Manager',
+  ProductManager: 'Product Manager', ProductOwner: 'Product Owner',
+  ScrumMaster: 'Scrum Master', TechLead: 'Tech Lead', Dev: 'Dev',
+  UX: 'UX / UI', QA: 'QA',
+}
+
+export function roleChoiceLabel(choice: RoleChoice): string {
+  return choice === ADMIN_MASTER_ROLE ? 'Admin Master' : ROLE_LABEL[choice]
+}
+
+/** Papéis que o usuário pode assumir na Home (principal primeiro). */
+export function availableRoleChoices(user: MockUser): RoleChoice[] {
+  const roles = (user.available_roles?.length ? user.available_roles : [user.role_context])
+    .filter((r, i, arr) => arr.indexOf(r) === i)
+  const list: RoleChoice[] = [...roles]
+  if (user.tenant_owner && !list.includes(ADMIN_MASTER_ROLE as RoleChoice)) {
+    list.push(ADMIN_MASTER_ROLE)
+  }
+  return list
+}
+
+function withOwnerCapabilities(perms: string[], isOwner: boolean): string[] {
+  if (!isOwner || perms.includes('*')) return perms
+  const merged = new Set(perms)
+  for (const cap of TENANT_OWNER_CAPABILITIES) merged.add(cap)
+  return [...merged]
+}
+
+/** Aplica o papel escolhido no dropdown da Home ao usuário ativo. */
+export function applyRoleChoice(user: MockUser, choice: RoleChoice | null): MockUser {
+  const isOwner = !!user.tenant_owner
+  if (!choice || (choice !== ADMIN_MASTER_ROLE && choice === user.role_context)) {
+    return { ...user, permissions: withOwnerCapabilities(user.permissions ?? [], isOwner) }
+  }
+  if (choice === ADMIN_MASTER_ROLE) {
+    if (!isOwner) return user
+    return {
+      ...user,
+      role_context: 'Admin',
+      permissions: ['*'],
+      assigned_dashboards: [ud(user.user_id, 'admin', true)],
+    }
+  }
+  const dash = DEFAULT_DASHBOARD_BY_ROLE[choice]
+  return {
+    ...user,
+    role_context: choice,
+    permissions: withOwnerCapabilities(derivePermissions(choice), isOwner),
+    assigned_dashboards: [ud(user.user_id, dash, true)],
+  }
+}
+
 /** Monta uma persona de Inspection a partir de um profile real do tenant. */
 export function buildPersona(input: {
   user_id: string
@@ -127,12 +194,14 @@ export function buildPersona(input: {
   email: string
   role_context: RoleContext
   tenant_owner?: boolean
+  available_roles?: RoleContext[]
 }): MockUser {
   const tenantId = input.tenant_id ?? MOCK_TENANT.tenant_id
   const isMaster = !!input.tenant_owner
   const dash = DEFAULT_DASHBOARD_BY_ROLE[input.role_context]
   const dashboards = [ud(input.user_id, dash, true)]
   if (isMaster && dash !== 'admin') dashboards.push(ud(input.user_id, 'admin', false))
+  const roles = input.available_roles?.length ? input.available_roles : [input.role_context]
 
   return {
     user_id: input.user_id,
@@ -149,6 +218,8 @@ export function buildPersona(input: {
       : BASE_MODULES,
     permissions: isMaster ? ['*'] : derivePermissions(input.role_context),
     assigned_dashboards: dashboards,
+    tenant_owner: isMaster,
+    available_roles: [input.role_context, ...roles.filter(r => r !== input.role_context)],
   }
 }
 

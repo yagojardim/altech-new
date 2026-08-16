@@ -51,20 +51,28 @@ function dash(userId: string, tenantId: string, id: DashboardType, isDefault: bo
   }
 }
 
-async function resolveRole(profileId: string, tenantId: string, fallback: string | null): Promise<RoleContext> {
+/** Todos os papéis do profile (principal primeiro, depois secundários). */
+async function resolveRoles(profileId: string, tenantId: string, fallback: string | null): Promise<RoleContext[]> {
+  const primary = fallback ? normalizeRole(fallback) : null
+  const found: RoleContext[] = []
   try {
     const { data: urs } = await tbl('user_roles')
       .select('role_id').eq('profile_id', profileId).eq('tenant_id', tenantId)
     const roleIds = (urs ?? []).map((r: any) => r.role_id).filter(Boolean)
     if (roleIds.length) {
       const { data: roles } = await tbl('roles').select('id, key, label').in('id', roleIds)
-      const first = (roles ?? [])[0]
-      if (first) return normalizeRole(first.key ?? first.label)
+      for (const r of roles ?? []) {
+        const rc = normalizeRole(r.key ?? r.label)
+        if (rc && !found.includes(rc)) found.push(rc)
+      }
     }
   } catch (err) {
-    logger.error('authProfile.resolveRole', err, { profileId })
+    logger.error('authProfile.resolveRoles', err, { profileId })
   }
-  return normalizeRole(fallback)
+  const ordered = primary
+    ? [primary, ...found.filter(r => r !== primary)]
+    : (found.length ? found : [normalizeRole(fallback)])
+  return ordered
 }
 
 /** Carrega o profile ligado à sessão do Supabase Auth e monta o usuário ativo. */
@@ -89,8 +97,10 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
 
     if (!row) return null
 
-    const roleContext = await resolveRole(row.id, row.tenant_id, row.primary_role)
+    const roles = await resolveRoles(row.id, row.tenant_id, row.primary_role)
+    const roleContext: RoleContext = roles[0] ?? 'Dev'
     const isAdmin = roleContext === 'Admin'
+    const isOwner = !!row.tenant_owner
     const defaultDash = ROLE_DASHBOARD[roleContext]
 
     return {
@@ -107,6 +117,8 @@ export function loadProfileByAuthUserId(authUserId: string, email: string): Prom
       permissions: isAdmin ? ['*'] : derivePermissions(roleContext),
       assigned_dashboards: [dash(row.id, row.tenant_id, defaultDash, true)],
       password_must_change: !!row.password_must_change,
+      tenant_owner: isOwner,
+      available_roles: roles,
     }
   }, null)
 }
