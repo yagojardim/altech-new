@@ -1961,7 +1961,7 @@ function SprintClosureSummary({ closure, onOpenItem }: { closure: SprintClosure;
 
 
 // ─── Sprints tab ──────────────────────────────────────────────────────────────
-function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onCreateSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
+function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, error, onStartSprint, onCompleteSprint, onCreateSprint, onEditSprint, onGenerateCeremonies, generatingCeremonies, availableEpics, availableMembers }: {
   issues: Issue[]
   sprints: SprintDef[]
   onUpdateIssue: (updated: Issue) => void
@@ -1971,7 +1971,9 @@ function SprintsTab({ issues, sprints, onUpdateIssue, canManageSprint, loading, 
   onStartSprint: (sprint: SprintDef) => void
   onCompleteSprint: (sprint: SprintDef) => void
   onCreateSprint: () => void
+  onEditSprint: (sprint: SprintDef) => void
   onGenerateCeremonies: (sprint: SprintDef) => void
+
   generatingCeremonies: string | null
   availableEpics: { id: string; label: string; color: string }[]
   availableMembers: { id: string; initials: string; name: string }[]
