@@ -51,20 +51,28 @@ function dash(userId: string, tenantId: string, id: DashboardType, isDefault: bo
   }
 }
 
-async function resolveRole(profileId: string, tenantId: string, fallback: string | null): Promise<RoleContext> {
+/** Todos os papéis do profile (principal primeiro, depois secundários). */
+async function resolveRoles(profileId: string, tenantId: string, fallback: string | null): Promise<RoleContext[]> {
+  const primary = fallback ? normalizeRole(fallback) : null
+  const found: RoleContext[] = []
   try {
     const { data: urs } = await tbl('user_roles')
       .select('role_id').eq('profile_id', profileId).eq('tenant_id', tenantId)
     const roleIds = (urs ?? []).map((r: any) => r.role_id).filter(Boolean)
     if (roleIds.length) {
       const { data: roles } = await tbl('roles').select('id, key, label').in('id', roleIds)
-      const first = (roles ?? [])[0]
-      if (first) return normalizeRole(first.key ?? first.label)
+      for (const r of roles ?? []) {
+        const rc = normalizeRole(r.key ?? r.label)
+        if (rc && !found.includes(rc)) found.push(rc)
+      }
     }
   } catch (err) {
-    logger.error('authProfile.resolveRole', err, { profileId })
+    logger.error('authProfile.resolveRoles', err, { profileId })
   }
-  return normalizeRole(fallback)
+  const ordered = primary
+    ? [primary, ...found.filter(r => r !== primary)]
+    : (found.length ? found : [normalizeRole(fallback)])
+  return ordered
 }
 
 /** Carrega o profile ligado à sessão do Supabase Auth e monta o usuário ativo. */
