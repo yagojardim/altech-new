@@ -154,19 +154,8 @@ export default function InviteMemberModal({ onClose, onSuccess }: Props) {
     setDefaultDash(DEFAULT_DASHBOARD[r])
     setExtraDashes([])
     setOptIns(new Set())
-    const base: Record<RoleContext, string[]> = {
-      Admin: ['board','reports','portfolio','roadmap','config','team','modules','audit'],
-      PMO: ['board','reports','portfolio','roadmap'],
-      ProjectManager: ['board','reports','roadmap','releases'],
-      ProductManager: ['board','reports','roadmap','analytics'],
-      ProductOwner: ['board','reports','roadmap'],
-      ScrumMaster: ['board','reports'],
-      TechLead: ['board','reports','integrations','deployments'],
-      Dev: ['board','reports'],
-      QA: ['board','reports'],
-      UX: ['board','reports'],
-    }
-    setModules(base[r] ?? ['board'])
+    // Módulos habilitados vêm do tenant (tenant_modules) — todos marcados por padrão.
+    setModules(moduleOpts.map(m => m.key))
   }
 
   // ── Toggle extra dashboard ─────────────────────────────────────────────────
