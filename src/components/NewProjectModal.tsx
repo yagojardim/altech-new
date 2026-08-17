@@ -218,7 +218,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Name */}
               <div>
-                <label style={labelStyle}>Nome do projeto <span style={{ color: T.crit }}>*</span></label>
+                <label style={labelStyle}>Nome do projeto <span style={{ color: T.crit }}>*</span> <HelpHint text="Nome completo do projeto, como ele aparece nas listas e no topo do board." /></label>
                 <input
                   type="text"
                   placeholder="Ex: Website Relaunch"
