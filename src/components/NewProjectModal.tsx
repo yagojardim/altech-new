@@ -242,7 +242,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Key */}
               <div>
-                <label style={labelStyle}>Chave <span style={{ color: T.crit }}>*</span></label>
+                <label style={labelStyle}>Chave <span style={{ color: T.crit }}>*</span> <HelpHint title="Chave do projeto" text="Código curto (3-6 letras, maiúsculas) usado como prefixo das demandas — ex.: chave PZERO gera PZERO-101, PZERO-102. Serve para identificar e separar as demandas de cada projeto. Deve ser única no tenant e evite mudar depois." /></label>
                 <input
                   type="text"
                   value={key}
