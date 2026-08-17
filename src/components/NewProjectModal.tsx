@@ -309,7 +309,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Lead */}
               <div>
-                <label style={labelStyle}>Responsável</label>
+                <label style={labelStyle}>Responsável <HelpHint text="Lead do projeto — responsável principal. É adicionado automaticamente como membro do projeto." /></label>
                 <select
                   value={lead}
                   onChange={e => setLead(e.target.value)}
