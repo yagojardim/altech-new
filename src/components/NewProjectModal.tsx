@@ -230,7 +230,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Client */}
               <div>
-                <label style={labelStyle}>Cliente <HelpHint text="Cliente atendido por este projeto (ex.: CET, Cobasi). Permite separar os projetos por cliente dentro da mesma agência (tenant)." /></label>
+                <label style={labelStyle}>Cliente <HelpHint text="Empresa ou cliente atendido por este projeto. Permite separar os projetos por cliente dentro da mesma organização (tenant)." /></label>
                 <input
                   type="text"
                   placeholder="Ex: Cobasi"
@@ -242,7 +242,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Key */}
               <div>
-                <label style={labelStyle}>Chave <span style={{ color: T.crit }}>*</span> <HelpHint title="Chave do projeto" text="Código curto (3-6 letras, maiúsculas) usado como prefixo das demandas — ex.: chave PZERO gera PZERO-101, PZERO-102. Serve para identificar e separar as demandas de cada projeto. Deve ser única no tenant e evite mudar depois." /></label>
+                <label style={labelStyle}>Chave <span style={{ color: T.crit }}>*</span> <HelpHint title="Chave do projeto" text="Código curto (3-6 letras, maiúsculas) usado como prefixo das demandas — ex.: a chave WEB gera WEB-101, WEB-102. Serve para identificar e separar as demandas de cada projeto. Deve ser única no tenant e evite mudar depois." /></label>
                 <input
                   type="text"
                   value={key}
