@@ -324,7 +324,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Description */}
               <div>
-                <label style={labelStyle}>Descrição</label>
+                <label style={labelStyle}>Descrição <HelpHint text="Objetivo/resumo do projeto. Opcional." /></label>
                 <textarea
                   rows={2}
                   value={desc}
