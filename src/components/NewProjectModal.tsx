@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { T } from './ds/tokens'
+import { HelpHint } from './ds/HelpHint'
 
 export interface NewProjectInput {
   name: string
