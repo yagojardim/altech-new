@@ -230,7 +230,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Client */}
               <div>
-                <label style={labelStyle}>Cliente</label>
+                <label style={labelStyle}>Cliente <HelpHint text="Cliente atendido por este projeto (ex.: CET, Cobasi). Permite separar os projetos por cliente dentro da mesma agência (tenant)." /></label>
                 <input
                   type="text"
                   placeholder="Ex: Cobasi"
