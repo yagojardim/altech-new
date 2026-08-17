@@ -266,7 +266,7 @@ export function NewProjectModal({ onClose, onSuccess, onCreate, leads, existingK
 
               {/* Type */}
               <div>
-                <label style={labelStyle}>Tipo</label>
+                <label style={labelStyle}>Tipo <HelpHint text="Scrum = trabalho organizado em sprints (ciclos). Kanban = fluxo contínuo sem sprints. Define as colunas padrão do board." /></label>
                 <div style={{ display: 'flex', gap: 12 }}>
                   {(['scrum', 'kanban'] as const).map(t => (
                     <button
