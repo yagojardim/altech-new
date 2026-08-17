@@ -139,7 +139,7 @@ export function AddRelationModal({ currentIssueKey, onClose, onAdd }: Props) {
                   value={query}
                   onChange={e => { setQuery(e.target.value); setShowList(true) }}
                   onFocus={() => setShowList(true)}
-                  placeholder="Buscar demanda (ex: PZERO-118)"
+                  placeholder="Buscar demanda (ex: WEB-118)"
                   style={{
                     width: '100%', height: 36, padding: '0 12px', fontSize: 13, borderRadius: 8,
                     background: T.bgSurface2, border: `1px solid ${T.border}`, color: T.text1,
